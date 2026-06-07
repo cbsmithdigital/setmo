@@ -1,0 +1,13 @@
+# Normalize line endings to LF in the repo (Vercel builds on Linux).
+* text=auto eol=lf
+
+# Treat binary assets as binary (no EOL normalization).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

@@ -1,0 +1,427 @@
+// SetMo — Prisma schema
+// Source of truth: design_handoff_setmo/DATA_MODEL.md (UI-aligned) +
+// SetMo_Technical_Spec.md §4 (partner/channel tables). Postgres on Supabase.
+// Score integrity rule: official scores + session durations are written
+// server-side only (from the ElevenLabs post-call webhook), never the browser.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- enums ----------
+
+enum Role {
+  PLATFORM_ADMIN
+  DISTRIBUTOR
+  CONSULTANT
+  GROUP_ADMIN
+  OFFICE_ADMIN
+  SETTER
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+enum OrganizationType {
+  GROUP
+  INDEPENDENT
+}
+
+enum PartnerType {
+  DISTRIBUTOR
+  INDEPENDENT_CONSULTANT
+}
+
+enum PartnerStatus {
+  PENDING
+  APPROVED
+  DISABLED
+}
+
+enum ServiceKey {
+  IMPLANT
+  DENTURE
+  COSMETIC
+  ORTHO
+  WISDOM
+  GENERAL
+}
+
+enum AgentStatus {
+  LIVE
+  DRAFT
+  PLANNED
+}
+
+enum SessionStatus {
+  CREATED
+  IN_PROGRESS
+  SCORED
+  FAILED
+}
+
+enum Difficulty {
+  ADAPTIVE
+  WARM
+  TOUGH
+}
+
+enum SkillTier {
+  UNIVERSAL
+  SERVICE_SPECIFIC
+}
+
+enum TrainingType {
+  VIDEO
+  WORKBOOK
+}
+
+enum TrainingStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum RecommendationStatus {
+  ACTIVE
+  DISMISSED
+  COMPLETED
+}
+
+enum Cadence {
+  MONTHLY
+  QUARTERLY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum LeaderboardScope {
+  OFFICE
+  GLOBAL
+}
+
+enum SubjectType {
+  SETTER
+  OFFICE
+  GROUP
+}
+
+enum LeaderboardMetric {
+  AVG_SCORE
+  IMPROVEMENT
+}
+
+// ---------- tenancy ----------
+
+model Organization {
+  id        String           @id @default(uuid())
+  name      String
+  type      OrganizationType @default(GROUP)
+  createdAt DateTime         @default(now())
+
+  offices Office[]
+  users   User[]
+
+  @@map("organization")
+}
+
+model Office {
+  id               String   @id @default(uuid())
+  organizationId   String?  @map("organization_id")
+  name             String
+  city             String?
+  offerFraming     String?  @map("offer_framing")
+  appointmentFraming String? @map("appointment_framing")
+  depositPolicy    String?  @map("deposit_policy")
+  seatCount        Int      @default(1) @map("seat_count")
+  stripeCustomerId String?  @map("stripe_customer_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  organization Organization?       @relation(fields: [organizationId], references: [id])
+  users        User[]
+  services     OfficeService[]
+  sessions     Session[]
+  periods      AllowancePeriod[]
+  bundles      ConversationBundle[]
+  subscription Subscription?
+
+  @@index([organizationId])
+  @@map("office")
+}
+
+model User {
+  id             String     @id // = Supabase auth user id
+  officeId       String?    @map("office_id")
+  organizationId String?    @map("organization_id")
+  partnerId      String?    @map("partner_id")
+  role           Role
+  firstName      String?    @map("first_name")
+  lastName       String?    @map("last_name")
+  email          String     @unique
+  status         UserStatus @default(INVITED)
+  invitedById    String?    @map("invited_by")
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  office       Office?       @relation(fields: [officeId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  partner      Partner?      @relation(fields: [partnerId], references: [id])
+  invitedBy    User?         @relation("Invites", fields: [invitedById], references: [id])
+  invitees     User[]        @relation("Invites")
+
+  sessions        Session[]
+  memory          SetterMemory?
+  recommendations Recommendation[]
+  managedAccounts ManagedAccount[] @relation("ConsultantManaged")
+
+  @@index([officeId])
+  @@index([organizationId])
+  @@index([partnerId])
+  @@map("user")
+}
+
+// ---------- channel partners (v1 schema; self-serve portal is later) ----------
+
+model Partner {
+  id              String        @id @default(uuid())
+  name            String
+  type            PartnerType
+  status          PartnerStatus @default(PENDING)
+  commissionEnabled Boolean     @default(false) @map("commission_enabled")
+  commissionTerms Json?         @map("commission_terms")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  users           User[]
+  managedAccounts ManagedAccount[]
+
+  @@map("partner")
+}
+
+model ManagedAccount {
+  id               String  @id @default(uuid())
+  partnerId        String  @map("partner_id")
+  consultantUserId String? @map("consultant_user_id")
+  officeId         String? @map("office_id")
+  organizationId   String? @map("organization_id")
+
+  partner    Partner @relation(fields: [partnerId], references: [id])
+  consultant User?   @relation("ConsultantManaged", fields: [consultantUserId], references: [id])
+
+  @@index([partnerId])
+  @@map("managed_account")
+}
+
+// ---------- service catalog / agents ----------
+
+model Agent {
+  id                String      @id @default(uuid())
+  serviceType       ServiceKey  @unique @map("service_type")
+  name              String
+  shortName         String?     @map("short_name")
+  status            AgentStatus @default(PLANNED)
+  version           String?
+  elevenlabsAgentId String?     @map("elevenlabs_agent_id")
+  rubricSkills      Json        @map("rubric_skills") // ordered skill keys for this service
+  personaCount      Int         @default(0) @map("persona_count")
+  note              String?
+
+  sessions Session[]
+
+  @@map("agent")
+}
+
+model OfficeService {
+  officeId    String     @map("office_id")
+  serviceType ServiceKey @map("service_type")
+  enabled     Boolean    @default(true)
+
+  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@id([officeId, serviceType])
+  @@map("office_service")
+}
+
+// ---------- sessions, evaluations, scoring ----------
+
+model Session {
+  id                     String        @id @default(uuid())
+  setterId               String        @map("setter_id")
+  officeId               String        @map("office_id") // denormalized for scoping/leaderboards
+  serviceType            ServiceKey    @map("service_type")
+  agentId                String?       @map("agent_id")
+  personaSeed            Json?         @map("persona_seed") // difficulty + hidden "why" (never shown pre-call)
+  difficulty             Difficulty    @default(ADAPTIVE)
+  elevenlabsConversationId String?     @unique @map("elevenlabs_conversation_id")
+  transcriptRef          String?       @map("transcript_ref")
+  startedAt              DateTime      @default(now()) @map("started_at")
+  completedAt            DateTime?     @map("completed_at")
+  durationSeconds        Int?          @map("duration_seconds") // authoritative, from webhook
+  status                 SessionStatus @default(CREATED)
+
+  setter     User        @relation(fields: [setterId], references: [id])
+  office     Office      @relation(fields: [officeId], references: [id])
+  agent      Agent?      @relation(fields: [agentId], references: [id])
+  evaluation Evaluation?
+
+  @@index([setterId])
+  @@index([officeId])
+  @@index([serviceType])
+  @@map("session")
+}
+
+model Evaluation {
+  id                      String   @id @default(uuid())
+  sessionId               String   @unique @map("session_id")
+  overallScore            Decimal? @map("overall_score") @db.Decimal(2, 1)
+  narrative               String?
+  wins                    Json?    // string[]
+  misses                  Json?    // string[]
+  replacementPhrases      Json?    @map("replacement_phrases") // [{from,to}]
+  personaCoaching         String?  @map("persona_coaching")
+  recommendedNextScenario String?  @map("recommended_next_scenario")
+  rawPayload              Json?    @map("raw_payload")
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  session Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  skills  SkillScore[]
+
+  @@map("evaluation")
+}
+
+model SkillScore {
+  evaluationId String    @map("evaluation_id")
+  skillKey     String    @map("skill_key")
+  tier         SkillTier
+  score        Decimal   @db.Decimal(2, 1)
+  reasoning    String?
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  @@id([evaluationId, skillKey])
+  @@map("skill_score")
+}
+
+// ---------- coaching ----------
+
+model SetterMemory {
+  setterId        String     @id @map("setter_id")
+  summary         String?
+  difficultyFloor Difficulty @default(ADAPTIVE) @map("difficulty_floor")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  setter User @relation(fields: [setterId], references: [id], onDelete: Cascade)
+
+  @@map("setter_memory")
+}
+
+model Training {
+  id             String         @id @default(uuid())
+  title          String
+  description    String?
+  type           TrainingType
+  length         Int            @default(0) // minutes (video) / pages (workbook)
+  targetSkillKey String?        @map("target_skill_key")
+  status         TrainingStatus @default(DRAFT)
+  assetRef       String?        @map("asset_ref")
+
+  recommendations Recommendation[]
+
+  @@map("training")
+}
+
+model Recommendation {
+  id         String               @id @default(uuid())
+  setterId   String               @map("setter_id")
+  sessionId  String?              @map("session_id")
+  trainingId String               @map("training_id")
+  skillKey   String               @map("skill_key")
+  reason     String // stored: "objection-handling scored 2/5 on the last two sessions"
+  status     RecommendationStatus @default(ACTIVE)
+  createdAt  DateTime             @default(now()) @map("created_at")
+
+  setter   User     @relation(fields: [setterId], references: [id], onDelete: Cascade)
+  training Training @relation(fields: [trainingId], references: [id])
+
+  @@index([setterId])
+  @@map("recommendation")
+}
+
+// ---------- billing & usage ----------
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  officeId             String             @unique @map("office_id")
+  stripeCustomerId     String?            @map("stripe_customer_id")
+  stripeSubscriptionId String?            @map("stripe_subscription_id")
+  seats                Int                @default(1)
+  cadence              Cadence            @default(MONTHLY)
+  pricePerSeat         Decimal            @default(59.99) @map("price_per_seat") @db.Decimal(6, 2)
+  status               SubscriptionStatus @default(ACTIVE)
+  currentPeriodEnd     DateTime?          @map("current_period_end")
+
+  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@map("subscription")
+}
+
+model AllowancePeriod {
+  id              String   @id @default(uuid())
+  officeId        String   @map("office_id")
+  periodStart     DateTime @map("period_start")
+  periodEnd       DateTime @map("period_end")
+  includedSeconds BigInt   @default(0) @map("included_seconds") // seats × 3h × 3600
+  bundleSeconds   BigInt   @default(0) @map("bundle_seconds")
+  consumedSeconds BigInt   @default(0) @map("consumed_seconds") // incremented server-side
+
+  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@index([officeId])
+  @@map("allowance_period")
+}
+
+model ConversationBundle {
+  id                  String    @id @default(uuid())
+  officeId            String    @map("office_id")
+  hours               Int
+  minutesPurchased    Int       @map("minutes_purchased")
+  minutesRemaining    Int       @map("minutes_remaining")
+  stripePaymentIntent String?   @map("stripe_payment_intent")
+  purchasedAt         DateTime  @default(now()) @map("purchased_at")
+  expiresAt           DateTime? @map("expires_at")
+
+  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@index([officeId])
+  @@map("conversation_bundle")
+}
+
+// ---------- leaderboards (materialized) ----------
+
+model LeaderboardEntry {
+  id             String            @id @default(uuid())
+  scope          LeaderboardScope
+  officeId       String?           @map("office_id")
+  organizationId String?           @map("organization_id")
+  subjectType    SubjectType       @map("subject_type")
+  subjectId      String            @map("subject_id")
+  serviceType    ServiceKey        @map("service_type")
+  metric         LeaderboardMetric @default(AVG_SCORE)
+  value          Float
+  movement       Int               @default(0)
+  rank           Int               @default(0)
+  periodKey      String            @map("period_key")
+  computedAt     DateTime          @default(now()) @map("computed_at")
+
+  @@index([scope, serviceType, periodKey])
+  @@map("leaderboard_entry")
+}
