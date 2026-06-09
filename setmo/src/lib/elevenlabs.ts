@@ -173,6 +173,26 @@ export function parsePostCall(payload: unknown): ParsedEvaluation {
     });
   }
 
+  // 3) Fallback: some agents report all 8 scores as prose inside a single
+  // feedback field (e.g. "5/5 for Rapport and Warmth … 4/5 for Pain Point
+  // Exploration"). Scan the combined free text for "<N>/5 <skill>" in either
+  // order. Structured fields (passes 1–2) always take precedence.
+  if (skills.length < SKILL_SCAN.length) {
+    const blob = collectFeedbackText(dataCollection, analysis);
+    for (const def of SKILL_SCAN) {
+      if (seen.has(def.key)) continue;
+      const score = scoreNearPhrase(blob, def.phrase);
+      if (score == null) continue;
+      seen.add(def.key);
+      skills.push({
+        skillKey: def.key,
+        tier: skillTier(def.key) === "universal" ? "UNIVERSAL" : "SERVICE_SPECIFIC",
+        score,
+        reasoning: null,
+      });
+    }
+  }
+
   const overallScore =
     toScore(dataCollection.overall_score ?? (dataCollection.overall as Record<string, unknown>)?.value) ??
     (skills.length ? Number((skills.reduce((a, b) => a + b.score, 0) / skills.length).toFixed(1)) : null);
@@ -220,4 +240,42 @@ function fieldValue(dc: Record<string, unknown>, key: string): unknown {
 function asField(dc: Record<string, unknown>, key: string): string | null {
   const v = fieldValue(dc, key);
   return typeof v === "string" ? v : null;
+}
+
+// --- free-text score extraction (fallback when scores arrive as prose) ---
+const SKILL_SCAN: { key: string; phrase: string }[] = [
+  { key: "rapport", phrase: "rapport" },
+  { key: "listening", phrase: "listening" },
+  { key: "discovery", phrase: "discovery" },
+  { key: "painpoint", phrase: "pain[\\s-]?point" },
+  { key: "objection", phrase: "objection" },
+  { key: "confidence", phrase: "confidence" },
+  { key: "value", phrase: "value(?:\\s*building)?" },
+  { key: "closing", phrase: "closing" },
+];
+
+// Concatenate every free-text value from data collection + the transcript
+// summary into one blob to scan for inline scores.
+function collectFeedbackText(
+  dc: Record<string, unknown>,
+  analysis: Record<string, unknown>
+): string {
+  const parts: string[] = [];
+  for (const v of Object.values(dc)) {
+    const val = v && typeof v === "object" && "value" in (v as object) ? (v as Record<string, unknown>).value : v;
+    if (typeof val === "string") parts.push(val);
+  }
+  if (typeof analysis.transcript_summary === "string") parts.push(analysis.transcript_summary as string);
+  return parts.join("\n");
+}
+
+// Find a "<N>/5" (or "N out of 5") score within ~60 chars of a skill phrase,
+// in either order, not crossing a sentence boundary.
+function scoreNearPhrase(text: string, phrase: string): number | null {
+  if (!text) return null;
+  const before = new RegExp(`(\\d(?:\\.\\d)?)\\s*(?:/|out of)\\s*5[^.\\n]{0,60}?(?:${phrase})`, "i");
+  const after = new RegExp(`(?:${phrase})[^.\\n]{0,60}?(\\d(?:\\.\\d)?)\\s*(?:/|out of)\\s*5`, "i");
+  const m = text.match(before) ?? text.match(after);
+  if (!m) return null;
+  return clamp(parseFloat(m[1]));
 }
