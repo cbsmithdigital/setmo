@@ -263,6 +263,7 @@ model Session {
   difficulty             Difficulty    @default(ADAPTIVE)
   elevenlabsConversationId String?     @unique @map("elevenlabs_conversation_id")
   transcriptRef          String?       @map("transcript_ref")
+  audioPath              String?       @map("audio_path") // Supabase Storage path to the call recording
   startedAt              DateTime      @default(now()) @map("started_at")
   completedAt            DateTime?     @map("completed_at")
   durationSeconds        Int?          @map("duration_seconds") // authoritative, from webhook

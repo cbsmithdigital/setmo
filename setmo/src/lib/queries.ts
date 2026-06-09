@@ -509,6 +509,21 @@ export async function getSessionResult(sessionId: string, setterId: string) {
     include: { evaluation: true },
   });
 
+  // Transcript turns from the stored webhook payload.
+  const raw = e.rawPayload as { data?: { transcript?: unknown[] } } | null;
+  const rawTurns = (raw?.data?.transcript ?? []) as {
+    role?: string;
+    message?: string | null;
+    time_in_call_secs?: number;
+  }[];
+  const transcript = rawTurns
+    .filter((t) => typeof t.message === "string" && t.message.trim().length > 0)
+    .map((t) => ({
+      speaker: t.role === "user" ? ("you" as const) : ("lead" as const),
+      text: (t.message as string).trim(),
+      t: t.time_in_call_secs ?? 0,
+    }));
+
   return {
     sessionId: session.id,
     service: SERVICE_META[session.serviceType as ServiceKey].name,
@@ -523,5 +538,7 @@ export async function getSessionResult(sessionId: string, setterId: string) {
     phrases: (e.replacementPhrases as { from: string; to: string }[] | null) ?? [],
     personaCoaching: e.personaCoaching,
     nextScenario: e.recommendedNextScenario,
+    transcript,
+    audioAvailable: Boolean(session.audioPath),
   };
 }

@@ -235,6 +235,73 @@ export default async function ResultsPage({
             </Link>
           </div>
         )}
+
+        {/* recording + transcript */}
+        {(r.audioAvailable || r.transcript.length > 0) && (
+          <div className="card card-pad rise" style={{ marginTop: 18, animationDelay: ".3s" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <Icon name="sound" size={18} color="var(--purple-2)" />
+              <h3 style={{ fontSize: 18 }}>Listen back</h3>
+            </div>
+            <p className="muted" style={{ fontSize: 13.5, marginBottom: 16 }}>
+              Replay the call and read the transcript — hear exactly where it turned.
+            </p>
+
+            {r.audioAvailable ? (
+              <audio
+                controls
+                preload="none"
+                src={`/api/sessions/${r.sessionId}/audio`}
+                style={{ width: "100%", marginBottom: r.transcript.length ? 18 : 0 }}
+              />
+            ) : (
+              <div className="muted" style={{ fontSize: 13, marginBottom: r.transcript.length ? 18 : 0 }}>
+                The recording will appear here once it finishes processing.
+              </div>
+            )}
+
+            {r.transcript.length > 0 && (
+              <div
+                style={{
+                  maxHeight: 420,
+                  overflowY: "auto",
+                  border: "1px solid var(--line)",
+                  borderRadius: "var(--r-lg)",
+                  background: "var(--s1)",
+                  padding: "6px 0",
+                }}
+              >
+                {r.transcript.map((turn, i) => {
+                  const you = turn.speaker === "you";
+                  return (
+                    <div
+                      key={i}
+                      style={{ display: "flex", gap: 12, padding: "9px 16px", borderTop: i ? "1px solid var(--line-soft)" : "none" }}
+                    >
+                      <div style={{ width: 70, flex: "none", textAlign: "right" }}>
+                        <div
+                          style={{
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            letterSpacing: ".04em",
+                            textTransform: "uppercase",
+                            color: you ? "var(--mint)" : "var(--purple-2)",
+                          }}
+                        >
+                          {you ? "You" : "Lead"}
+                        </div>
+                        <div className="muted" style={{ fontSize: 11, fontVariantNumeric: "tabular-nums" }}>
+                          {mmss(turn.t)}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 14, color: "var(--text-2)", lineHeight: 1.5 }}>{turn.text}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </>
   );

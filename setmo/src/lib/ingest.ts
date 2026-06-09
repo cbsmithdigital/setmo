@@ -3,6 +3,7 @@ import { drawDownUsage } from "@/lib/usage";
 import { recomputeRecommendations } from "@/lib/coaching";
 import { updateSetterMemory } from "@/lib/memory";
 import { recomputeLeaderboards } from "@/lib/leaderboard";
+import { uploadRecording } from "@/lib/storage";
 import type { ParsedEvaluation } from "@/lib/elevenlabs";
 
 /**
@@ -84,4 +85,31 @@ export async function ingestPostCall(
   await recomputeLeaderboards(session.officeId);
 
   return { ok: true, sessionId: session.id };
+}
+
+/**
+ * Stores the call recording from the ElevenLabs `post_call_audio` webhook.
+ * The audio arrives inline (base64) because the account is zero-retention; we
+ * persist it to Supabase Storage and reference it on the session. Matched to a
+ * session by conversation id (set at /ended or score capture).
+ */
+export async function ingestAudio(payload: unknown): Promise<{ ok: boolean; reason?: string }> {
+  const root = (payload ?? {}) as Record<string, unknown>;
+  const data = (root.data ?? root) as Record<string, unknown>;
+  const conversationId = (data.conversation_id as string) ?? null;
+  const b64 =
+    (data.full_audio as string) ?? (data.audio as string) ?? (data.audio_base64 as string) ?? null;
+  if (!conversationId || !b64) return { ok: false, reason: "missing conversation id or audio" };
+
+  const session = await prisma.session.findUnique({
+    where: { elevenlabsConversationId: conversationId },
+  });
+  if (!session) return { ok: false, reason: "no matching session for audio" };
+
+  const buffer = Buffer.from(b64, "base64");
+  const path = `${session.officeId}/${session.id}.mp3`;
+  await uploadRecording(path, buffer);
+  await prisma.session.update({ where: { id: session.id }, data: { audioPath: path } });
+
+  return { ok: true };
 }
