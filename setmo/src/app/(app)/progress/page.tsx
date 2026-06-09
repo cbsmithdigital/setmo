@@ -44,20 +44,18 @@ export default async function ProgressPage() {
 
         <div className="grid g-2" style={{ gridTemplateColumns: "1.4fr 1fr", marginBottom: 18 }}>
           <div className="card card-pad rise" style={{ animationDelay: ".05s" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
               <h3 style={{ fontSize: 18 }}>Score over time</h3>
-              <div style={{ display: "flex", gap: 16, fontSize: 12.5 }} className="muted">
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 14, height: 3, borderRadius: 9, background: "#34d399" }} />
-                  Overall
-                </span>
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 14, height: 3, borderRadius: 9, background: "#a78bfa" }} />
-                  Objection handling
-                </span>
+              <div style={{ display: "flex", gap: 16, fontSize: 12.5, flexWrap: "wrap" }} className="muted">
+                {d.series.map((s) => (
+                  <span key={s.key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 14, height: 3, borderRadius: 9, background: s.color }} />
+                    {s.name}
+                  </span>
+                ))}
               </div>
             </div>
-            <ScoreOverTime points={d.points} />
+            <ScoreOverTime points={d.points} series={d.series} />
           </div>
           <div className="card card-pad rise" style={{ animationDelay: ".1s" }}>
             <h3 style={{ fontSize: 18, marginBottom: 4 }}>Universal skill profile</h3>

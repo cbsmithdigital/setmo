@@ -14,9 +14,20 @@ import {
   YAxis,
 } from "recharts";
 
-type Point = { label: string; overall: number; objection: number };
+type SeriesDef = { key: string; name: string; color: string };
 
-export function ScoreOverTime({ points }: { points: Point[] }) {
+const DEFAULT_SERIES: SeriesDef[] = [
+  { key: "overall", name: "Overall", color: "#34d399" },
+  { key: "objection", name: "Objection handling", color: "#a78bfa" },
+];
+
+export function ScoreOverTime({
+  points,
+  series = DEFAULT_SERIES,
+}: {
+  points: Record<string, number | string | null>[];
+  series?: SeriesDef[];
+}) {
   if (points.length === 0) {
     return <Empty text="Run a few sessions to see your score trend." />;
   }
@@ -31,8 +42,20 @@ export function ScoreOverTime({ points }: { points: Point[] }) {
           labelStyle={{ color: "#94a3b8" }}
           itemStyle={{ color: "#e2e8f0" }}
         />
-        <Line type="monotone" dataKey="overall" name="Overall" stroke="#34d399" strokeWidth={2.6} dot={{ r: 3, fill: "#0d0d18", stroke: "#34d399", strokeWidth: 2 }} activeDot={{ r: 5 }} />
-        <Line type="monotone" dataKey="objection" name="Objection handling" stroke="#a78bfa" strokeWidth={2.6} dot={{ r: 3, fill: "#0d0d18", stroke: "#a78bfa", strokeWidth: 2 }} activeDot={{ r: 5 }} />
+        {series.map((s) => (
+          <Line
+            key={s.key}
+            type="monotone"
+            dataKey={s.key}
+            name={s.name}
+            stroke={s.color}
+            strokeWidth={s.key === "overall" ? 2.8 : 2.2}
+            strokeDasharray={s.key === "overall" ? undefined : "5 4"}
+            connectNulls
+            dot={{ r: 3, fill: "#0d0d18", stroke: s.color, strokeWidth: 2 }}
+            activeDot={{ r: 5 }}
+          />
+        ))}
       </LineChart>
     </ResponsiveContainer>
   );

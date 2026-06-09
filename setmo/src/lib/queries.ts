@@ -182,61 +182,85 @@ export async function getSetterProgress(userId: string, officeId: string) {
     getAllowance(officeId),
   ]);
 
-  const scored = sessions.filter((s) => s.evaluation);
+  // Only count sessions that actually produced skill scores — abandoned/short
+  // calls with no rubric shouldn't drag the charts down to zero.
+  const scored = sessions.filter((s) => (s.evaluation?.skills.length ?? 0) > 0);
   const n = scored.length;
+  const avgOf = (a: number[]) =>
+    a.length ? Number((a.reduce((x, y) => x + y, 0) / a.length).toFixed(1)) : 0;
 
-  // Per-skill score series in chronological order.
-  const seriesBySkill = new Map<string, number[]>();
-  const overallSeries: number[] = [];
-  for (const s of scored) {
-    overallSeries.push(s.evaluation!.overallScore != null ? Number(s.evaluation!.overallScore) : 0);
-    for (const sk of s.evaluation!.skills) {
-      const arr = seriesBySkill.get(sk.skillKey) ?? [];
-      arr.push(Number(sk.score));
-      seriesBySkill.set(sk.skillKey, arr);
-    }
-  }
+  // Per session: overall + a map of skillKey -> score, aligned by session (not
+  // by a per-skill array — that's what caused the cross-skill mismatch).
+  const rows = scored.map((s, i) => {
+    const map = new Map<string, number>();
+    for (const sk of s.evaluation!.skills) map.set(sk.skillKey, Number(sk.score));
+    const overall =
+      s.evaluation!.overallScore != null ? Number(s.evaluation!.overallScore) : avgOf([...map.values()]);
+    return { label: i === n - 1 ? "Now" : `S${i + 1}`, overall, map };
+  });
 
-  // Chart points: overall + objection-handling line over time.
-  const objectionSeries = seriesBySkill.get("objection") ?? [];
-  const points = scored.map((_, i) => ({
-    label: i === n - 1 ? "Now" : `S${i + 1}`,
-    overall: overallSeries[i] ?? 0,
-    objection: objectionSeries[i] ?? 0,
-  }));
+  const order = rubricFor("IMPLANT").map((s) => s.key);
+  const histOf = (key: string) =>
+    rows.map((r) => r.map.get(key)).filter((v): v is number => v != null);
 
-  // Latest snapshot.
-  const latest = scored.length ? scored[scored.length - 1].evaluation!.skills : [];
-  const snapshot = latest
+  // Latest snapshot (current per-skill score + delta vs the previous session).
+  const latestSkills = scored.length ? scored[scored.length - 1].evaluation!.skills : [];
+  const snapshot = latestSkills
     .map((sk) => {
-      const arr = seriesBySkill.get(sk.skillKey) ?? [Number(sk.score)];
-      const prev = arr.length > 1 ? arr[arr.length - 2] : Number(sk.score);
+      const hist = histOf(sk.skillKey);
+      const cur = Number(sk.score);
+      const prev = hist.length > 1 ? hist[hist.length - 2] : cur;
       return {
         key: sk.skillKey,
         name: skillName(sk.skillKey),
         tier: skillTier(sk.skillKey),
-        score: Number(sk.score),
+        score: cur,
         prev,
-        delta: Number((Number(sk.score) - prev).toFixed(1)),
-        spark: arr.slice(-5),
+        delta: Number((cur - prev).toFixed(1)),
+        spark: hist.slice(-5),
       };
     })
-    .sort((a, b) => {
-      const order = rubricFor("IMPLANT").map((s) => s.key);
-      return order.indexOf(a.key) - order.indexOf(b.key);
-    });
+    .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
 
   const universal = snapshot
     .filter((s) => s.tier === "universal")
     .map((s) => ({ key: s.key, name: s.name.split(" ")[0], value: s.score }));
 
+  // Chart series: overall + current top skill + the two lowest (focus) skills.
+  const byScore = [...snapshot].sort((a, b) => a.score - b.score);
+  const lowest = byScore.slice(0, 2);
+  const topSkill = byScore[byScore.length - 1];
+  const series: { key: string; name: string; color: string }[] = [
+    { key: "overall", name: "Overall", color: "#34d399" },
+  ];
+  if (topSkill && !lowest.some((l) => l.key === topSkill.key)) {
+    series.push({ key: topSkill.key, name: topSkill.name, color: "#a78bfa" });
+  }
+  const focusColors = ["#fbbf24", "#fb7185"];
+  lowest.forEach((l, i) => series.push({ key: l.key, name: l.name, color: focusColors[i] ?? "#94a3b8" }));
+
+  const points = rows.map((r) => {
+    const p: Record<string, number | string | null> = {
+      label: r.label,
+      overall: Number(r.overall.toFixed(1)),
+    };
+    for (const s of series) {
+      if (s.key === "overall") continue;
+      const v = r.map.get(s.key);
+      p[s.key] = v != null ? v : null;
+    }
+    return p;
+  });
+
   // Stats.
-  const overallAvg = overallSeries.length ? overallSeries[overallSeries.length - 1] : 0;
-  const overallDelta = overallSeries.length > 1 ? overallAvg - overallSeries[0] : 0;
+  const overalls = rows.map((r) => r.overall);
+  const overallAvg = overalls.length ? overalls[overalls.length - 1] : 0;
+  const overallDelta = overalls.length > 1 ? overallAvg - overalls[0] : 0;
   let mostImproved: { name: string; delta: number } | null = null;
-  for (const [key, arr] of seriesBySkill) {
-    if (arr.length < 2) continue;
-    const d = arr[arr.length - 1] - arr[0];
+  for (const key of order) {
+    const hist = histOf(key);
+    if (hist.length < 2) continue;
+    const d = hist[hist.length - 1] - hist[0];
     if (!mostImproved || d > mostImproved.delta) mostImproved = { name: skillName(key), delta: d };
   }
   const practiceHours = scored.reduce((a, s) => a + (s.durationSeconds ?? 0), 0) / 3600;
@@ -245,6 +269,7 @@ export async function getSetterProgress(userId: string, officeId: string) {
 
   return {
     points,
+    series,
     universal,
     snapshot,
     stats: {

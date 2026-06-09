@@ -214,6 +214,17 @@ export function parsePostCall(payload: unknown): ParsedEvaluation {
         .filter((p) => p.from && p.to)
     : [];
 
+  // Wins/misses: prefer structured fields; otherwise pull them out of the
+  // feedback prose ("did a great job …", "areas for improvement include …").
+  let wins = asStringArray(fieldValue(dataCollection, "wins"));
+  let misses = asStringArray(fieldValue(dataCollection, "misses"));
+  if (!wins.length || !misses.length) {
+    const fb = collectFeedbackText(dataCollection, analysis);
+    const wm = parseWinsMisses(fb);
+    if (!wins.length) wins = wm.wins;
+    if (!misses.length) misses = wm.misses;
+  }
+
   return {
     conversationId,
     sessionId,
@@ -221,8 +232,8 @@ export function parsePostCall(payload: unknown): ParsedEvaluation {
     overallScore,
     narrative,
     skills,
-    wins: asStringArray(fieldValue(dataCollection, "wins")),
-    misses: asStringArray(fieldValue(dataCollection, "misses")),
+    wins,
+    misses,
     phrases,
     personaCoaching: asField(dataCollection, "persona_coaching"),
     recommendedNextScenario: asField(dataCollection, "recommended_next_scenario") ?? asField(dataCollection, "next_scenario"),
@@ -278,4 +289,35 @@ function scoreNearPhrase(text: string, phrase: string): number | null {
   const m = text.match(before) ?? text.match(after);
   if (!m) return null;
   return clamp(parseFloat(m[1]));
+}
+
+// Split a clause like "doing X, showing Y, and Z" into individual items,
+// dropping score/grade noise that sometimes trails the sentence.
+function splitClause(s: string): string[] {
+  return s
+    .replace(/\s+/g, " ")
+    // cut anything from a trailing "earning/scoring … N/5" tail onward
+    .replace(/,?\s*(?:earning|scoring|with)\b.*$/i, "")
+    .split(/\s*,\s*and\s+|\s*,\s*|\s+and\s+/i)
+    .map((x) => x.replace(/^(?:by|on|the|their|using|a |an )\s*/i, "").trim())
+    .map((x) => (x ? x[0].toUpperCase() + x.slice(1) : x))
+    .filter((x) => x.length > 4 && !/\/\s*5|\bscored?\b|\bscores?\b|\bearning\b/i.test(x))
+    .slice(0, 4);
+}
+
+// Pull wins ("did a great job …") and growth areas ("areas for improvement
+// include …") out of a free-text coaching summary. Fallback only — structured
+// fields are preferred when the agent provides them.
+function parseWinsMisses(text: string): { wins: string[]; misses: string[] } {
+  if (!text) return { wins: [], misses: [] };
+  const winM = text.match(
+    /(?:did (?:an?|a really |a |an )?(?:excellent|great|good|fantastic|strong|solid|nice)\s+job|excelled (?:at|in)|strengths?(?:\s+(?:include|were|:))?|nailed)\s+(.+?)[.!]/i
+  );
+  const missM = text.match(
+    /(?:areas?\s+(?:for|to)\s+(?:improve(?:ment)?|growth|work\s+on)|needs?\s+to\s+(?:work\s+on|improve)|could\s+(?:improve|work\s+on)|opportunit(?:y|ies))\s*(?:include[sd]?|are|:|by|to)?\s*(.+?)[.!]/i
+  );
+  return {
+    wins: winM ? splitClause(winM[1]) : [],
+    misses: missM ? splitClause(missM[1]) : [],
+  };
 }
