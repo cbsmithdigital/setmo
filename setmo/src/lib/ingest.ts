@@ -4,18 +4,25 @@ import { recomputeRecommendations } from "@/lib/coaching";
 import { updateSetterMemory } from "@/lib/memory";
 import { recomputeLeaderboards } from "@/lib/leaderboard";
 import { uploadRecording } from "@/lib/storage";
-import type { ParsedEvaluation } from "@/lib/elevenlabs";
+import { parsePostCall, extractTranscript } from "@/lib/elevenlabs";
+import { scoreTranscript, isScorerConfigured } from "@/lib/scorer";
+
+// Below this, a call is treated as too short to score (accidental hang-ups).
+const MIN_SETTER_TURNS = 2;
+const MIN_DURATION_SECS = 30;
 
 /**
  * Ingests an authoritative post-call evaluation (server-side only).
- * Idempotent: re-running for a session that's already scored is a no-op.
- * In production the webhook enqueues this onto Trigger.dev; for v1 it runs
- * inline. Either way this is the ONLY path that writes scores + durations.
+ * SetMo scores the call ITSELF from the transcript (Claude) — independent of
+ * whether the agent ran its feedback monologue, and works on partial calls.
+ * Falls back to parsing the agent's feedback prose when the scorer is off.
+ * Idempotent on the session's evaluation. The ONLY path that writes scores.
  */
 export async function ingestPostCall(
-  parsed: ParsedEvaluation,
   rawPayload: unknown
-): Promise<{ ok: boolean; sessionId?: string; reason?: string }> {
+): Promise<{ ok: boolean; sessionId?: string; reason?: string; source?: string }> {
+  const parsed = parsePostCall(rawPayload);
+
   // Resolve the session: prefer our sessionId dynamic variable; fall back to
   // the ElevenLabs conversation id if it was recorded at connect time.
   const session = parsed.sessionId
@@ -35,6 +42,48 @@ export async function ingestPostCall(
 
   const duration = parsed.durationSeconds ?? session.durationSeconds ?? 0;
 
+  // --- decide the score source ---
+  // Default to the agent's feedback prose (fallback). Prefer SetMo's own
+  // transcript scorer when configured and the call is long enough to score.
+  let skills = parsed.skills;
+  let overall = parsed.overallScore;
+  let wins = parsed.wins;
+  let misses = parsed.misses;
+  let phrases = parsed.phrases;
+  let personaCoaching = parsed.personaCoaching;
+  let nextScenario = parsed.recommendedNextScenario;
+  let narrative = parsed.narrative;
+  let source = "agent-feedback";
+
+  const turns = extractTranscript(rawPayload);
+  const setterTurns = turns.filter((t) => t.speaker === "you").length;
+  const longEnough = setterTurns >= MIN_SETTER_TURNS && duration >= MIN_DURATION_SECS;
+
+  if (isScorerConfigured() && longEnough) {
+    const office = await prisma.office.findUnique({ where: { id: session.officeId } });
+    const scored = await scoreTranscript({
+      turns,
+      durationSeconds: duration,
+      office: { name: office?.name, city: office?.city, offerFraming: office?.offerFraming },
+    });
+    if (scored) {
+      skills = scored.skills;
+      overall = scored.overallScore;
+      wins = scored.wins;
+      misses = scored.misses;
+      phrases = scored.phrases;
+      personaCoaching = scored.personaCoaching;
+      nextScenario = scored.recommendedNextScenario;
+      narrative = scored.narrative ?? parsed.narrative;
+      source = "transcript-scorer";
+    }
+  } else if (!longEnough) {
+    // Too short to grade — keep a record but no skill scores (excluded from progress).
+    skills = [];
+    overall = null;
+    source = "too-short";
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.session.update({
       where: { id: session.id },
@@ -50,20 +99,20 @@ export async function ingestPostCall(
     const evaluation = await tx.evaluation.create({
       data: {
         sessionId: session.id,
-        overallScore: parsed.overallScore != null ? parsed.overallScore.toFixed(1) : null,
-        narrative: parsed.narrative,
-        wins: parsed.wins,
-        misses: parsed.misses,
-        replacementPhrases: parsed.phrases,
-        personaCoaching: parsed.personaCoaching,
-        recommendedNextScenario: parsed.recommendedNextScenario,
+        overallScore: overall != null ? overall.toFixed(1) : null,
+        narrative,
+        wins,
+        misses,
+        replacementPhrases: phrases,
+        personaCoaching,
+        recommendedNextScenario: nextScenario,
         rawPayload: rawPayload as object,
       },
     });
 
-    if (parsed.skills.length) {
+    if (skills.length) {
       await tx.skillScore.createMany({
-        data: parsed.skills.map((s) => ({
+        data: skills.map((s) => ({
           evaluationId: evaluation.id,
           skillKey: s.skillKey,
           tier: s.tier,
@@ -84,7 +133,7 @@ export async function ingestPostCall(
   // Refresh office + global leaderboards (fairness-weighted).
   await recomputeLeaderboards(session.officeId);
 
-  return { ok: true, sessionId: session.id };
+  return { ok: true, sessionId: session.id, source };
 }
 
 /**

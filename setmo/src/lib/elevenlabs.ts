@@ -65,6 +65,28 @@ export function verifyWebhookSignature(
   }
 }
 
+// Extract conversation turns (with timing) from a post-call payload.
+export function extractTranscript(
+  payload: unknown
+): { speaker: "you" | "lead"; text: string; t: number; interrupted: boolean }[] {
+  const root = (payload ?? {}) as Record<string, unknown>;
+  const data = (root.data ?? root) as Record<string, unknown>;
+  const turns = (data.transcript ?? []) as {
+    role?: string;
+    message?: string | null;
+    time_in_call_secs?: number;
+    interrupted?: boolean;
+  }[];
+  return turns
+    .filter((t) => typeof t.message === "string" && t.message.trim().length > 0)
+    .map((t) => ({
+      speaker: t.role === "user" ? ("you" as const) : ("lead" as const),
+      text: (t.message as string).trim(),
+      t: t.time_in_call_secs ?? 0,
+      interrupted: Boolean(t.interrupted),
+    }));
+}
+
 // ---------- post-call payload parsing ----------
 
 type ParsedSkill = {

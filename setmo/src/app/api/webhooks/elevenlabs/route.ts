@@ -1,13 +1,14 @@
-import { parsePostCall, verifyWebhookSignature } from "@/lib/elevenlabs";
+import { verifyWebhookSignature } from "@/lib/elevenlabs";
 import { ingestPostCall, ingestAudio } from "@/lib/ingest";
 import { error, json } from "@/lib/api";
+
+// Allow up to 60s — the transcript scorer (Claude) runs inline. Idempotent, so
+// a retry after a slow first response just no-ops.
+export const maxDuration = 60;
 
 // POST /api/webhooks/elevenlabs — the authoritative, server-side score capture.
 // This is the ONLY path that writes scores + durations. The browser is never
 // trusted (leaderboards depend on this).
-//
-// In production this should verify, enqueue a Trigger.dev job, and return 200
-// fast. For v1 the ingestion runs inline (and is idempotent).
 export async function POST(req: Request) {
   const raw = await req.text();
   const signature =
@@ -37,8 +38,7 @@ export async function POST(req: Request) {
   }
 
   // Default: the transcription event — the authoritative scoring path.
-  const parsed = parsePostCall(payload);
-  const result = await ingestPostCall(parsed, payload);
+  const result = await ingestPostCall(payload);
 
   // Always 200 once verified so ElevenLabs doesn't retry a non-actionable event.
   return json({ received: true, kind: "transcription", ...result });
