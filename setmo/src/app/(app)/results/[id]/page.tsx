@@ -52,9 +52,12 @@ export default async function ResultsPage({
             {r.service} · {r.persona} · {mmss(r.durationSeconds)}
           </p>
         </div>
-        <div className="tb-right" style={{ display: "flex", gap: 10 }}>
+        <div className="tb-right" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Link className="btn btn-ghost" href="/dashboard">
             Done
+          </Link>
+          <Link className="btn btn-ghost" href={`/coach?session=${r.sessionId}`}>
+            <Icon name="chat" /> Coach me on this call
           </Link>
           <Link className="btn btn-primary" href="/practice">
             <Icon name="mic" /> Run another
