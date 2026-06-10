@@ -7,7 +7,7 @@ import { IMPLANT_RUBRIC } from "@/lib/skills";
 // Authoritative + reliable (structured JSON, no prose parsing), and works
 // whether or not the agent ran its feedback monologue, and on partial calls.
 
-const MODEL = process.env.SETMO_SCORER_MODEL || "claude-opus-4-8";
+const MODEL = process.env.SETMO_SCORER_MODEL || "claude-sonnet-4-6";
 
 export function isScorerConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -117,7 +117,7 @@ ${transcriptText}`;
   try {
     const res = await client.messages.parse({
       model: MODEL,
-      max_tokens: 2048,
+      max_tokens: 4096,
       thinking: { type: "adaptive" },
       output_config: { format: zodOutputFormat(ScoreZ), effort: "medium" },
       system,
