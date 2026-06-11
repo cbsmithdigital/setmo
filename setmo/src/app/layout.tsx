@@ -21,7 +21,11 @@ export const metadata: Metadata = {
   title: "SetMo — Set more appointments",
   description:
     "SetMo trains dental appointment setters on high-value lead calls against a realistic AI patient, scores them, and tracks improvement.",
-  icons: { icon: "/setmo-icon.png" },
+  icons: {
+    icon: [{ url: "/setmo-icon.png", type: "image/png" }],
+    shortcut: "/setmo-icon.png",
+    apple: "/setmo-icon.png",
+  },
 };
 
 export default function RootLayout({
