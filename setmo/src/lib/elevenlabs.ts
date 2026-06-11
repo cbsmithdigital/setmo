@@ -14,6 +14,12 @@ export function agentIdFor(serviceType: ServiceKey): string | null {
   return (env && process.env[env]) || null;
 }
 
+// The separate ElevenLabs agent used for voice coaching role-play (accepts
+// system-prompt + first-message overrides).
+export function coachAgentId(): string | null {
+  return process.env.ELEVENLABS_COACH_AGENT_ID || null;
+}
+
 export function isElevenLabsConfigured(): boolean {
   return Boolean(process.env.ELEVENLABS_API_KEY);
 }
