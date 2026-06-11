@@ -275,6 +275,10 @@ model Session {
   completedAt            DateTime?     @map("completed_at")
   durationSeconds        Int?          @map("duration_seconds") // authoritative, from webhook
   status                 SessionStatus @default(CREATED)
+  saved                  Boolean       @default(false) // setter/admin flagged this recording to keep
+  savedAt                DateTime?     @map("saved_at")
+  shareToken             String?       @unique @map("share_token") // set when a read-only share link is generated
+  sharedAt               DateTime?     @map("shared_at")
 
   setter     User        @relation(fields: [setterId], references: [id])
   office     Office      @relation(fields: [officeId], references: [id])

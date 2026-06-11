@@ -39,6 +39,8 @@ export async function proxy(request: NextRequest) {
     path === "/login" ||
     path.startsWith("/invite") ||
     path.startsWith("/auth") ||
+    // Public read-only shared-recording links (token-gated).
+    path.startsWith("/shared") ||
     // API routes enforce their own auth; webhooks must reach the handler.
     path.startsWith("/api");
 

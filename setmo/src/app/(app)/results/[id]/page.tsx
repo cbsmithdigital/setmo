@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
 import { Icon } from "@/components/ui/Icon";
 import { Ring } from "@/components/ui/widgets";
+import { RecordingActions } from "@/components/RecordingActions";
 import { mmss } from "@/lib/format";
 
 function ResultSkill({
@@ -249,6 +250,8 @@ export default async function ResultsPage({
             <p className="muted" style={{ fontSize: 13.5, marginBottom: 16 }}>
               Replay the call and read the transcript — hear exactly where it turned.
             </p>
+
+            <RecordingActions sessionId={r.sessionId} initialSaved={r.saved} initialShareToken={r.shareToken} />
 
             {r.audioAvailable ? (
               <audio

@@ -484,6 +484,71 @@ export async function getGlobalLeaderboard(viewerOfficeId: string | null) {
   });
 }
 
+// ---------- shared (public, by token) ----------
+export async function getSharedRecording(token: string) {
+  const session = await prisma.session.findUnique({
+    where: { shareToken: token },
+    include: { evaluation: { include: { skills: true } }, setter: true, office: true },
+  });
+  if (!session || !session.evaluation || !session.shareToken) return null;
+
+  const e = session.evaluation;
+  const order = rubricFor(session.serviceType).map((s) => s.key);
+  const skills = evalSkills(e.skills).sort((a, b) => order.indexOf(a.skillKey) - order.indexOf(b.skillKey));
+
+  const raw = e.rawPayload as { data?: { transcript?: unknown[] } } | null;
+  const transcript = ((raw?.data?.transcript ?? []) as { role?: string; message?: string | null; time_in_call_secs?: number }[])
+    .filter((t) => typeof t.message === "string" && t.message.trim().length > 0)
+    .map((t) => ({ speaker: t.role === "user" ? ("you" as const) : ("lead" as const), text: (t.message as string).trim(), t: t.time_in_call_secs ?? 0 }));
+
+  return {
+    token,
+    sessionId: session.id,
+    setterName: fullName(session.setter?.firstName, session.setter?.lastName),
+    officeName: session.office?.name ?? "",
+    service: SERVICE_META[session.serviceType as ServiceKey].name,
+    persona: (session.personaSeed as { persona?: string } | null)?.persona ?? "Practice lead",
+    durationSeconds: session.durationSeconds ?? 0,
+    when: session.startedAt,
+    score: e.overallScore != null ? Number(e.overallScore) : 0,
+    narrative: e.narrative ?? "",
+    skills,
+    wins: (e.wins as string[] | null) ?? [],
+    misses: (e.misses as string[] | null) ?? [],
+    phrases: (e.replacementPhrases as { from: string; to: string }[] | null) ?? [],
+    transcript,
+    audioAvailable: Boolean(session.audioPath),
+  };
+}
+
+// ---------- saved recordings (Library) ----------
+export async function getSavedRecordings(user: { id: string; role: string; officeId: string | null }) {
+  const isAdmin = ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(user.role);
+  const where = isAdmin
+    ? { officeId: user.officeId ?? "", saved: true, kind: "PRACTICE" as const }
+    : { setterId: user.id, saved: true, kind: "PRACTICE" as const };
+
+  const sessions = await prisma.session.findMany({
+    where,
+    orderBy: { savedAt: "desc" },
+    include: { evaluation: { select: { overallScore: true } }, setter: true },
+  });
+
+  return sessions.map((s) => ({
+    id: s.id,
+    persona: (s.personaSeed as { persona?: string } | null)?.persona ?? "Practice lead",
+    service: SERVICE_META[s.serviceType as ServiceKey].name,
+    score: s.evaluation?.overallScore != null ? Number(s.evaluation.overallScore) : null,
+    when: s.savedAt ?? s.startedAt,
+    durationSeconds: s.durationSeconds ?? 0,
+    setterName: fullName(s.setter?.firstName, s.setter?.lastName),
+    shared: Boolean(s.shareToken),
+    shareToken: s.shareToken,
+    audioAvailable: Boolean(s.audioPath),
+    showSetter: isAdmin,
+  }));
+}
+
 // ---------- session result ----------
 export async function getSessionResult(sessionId: string, setterId: string) {
   const session = await prisma.session.findFirst({
@@ -540,5 +605,7 @@ export async function getSessionResult(sessionId: string, setterId: string) {
     nextScenario: e.recommendedNextScenario,
     transcript,
     audioAvailable: Boolean(session.audioPath),
+    saved: session.saved,
+    shareToken: session.shareToken,
   };
 }

@@ -14,6 +14,7 @@ const NAV_SETTER: NavItem[] = [
   { href: "/progress", label: "Progress", icon: "chart" },
   { href: "/trainings", label: "Trainings", icon: "book" },
   { href: "/coach", label: "Coach", icon: "chat", ai: true },
+  { href: "/library", label: "Saved", icon: "doc" },
   { href: "/leaderboard", label: "Leaderboard", icon: "trophy" },
 ];
 
@@ -22,6 +23,7 @@ const NAV_OFFICE: NavItem[] = [
   { href: "/office/team", label: "Team", icon: "team" },
   { href: "/office/catalog", label: "Service catalog", icon: "target" },
   { href: "/office/billing", label: "Usage & billing", icon: "card" },
+  { href: "/library", label: "Saved", icon: "doc" },
   { href: "/office/leaderboard", label: "Leaderboard", icon: "trophy" },
 ];
 
