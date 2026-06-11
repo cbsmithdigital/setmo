@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
-import { VoiceCoach } from "@/components/coach/VoiceCoach";
 
 type Turn = { role: "user" | "assistant"; content: string };
 
@@ -10,16 +9,17 @@ export function CoachChat({
   sessionId,
   welcome,
   starters,
+  onVoice,
 }: {
   sessionId?: string;
   welcome: string;
   starters: string[];
+  onVoice: (focus?: string) => void;
 }) {
   const [convo, setConvo] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [voice, setVoice] = useState<{ open: boolean; focus?: string }>({ open: false });
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -61,10 +61,9 @@ export function CoachChat({
 
   return (
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 200px)", minHeight: 460 }}>
-      {/* standalone voice-coach launcher */}
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <button className="btn btn-ghost" style={{ padding: "8px 14px", fontSize: 13.5 }} onClick={() => setVoice({ open: true })}>
-          <Icon name="mic" size={16} /> Practice out loud with voice coach
+        <button className="btn btn-ghost" style={{ padding: "8px 14px", fontSize: 13.5 }} onClick={() => onVoice()}>
+          <Icon name="mic" size={16} /> Switch to voice coach
         </button>
       </div>
 
@@ -89,7 +88,7 @@ export function CoachChat({
             </div>
             {m.role === "assistant" && (
               <button
-                onClick={() => setVoice({ open: true, focus: m.content })}
+                onClick={() => onVoice(m.content)}
                 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--purple-2)", padding: "2px 4px" }}
               >
                 <Icon name="mic" size={14} /> Practice this with your voice coach
@@ -106,7 +105,6 @@ export function CoachChat({
         {err && <div className="banner error">{err}</div>}
       </div>
 
-      {/* starters */}
       {convo.length === 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "14px 0 10px" }}>
           {starters.map((s) => (
@@ -117,7 +115,6 @@ export function CoachChat({
         </div>
       )}
 
-      {/* input */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -136,10 +133,6 @@ export function CoachChat({
           <Icon name="send" size={17} />
         </button>
       </form>
-
-      {voice.open && (
-        <VoiceCoach sessionId={sessionId} focus={voice.focus} onClose={() => setVoice({ open: false })} />
-      )}
     </div>
   );
 }

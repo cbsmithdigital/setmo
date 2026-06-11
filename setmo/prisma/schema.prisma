@@ -65,7 +65,13 @@ enum SessionStatus {
   CREATED
   IN_PROGRESS
   SCORED
+  COMPLETED
   FAILED
+}
+
+enum SessionKind {
+  PRACTICE
+  COACH
 }
 
 enum Difficulty {
@@ -258,6 +264,7 @@ model Session {
   setterId               String        @map("setter_id")
   officeId               String        @map("office_id") // denormalized for scoping/leaderboards
   serviceType            ServiceKey    @map("service_type")
+  kind                   SessionKind   @default(PRACTICE) // PRACTICE (scored) | COACH (voice coaching, metered only)
   agentId                String?       @map("agent_id")
   personaSeed            Json?         @map("persona_seed") // difficulty + hidden "why" (never shown pre-call)
   difficulty             Difficulty    @default(ADAPTIVE)

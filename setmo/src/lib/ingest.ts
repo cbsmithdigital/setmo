@@ -35,12 +35,25 @@ export async function ingestPostCall(
 
   if (!session) return { ok: false, reason: "no matching session" };
 
+  const duration = parsed.durationSeconds ?? session.durationSeconds ?? 0;
+
+  // Voice coaching: meter the time against the pool, but never score it.
+  if (session.kind === "COACH") {
+    if (session.status === "COMPLETED") {
+      return { ok: true, sessionId: session.id, reason: "already metered" };
+    }
+    await prisma.session.update({
+      where: { id: session.id },
+      data: { status: "COMPLETED", completedAt: new Date(), durationSeconds: duration },
+    });
+    await drawDownUsage(session.officeId, duration);
+    return { ok: true, sessionId: session.id, source: "coach-metered" };
+  }
+
   const existing = await prisma.evaluation.findUnique({
     where: { sessionId: session.id },
   });
   if (existing) return { ok: true, sessionId: session.id, reason: "already scored" };
-
-  const duration = parsed.durationSeconds ?? session.durationSeconds ?? 0;
 
   // --- decide the score source ---
   // Default to the agent's feedback prose (fallback). Prefer SetMo's own

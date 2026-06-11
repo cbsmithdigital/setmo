@@ -1,78 +1,88 @@
 import { z } from "zod";
+import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
+import { canStartSession } from "@/lib/usage";
 import { coachAgentId, getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
+import { voiceCoachSystem, voiceCoachFirstMessage } from "@/lib/coach-prompts";
 import { error, json } from "@/lib/api";
 
-// POST /api/coach/voice/connect — bootstrap a voice coaching role-play. Builds
-// a system-prompt + first-message override from the call context and the thing
-// the setter wants to practice, then mints a signed URL for the coach agent.
-// Not scored, not metered like a practice session — it's rehearsal.
+// POST /api/coach/voice/connect — bootstrap a voice coaching role-play.
+// Builds a system-prompt + first-message override from the call context + the
+// thing to practice, then mints a signed URL for the coach agent. Coaching time
+// IS metered against the office pool (a COACH session is created and the
+// authoritative duration is drawn down by the post-call webhook).
 const Body = z.object({
-  sessionId: z.string().optional(),
+  sessionId: z.string().optional(), // the practice call being coached (for context)
   focus: z.string().max(1200).optional(),
 });
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
+  if (!user.officeId) return error("No office assigned", 400);
 
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
-  const sessionId = parsed.success ? parsed.data.sessionId : undefined;
+  const callSessionId = parsed.success ? parsed.data.sessionId : undefined;
   const rawFocus = parsed.success ? parsed.data.focus : undefined;
 
+  // Resolve focus + persona from the call being coached (if any).
   const first = user.firstName ?? "there";
   const office = user.office;
   let persona: string | null = null;
+  let focus = (rawFocus && rawFocus.trim()) || "";
 
-  if (sessionId) {
-    const r = await getSessionResult(sessionId, user.id);
+  if (callSessionId) {
+    const r = await getSessionResult(callSessionId, user.id);
     if (r) {
       persona = r.persona;
-      if (!rawFocus) {
+      if (!focus) {
         const weakest = [...r.skills].sort((a, b) => a.score - b.score)[0];
-        // no explicit focus given — default to the call's weakest skill
-        if (weakest) return buildAndReturn({ user, first, office, persona, focus: `getting more comfortable with ${weakest.name.toLowerCase()}` });
+        if (weakest) focus = `getting more comfortable with ${weakest.name.toLowerCase()}`;
       }
     }
   }
+  if (!focus) focus = "high-ticket appointment-setting fundamentals";
 
-  const focus = (rawFocus && rawFocus.trim()) || "high-ticket appointment-setting fundamentals";
-  return buildAndReturn({ user, first, office, persona, focus });
-}
+  // Coaching draws from the pool — block when it's empty (no free overage).
+  const allowance = await canStartSession(user.officeId);
+  if (!allowance.ok) {
+    return error("Your practice pool is used up. Buy a bundle or wait for the reset.", 402);
+  }
 
-async function buildAndReturn(opts: {
-  user: { id: string };
-  first: string;
-  office: { name?: string | null; city?: string | null; offerFraming?: string | null } | null | undefined;
-  persona: string | null;
-  focus: string;
-}) {
-  const { first, office, persona, focus } = opts;
+  const systemPrompt = voiceCoachSystem({
+    first,
+    officeName: office?.name,
+    officeCity: office?.city,
+    offerFraming: office?.offerFraming,
+    persona,
+    focus,
+  });
+  const firstMessage = voiceCoachFirstMessage(first);
 
-  const systemPrompt = `You are SetMo's voice practice coach for ${first}, a dental appointment setter${
-    office?.name ? ` at ${office.name}` : ""
-  }${office?.city ? ` (${office.city})` : ""}. Run a focused, realistic role-play so they can rehearse this specific thing:
+  if (!isElevenLabsConfigured() || !coachAgentId()) {
+    return json({ configured: false, systemPrompt, firstMessage, focus });
+  }
 
-"${focus}"
-
-Play a believable dental lead — push back naturally (price, fear of pain, "talk to my spouse," timing) the way a real caller would.${
-    persona ? ` Base the lead on: ${persona}.` : ""
-  }${office?.offerFraming ? ` The practice's offer: ${office.offerFraming}.` : ""}
-
-Stay in character during each rep. When ${first} handles the moment well — or asks for help — briefly step out of character to give ONE specific, encouraging tip plus a stronger phrase they can use, then run the moment again so it locks in. Keep your turns short and conversational. This is low-stakes practice: be warm and build their confidence.`;
-
-  const firstMessage = `Hey ${first}! Let's lock this in with a quick rep. I'll play the lead — go ahead and open the call whenever you're ready, and I'll respond just like a real one would.`;
+  // Create the metered coach session; its id rides as a dynamic variable so the
+  // post-call webhook can match it and draw the duration down from the pool.
+  const coachSession = await prisma.session.create({
+    data: {
+      setterId: user.id,
+      officeId: user.officeId,
+      serviceType: "IMPLANT",
+      kind: "COACH",
+      status: "IN_PROGRESS",
+      personaSeed: { coaching: true, focus },
+    },
+  });
 
   const dynamicVariables: Record<string, string> = {
     setter_first_name: first,
     office_name: office?.name ?? "",
     focus,
+    session_id: coachSession.id,
   };
-
-  if (!isElevenLabsConfigured() || !coachAgentId()) {
-    return json({ configured: false, systemPrompt, firstMessage, dynamicVariables });
-  }
 
   try {
     const signedUrl = await getSignedUrl(coachAgentId()!);
@@ -82,7 +92,7 @@ Stay in character during each rep. When ${first} handles the moment well — or 
       systemPrompt,
       firstMessage,
       dynamicVariables,
-      setterId: opts.user.id,
+      setterId: user.id,
       focus,
     });
   } catch (e) {

@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
-import { CoachChat } from "@/components/coach/CoachChat";
+import { CoachWorkspace } from "@/components/coach/CoachWorkspace";
 
 const GENERAL_STARTERS = [
   "How do I handle “I need to think about it”?",
@@ -21,6 +21,7 @@ export default async function CoachPage({
   let welcome = `Hey ${first} 👋 I'm your SetMo coach. Ask me anything about your calls — or open a session and hit "Coach me from this call" for feedback tied to that exact conversation.`;
   let starters = GENERAL_STARTERS;
   let subhead = "Your AI coach — sharpen the skills your calls show you need.";
+  let intro = `Hey ${first} — let's sharpen your next call.`;
 
   if (session) {
     const r = await getSessionResult(session, user.id);
@@ -36,6 +37,7 @@ export default async function CoachPage({
         "Give me a stronger close I could have used.",
       ];
       subhead = `Coaching on your ${r.persona} call · ${r.service}`;
+      intro = `Let's work on your ${r.persona} call (scored ${r.score.toFixed(1)}/5).`;
     }
   }
 
@@ -50,9 +52,7 @@ export default async function CoachPage({
           <span className="chip purple">AI Coach</span>
         </div>
       </div>
-      <div className="content">
-        <CoachChat sessionId={session} welcome={welcome} starters={starters} />
-      </div>
+      <CoachWorkspace sessionId={session} intro={intro} welcome={welcome} starters={starters} />
     </>
   );
 }
