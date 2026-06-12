@@ -29,15 +29,37 @@ function Waveform({ active, bars = 36 }: { active: boolean; bars?: number }) {
   );
 }
 
+const COPY = {
+  setter: {
+    chip: "Voice coach",
+    topic: "Practicing",
+    endedTitle: "Nice rep!",
+    endedSub: "Run it again any time — reps are how it sticks.",
+    endBtn: "End practice",
+    listening: "Listening — take it away",
+  },
+  manager: {
+    chip: "Management assistant",
+    topic: "Working on",
+    endedTitle: "Good session",
+    endedSub: "Come back any time to plan, brainstorm, or rehearse.",
+    endBtn: "End session",
+    listening: "Listening — go ahead",
+  },
+};
+
 function Inner({
   sessionId,
   focus,
   onClose,
+  mode = "setter",
 }: {
   sessionId?: string;
   focus?: string;
   onClose: () => void;
+  mode?: "setter" | "manager";
 }) {
+  const copy = COPY[mode];
   const [phase, setPhase] = useState<Phase>("connecting");
   const [secs, setSecs] = useState(0);
   const [muted, setMuted] = useState(false);
@@ -122,13 +144,13 @@ function Inner({
 
         <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 6 }}>
           <span className="chip purple">
-            <Icon name="chat" size={13} /> Voice coach
+            <Icon name="chat" size={13} /> {copy.chip}
           </span>
           {phase === "live" && <span className="chip mint" style={{ padding: "3px 10px" }}><span className="live-dot" /> Live</span>}
         </div>
         {topic && (
           <p className="muted" style={{ fontSize: 13.5, marginBottom: 18 }}>
-            Practicing: <span style={{ color: "var(--text-2)" }}>{topic.length > 140 ? topic.slice(0, 140) + "…" : topic}</span>
+            {copy.topic}: <span style={{ color: "var(--text-2)" }}>{topic.length > 140 ? topic.slice(0, 140) + "…" : topic}</span>
           </p>
         )}
 
@@ -142,15 +164,15 @@ function Inner({
             <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--grad-mint)", display: "grid", placeItems: "center", margin: "0 auto 16px", color: "#06281d" }}>
               <Icon name="check" size={26} sw={3} />
             </div>
-            <h2 style={{ fontSize: 22, marginBottom: 8 }}>Nice rep!</h2>
-            <p className="muted" style={{ marginBottom: 20 }}>Run it again any time — reps are how it sticks.</p>
+            <h2 style={{ fontSize: 22, marginBottom: 8 }}>{copy.endedTitle}</h2>
+            <p className="muted" style={{ marginBottom: 20 }}>{copy.endedSub}</p>
             <button className="btn btn-primary btn-lg" onClick={onClose}>Done</button>
           </div>
         ) : (
           <>
             <div style={{ textAlign: "center", margin: "8px 0" }}>
               <div className="muted" style={{ fontSize: 13 }}>
-                {phase === "connecting" ? "Connecting…" : speaking ? "Coach is speaking…" : muted ? "You're muted" : "Listening — take it away"}
+                {phase === "connecting" ? "Connecting…" : speaking ? "Coach is speaking…" : muted ? "You're muted" : copy.listening}
               </div>
               <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 44, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums", margin: "6px 0" }}>
                 {mmss(secs)}
@@ -167,7 +189,7 @@ function Inner({
                 <Icon name="mic" size={18} /> {muted ? "Muted" : "Mute"}
               </button>
               <button className="btn btn-primary" onClick={end} disabled={phase !== "live"}>
-                End practice
+                {copy.endBtn}
               </button>
             </div>
           </>
@@ -177,7 +199,7 @@ function Inner({
   );
 }
 
-export function VoiceCoach(props: { sessionId?: string; focus?: string; onClose: () => void }) {
+export function VoiceCoach(props: { sessionId?: string; focus?: string; onClose: () => void; mode?: "setter" | "manager" }) {
   return (
     <ConversationProvider>
       <Inner {...props} />

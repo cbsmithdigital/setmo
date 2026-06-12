@@ -20,6 +20,13 @@ export function coachAgentId(): string | null {
   return process.env.ELEVENLABS_COACH_AGENT_ID || null;
 }
 
+// The manager's management/training assistant. Defaults to the same agent as the
+// setter coach (behavior is driven entirely by the system-prompt override), but
+// can point at a dedicated agent (e.g. a different voice) via its own env var.
+export function managerCoachAgentId(): string | null {
+  return process.env.ELEVENLABS_MANAGER_AGENT_ID || process.env.ELEVENLABS_COACH_AGENT_ID || null;
+}
+
 export function isElevenLabsConfigured(): boolean {
   return Boolean(process.env.ELEVENLABS_API_KEY);
 }

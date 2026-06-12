@@ -11,11 +11,13 @@ export function CoachChat({
   welcome,
   starters,
   onVoice,
+  variant = "setter",
 }: {
   sessionId?: string;
   welcome: string;
   starters: string[];
   onVoice?: (focus?: string) => void;
+  variant?: "setter" | "manager";
 }) {
   const [convo, setConvo] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
@@ -98,7 +100,7 @@ export function CoachChat({
                 ))}
               </div>
             )}
-            {m.role === "assistant" && onVoice && (
+            {m.role === "assistant" && onVoice && variant === "setter" && (
               <button
                 onClick={() => onVoice(m.content)}
                 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--purple-2)", padding: "2px 4px" }}
