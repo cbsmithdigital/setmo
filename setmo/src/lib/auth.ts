@@ -54,6 +54,21 @@ export async function requireRole(...roles: Role[]) {
   return user;
 }
 
+/**
+ * The role the user is currently acting as. SINGLE SWITCH POINT for multi-role:
+ * today a user holds one role, so this returns it directly. When multi-role
+ * lands (a membership table + a role switcher), this is the only place that
+ * changes — every nav/agent/data decision already routes through it.
+ */
+export function getActiveRole(user: { role: Role }): Role {
+  return user.role;
+}
+
+/** True when the active role manages a team/practice (vs. an individual setter). */
+export function isManagerRole(role: Role): boolean {
+  return role === "OFFICE_ADMIN" || role === "GROUP_ADMIN" || role === "PLATFORM_ADMIN";
+}
+
 /** The default landing route for a role. */
 export function homeForRole(role: Role): string {
   switch (role) {

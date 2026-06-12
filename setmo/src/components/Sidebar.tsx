@@ -23,6 +23,7 @@ const NAV_OFFICE: NavItem[] = [
   { href: "/office/team", label: "Team", icon: "team" },
   { href: "/office/catalog", label: "Service catalog", icon: "target" },
   { href: "/office/billing", label: "Usage & billing", icon: "card" },
+  { href: "/coach", label: "Coach", icon: "chat", ai: true },
   { href: "/library", label: "Saved", icon: "doc" },
   { href: "/office/leaderboard", label: "Leaderboard", icon: "trophy" },
 ];

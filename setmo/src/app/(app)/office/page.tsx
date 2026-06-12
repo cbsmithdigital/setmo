@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { getOfficeOverview } from "@/lib/office";
+import { getOfficeOverview, currentPeriod, getOutcome } from "@/lib/office";
 import { BUNDLES } from "@/lib/stripe";
 import { StatTile } from "@/components/ui/StatTile";
 import { Sparkline, Delta } from "@/components/ui/widgets";
 import { BuyBundleButton } from "@/components/office/BuyBundleButton";
 import { InviteButton } from "@/components/office/InviteButton";
+import { OutcomesCard } from "@/components/office/OutcomesCard";
 import { relativeShort } from "@/lib/format";
 
 function trendColor(status: string) {
@@ -15,6 +16,8 @@ function trendColor(status: string) {
 export default async function OfficeOverviewPage() {
   const user = await requireRole("OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN");
   const o = await getOfficeOverview(user.officeId!);
+  const period = currentPeriod();
+  const outcome = await getOutcome(user.officeId!, period.label);
   const seatsFree = Math.max(0, o.seats - o.activeSetters);
   const poolPct = o.allowance.poolTotal > 0 ? Math.round((o.allowance.poolUsed / o.allowance.poolTotal) * 100) : 0;
   const remain = Math.max(0, o.allowance.poolTotal - o.allowance.poolUsed);
@@ -119,6 +122,16 @@ export default async function OfficeOverviewPage() {
             </div>
           </div>
         </div>
+
+        <OutcomesCard
+          periodLabel={period.label}
+          periodName={period.name}
+          initial={
+            outcome
+              ? { consultsBooked: outcome.consultsBooked, casesStarted: outcome.casesStarted, production: outcome.production, note: outcome.note }
+              : null
+          }
+        />
       </div>
     </>
   );

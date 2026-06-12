@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 
-type Turn = { role: "user" | "assistant"; content: string };
+type Action = { type: string; summary: string };
+type Turn = { role: "user" | "assistant"; content: string; actions?: Action[] };
 
 export function CoachChat({
   sessionId,
@@ -14,7 +15,7 @@ export function CoachChat({
   sessionId?: string;
   welcome: string;
   starters: string[];
-  onVoice: (focus?: string) => void;
+  onVoice?: (focus?: string) => void;
 }) {
   const [convo, setConvo] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
@@ -46,7 +47,7 @@ export function CoachChat({
         setLoading(false);
         return;
       }
-      setConvo((c) => [...c, { role: "assistant", content: data.reply || "…" }]);
+      setConvo((c) => [...c, { role: "assistant", content: data.reply || "…", actions: data.actions ?? [] }]);
     } catch {
       setErr("Couldn't reach the coach. Try again.");
     } finally {
@@ -61,11 +62,13 @@ export function CoachChat({
 
   return (
     <div className="card card-pad" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 200px)", minHeight: 460 }}>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <button className="btn btn-ghost" style={{ padding: "8px 14px", fontSize: 13.5 }} onClick={() => onVoice()}>
-          <Icon name="mic" size={16} /> Switch to voice coach
-        </button>
-      </div>
+      {onVoice && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <button className="btn btn-ghost" style={{ padding: "8px 14px", fontSize: 13.5 }} onClick={() => onVoice()}>
+            <Icon name="mic" size={16} /> Switch to voice coach
+          </button>
+        </div>
+      )}
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, paddingRight: 4 }}>
         {/* coach welcome */}
@@ -86,7 +89,16 @@ export function CoachChat({
             >
               {m.content}
             </div>
-            {m.role === "assistant" && (
+            {m.role === "assistant" && m.actions && m.actions.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {m.actions.map((a, j) => (
+                  <span key={j} className="chip mint" style={{ fontSize: 12 }}>
+                    <Icon name="check" size={13} sw={3} /> {a.summary}
+                  </span>
+                ))}
+              </div>
+            )}
+            {m.role === "assistant" && onVoice && (
               <button
                 onClick={() => onVoice(m.content)}
                 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--purple-2)", padding: "2px 4px" }}

@@ -115,6 +115,64 @@ export async function getOfficeOverview(officeId: string) {
   };
 }
 
+// Team-wide skill averages from each setter's most recent scored call — shows
+// the office's systemic strengths/gaps (vs. one person's gap).
+export async function getOfficeSkillHeatmap(officeId: string) {
+  const sessions = await prisma.session.findMany({
+    where: { officeId, status: "SCORED", evaluation: { isNot: null } },
+    orderBy: { startedAt: "desc" },
+    include: { evaluation: { include: { skills: true } } },
+  });
+
+  const seen = new Set<string>();
+  const sums = new Map<string, { total: number; n: number }>();
+  for (const s of sessions) {
+    if (seen.has(s.setterId)) continue; // latest only, per setter
+    seen.add(s.setterId);
+    for (const sk of s.evaluation!.skills) {
+      const cur = sums.get(sk.skillKey) ?? { total: 0, n: 0 };
+      cur.total += Number(sk.score);
+      cur.n += 1;
+      sums.set(sk.skillKey, cur);
+    }
+  }
+
+  const order = rubricFor("IMPLANT").map((s) => s.key);
+  return [...sums.entries()]
+    .map(([key, v]) => ({ key, name: skillName(key), tier: skillTier(key), avg: v.total / v.n }))
+    .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+}
+
+// Everything the Office Admin coach needs to be grounded + to take actions.
+export async function getOfficeCoachContext(officeId: string) {
+  const [overview, heatmap, outcomes, trainings] = await Promise.all([
+    getOfficeOverview(officeId),
+    getOfficeSkillHeatmap(officeId),
+    prisma.officeOutcome.findMany({ where: { officeId }, orderBy: { periodLabel: "desc" }, take: 3 }),
+    prisma.training.findMany({ where: { status: "PUBLISHED" }, select: { id: true, title: true, targetSkillKey: true } }),
+  ]);
+
+  return {
+    overview,
+    heatmap,
+    outcomes,
+    trainings: trainings.map((t) => ({ id: t.id, title: t.title, skillKey: t.targetSkillKey })),
+    setters: overview.team.map((t) => ({ id: t.id, name: t.name })),
+  };
+}
+
+export function currentPeriod() {
+  const d = new Date();
+  return {
+    label: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+    name: d.toLocaleString("en-US", { month: "long", year: "numeric" }),
+  };
+}
+
+export async function getOutcome(officeId: string, periodLabel: string) {
+  return prisma.officeOutcome.findUnique({ where: { officeId_periodLabel: { officeId, periodLabel } } });
+}
+
 export async function getOfficeSetterDetail(officeId: string, setterId: string) {
   const setter = await prisma.user.findFirst({
     where: { id: setterId, officeId, role: "SETTER" },

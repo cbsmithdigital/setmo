@@ -550,12 +550,21 @@ export async function getSavedRecordings(user: { id: string; role: string; offic
 }
 
 // ---------- session result ----------
-export async function getSessionResult(sessionId: string, setterId: string) {
-  const session = await prisma.session.findFirst({
-    where: { id: sessionId, setterId },
-    include: { evaluation: { include: { skills: true } } },
+type ResultViewer = { id: string; role: string; officeId: string | null };
+
+export async function getSessionResult(sessionId: string, viewer: ResultViewer) {
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    include: { evaluation: { include: { skills: true } }, setter: true },
   });
   if (!session || !session.evaluation) return null;
+
+  // The setter owns their call; office/group/platform admins may view any call
+  // in their office (read-only — setter-only actions are hidden in the UI).
+  const isOwner = session.setterId === viewer.id;
+  const isManager = ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(viewer.role);
+  const canView = isOwner || (isManager && session.officeId === viewer.officeId);
+  if (!canView) return null;
 
   const e = session.evaluation;
   const rubricKeys = rubricFor(session.serviceType).map((s) => s.key);
@@ -563,10 +572,10 @@ export async function getSessionResult(sessionId: string, setterId: string) {
     (a, b) => rubricKeys.indexOf(a.skillKey) - rubricKeys.indexOf(b.skillKey)
   );
 
-  // previous session score for "up from"
+  // previous session score for "up from" (relative to the call's owner)
   const prev = await prisma.session.findFirst({
     where: {
-      setterId,
+      setterId: session.setterId,
       status: "SCORED",
       startedAt: { lt: session.startedAt },
     },
@@ -591,6 +600,8 @@ export async function getSessionResult(sessionId: string, setterId: string) {
 
   return {
     sessionId: session.id,
+    isOwner,
+    setterName: fullName(session.setter?.firstName, session.setter?.lastName),
     service: SERVICE_META[session.serviceType as ServiceKey].name,
     persona: (session.personaSeed as { persona?: string } | null)?.persona ?? "Practice lead",
     durationSeconds: session.durationSeconds ?? 0,

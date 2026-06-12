@@ -161,9 +161,32 @@ model Office {
   periods      AllowancePeriod[]
   bundles      ConversationBundle[]
   subscription Subscription?
+  outcomes     OfficeOutcome[]
 
   @@index([organizationId])
   @@map("office")
+}
+
+// Real-world results the practice reports (client feedback). Collected now so
+// training→outcome reporting becomes possible once there's history. One row per
+// office per period (month).
+model OfficeOutcome {
+  id             String   @id @default(uuid())
+  officeId       String   @map("office_id")
+  periodLabel    String   @map("period_label") // "2026-06"
+  consultsBooked Int?     @map("consults_booked")
+  casesStarted   Int?     @map("cases_started")
+  production     Int? // whole dollars
+  note           String? // manager's qualitative feedback for the period
+  createdById    String?  @map("created_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@unique([officeId, periodLabel])
+  @@index([officeId])
+  @@map("office_outcome")
 }
 
 model User {

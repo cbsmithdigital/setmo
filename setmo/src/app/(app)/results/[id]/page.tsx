@@ -41,28 +41,36 @@ export default async function ResultsPage({
 }) {
   const user = await requireUser();
   const { id } = await params;
-  const r = await getSessionResult(id, user.id);
+  const r = await getSessionResult(id, user);
   if (!r) notFound();
 
   return (
     <>
       <div className="topbar">
         <div className="tb-greet">
-          <h1>How you did</h1>
+          <h1>{r.isOwner ? "How you did" : `${r.setterName}'s call`}</h1>
           <p>
             {r.service} · {r.persona} · {mmss(r.durationSeconds)}
           </p>
         </div>
         <div className="tb-right" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Link className="btn btn-ghost" href="/dashboard">
-            Done
-          </Link>
-          <Link className="btn btn-ghost" href={`/coach?session=${r.sessionId}`}>
-            <Icon name="chat" /> Coach me on this call
-          </Link>
-          <Link className="btn btn-primary" href="/practice">
-            <Icon name="mic" /> Run another
-          </Link>
+          {r.isOwner ? (
+            <>
+              <Link className="btn btn-ghost" href="/dashboard">
+                Done
+              </Link>
+              <Link className="btn btn-ghost" href={`/coach?session=${r.sessionId}`}>
+                <Icon name="chat" /> Coach me on this call
+              </Link>
+              <Link className="btn btn-primary" href="/practice">
+                <Icon name="mic" /> Run another
+              </Link>
+            </>
+          ) : (
+            <Link className="btn btn-ghost" href="/library">
+              Back to saved
+            </Link>
+          )}
         </div>
       </div>
 

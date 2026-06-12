@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   let focus = (rawFocus && rawFocus.trim()) || "";
 
   if (callSessionId) {
-    const r = await getSessionResult(callSessionId, user.id);
+    const r = await getSessionResult(callSessionId, user);
     if (r) {
       persona = r.persona;
       if (!focus) {

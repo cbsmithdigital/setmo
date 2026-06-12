@@ -12,16 +12,28 @@ export function CoachWorkspace({
   intro,
   welcome,
   starters,
+  variant = "setter",
 }: {
   sessionId?: string;
   intro: string;
   welcome: string;
   starters: string[];
+  variant?: "setter" | "manager";
 }) {
   const [mode, setMode] = useState<"choose" | "chat">("choose");
   const [voice, setVoice] = useState<{ open: boolean; focus?: string }>({ open: false });
 
   const openVoice = (focus?: string) => setVoice({ open: true, focus });
+
+  // The manager coach is chat-only for now (voice roleplay is phase 2) — skip
+  // the chat-vs-voice chooser and go straight in.
+  if (variant === "manager") {
+    return (
+      <div className="content">
+        <CoachChat welcome={welcome} starters={starters} />
+      </div>
+    );
+  }
 
   return (
     <div className="content">

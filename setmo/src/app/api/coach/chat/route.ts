@@ -1,9 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
-import { coachChatSystem, coachGroundingFromCall, coachGeneralGrounding } from "@/lib/coach-prompts";
+import { getOfficeCoachContext } from "@/lib/office";
+import {
+  coachChatSystem,
+  coachGroundingFromCall,
+  coachGeneralGrounding,
+  adminCoachSystem,
+  coachAdminGrounding,
+} from "@/lib/coach-prompts";
 import { error, json } from "@/lib/api";
 
 export const maxDuration = 60;
@@ -18,10 +25,12 @@ const Body = z.object({
     .max(40),
 });
 
-// POST /api/coach/chat — the "Coach me from this call" conversation. Grounds the
-// coach in a specific call's transcript + scores when sessionId is given;
-// otherwise coaches off the setter's recent memory/weak areas.
-// Prompts live in src/lib/coach-prompts.ts.
+type Action = { type: string; summary: string };
+
+// POST /api/coach/chat — routes by the user's ACTIVE role:
+//  • Setter  → "Coach me from this call" / general skill coaching (grounded in their calls).
+//  • Manager → Practice Performance Coach: diagnose the team, recommend, and
+//    actually assign trainings via tool use. Prompts live in src/lib/coach-prompts.ts.
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
@@ -32,32 +41,157 @@ export async function POST(req: Request) {
   const { sessionId, messages } = parsed.data;
 
   const first = user.firstName ?? "there";
-  let grounding: string | null = null;
-
-  if (sessionId) {
-    const r = await getSessionResult(sessionId, user.id);
-    if (r) grounding = coachGroundingFromCall(first, r);
-  }
-  if (!grounding) {
-    const memory = await prisma.setterMemory.findUnique({ where: { setterId: user.id } });
-    grounding = coachGeneralGrounding(first, memory?.summary);
-  }
+  const apiMessages = messages.map((m) => ({ role: m.role, content: m.content }));
 
   try {
-    const client = new Anthropic();
-    const res = await client.messages.create({
-      model: MODEL,
-      max_tokens: 1024,
-      system: coachChatSystem(grounding),
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-    });
-    const reply = res.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("\n")
-      .trim();
-    return json({ reply });
+    if (isManagerRole(getActiveRole(user)) && user.officeId) {
+      return await managerChat(first, user.officeId, apiMessages);
+    }
+    return await setterChat(first, user.id, sessionId, apiMessages);
   } catch (e) {
     return error(e instanceof Error ? e.message : "Coach failed", 502);
   }
+}
+
+// ---- Setter coach (unchanged behavior) ----
+async function setterChat(
+  first: string,
+  userId: string,
+  sessionId: string | undefined,
+  apiMessages: { role: "user" | "assistant"; content: string }[]
+) {
+  let grounding: string | null = null;
+  if (sessionId) {
+    const r = await getSessionResult(sessionId, { id: userId, role: "SETTER", officeId: null });
+    if (r) grounding = coachGroundingFromCall(first, r);
+  }
+  if (!grounding) {
+    const memory = await prisma.setterMemory.findUnique({ where: { setterId: userId } });
+    grounding = coachGeneralGrounding(first, memory?.summary);
+  }
+
+  const client = new Anthropic();
+  const res = await client.messages.create({
+    model: MODEL,
+    max_tokens: 1024,
+    system: coachChatSystem(grounding),
+    messages: apiMessages,
+  });
+  return json({ reply: textOf(res), actions: [] });
+}
+
+// ---- Manager coach (Practice Performance Coach, with actions) ----
+async function managerChat(
+  first: string,
+  officeId: string,
+  apiMessages: { role: "user" | "assistant"; content: string }[]
+) {
+  const ctx = await getOfficeCoachContext(officeId);
+  const o = ctx.overview;
+
+  const system = adminCoachSystem(
+    coachAdminGrounding(first, {
+      practiceName: o.practiceName,
+      teamAvg: o.teamAvg,
+      activeSetters: o.activeSetters,
+      sessionsThisWeek: o.sessionsThisWeek,
+      team: o.team.map((t) => ({
+        name: t.name,
+        avg: t.avg,
+        delta: t.delta,
+        sessions: t.sessions,
+        usageHours: t.usageHours,
+        status: t.status,
+        recSkill: t.recSkill,
+      })),
+      heatmap: ctx.heatmap.map((h) => ({ name: h.name, avg: h.avg })),
+      outcomes: ctx.outcomes.map((x) => ({ periodLabel: x.periodLabel, consultsBooked: x.consultsBooked, note: x.note })),
+      trainings: ctx.trainings.map((t) => ({ title: t.title, skillKey: t.skillKey })),
+    })
+  );
+
+  const tools: Anthropic.Tool[] = [
+    {
+      name: "assign_training",
+      description:
+        "Assign a published training to a specific setter on this team to address a skill gap. Only use setter names and skills that appear in the provided team data. The setter sees it as a recommendation.",
+      input_schema: {
+        type: "object",
+        properties: {
+          setter_name: { type: "string", description: "The setter's name, exactly as shown in TEAM DATA." },
+          skill_key: {
+            type: "string",
+            description: "The skill to target — one of: rapport, listening, discovery, painpoint, objection, confidence, value, closing.",
+          },
+          reason: { type: "string", description: "Short reason the setter will see, e.g. 'objection handling dipped on your last two calls'." },
+        },
+        required: ["setter_name", "skill_key", "reason"],
+      },
+    },
+  ];
+
+  const client = new Anthropic();
+  const convo: Anthropic.MessageParam[] = [...apiMessages];
+  const actions: Action[] = [];
+  let reply = "";
+
+  for (let i = 0; i < 4; i++) {
+    const res = await client.messages.create({ model: MODEL, max_tokens: 1500, system, tools, messages: convo });
+    convo.push({ role: "assistant", content: res.content });
+
+    const toolUses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+    if (toolUses.length === 0) {
+      reply = textOf(res);
+      break;
+    }
+
+    const results: Anthropic.ToolResultBlockParam[] = [];
+    for (const tu of toolUses) {
+      const out = await assignTraining(officeId, ctx, tu.input as Record<string, unknown>);
+      if (out.ok) actions.push({ type: "assign_training", summary: out.summary });
+      results.push({ type: "tool_result", tool_use_id: tu.id, content: out.summary, is_error: !out.ok });
+    }
+    convo.push({ role: "user", content: results });
+  }
+
+  if (!reply) reply = actions.length ? `Done — ${actions.map((a) => a.summary).join(" ")}` : "…";
+  return json({ reply, actions });
+}
+
+async function assignTraining(
+  officeId: string,
+  ctx: Awaited<ReturnType<typeof getOfficeCoachContext>>,
+  input: Record<string, unknown>
+): Promise<{ ok: boolean; summary: string }> {
+  const setterName = String(input.setter_name ?? "").trim();
+  const skillKey = String(input.skill_key ?? "").trim().toLowerCase();
+  const reason = String(input.reason ?? "").trim() || "Recommended by your coach";
+
+  const needle = setterName.toLowerCase();
+  const setter =
+    ctx.setters.find((s) => s.name.toLowerCase() === needle) ??
+    ctx.setters.find((s) => s.name.toLowerCase().includes(needle) || needle.includes(s.name.toLowerCase().split(" ")[0]));
+  if (!setter) return { ok: false, summary: `No setter named "${setterName}" on this team. Available: ${ctx.setters.map((s) => s.name).join(", ")}.` };
+
+  const training = ctx.trainings.find((t) => t.skillKey === skillKey) ?? ctx.trainings.find((t) => t.skillKey);
+  if (!training) return { ok: false, summary: "No published training is available to assign yet." };
+
+  // One active recommendation per setter+skill — update if it already exists.
+  const existing = await prisma.recommendation.findFirst({ where: { setterId: setter.id, skillKey: training.skillKey ?? skillKey, status: "ACTIVE" } });
+  if (existing) {
+    await prisma.recommendation.update({ where: { id: existing.id }, data: { trainingId: training.id, reason } });
+  } else {
+    await prisma.recommendation.create({ data: { setterId: setter.id, trainingId: training.id, skillKey: training.skillKey ?? skillKey, reason } });
+  }
+  // Keep ctx in sync so the model doesn't double-assign within one turn.
+  void officeId;
+  return { ok: true, summary: `Assigned "${training.title}" to ${setter.name} (${training.skillKey ?? skillKey}).` };
+}
+
+function textOf(res: Anthropic.Message): string {
+  return res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
 }

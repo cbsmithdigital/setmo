@@ -12,7 +12,7 @@ export async function GET(
   if (!user) return error("Unauthorized", 401);
 
   const { id } = await params;
-  const result = await getSessionResult(id, user.id);
+  const result = await getSessionResult(id, user);
   if (!result) return json({ status: "pending" }, 202);
   return json({ status: "scored", result });
 }
