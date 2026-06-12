@@ -212,11 +212,36 @@ model User {
   memory          SetterMemory?
   recommendations Recommendation[]
   managedAccounts ManagedAccount[] @relation("ConsultantManaged")
+  memberships     Membership[]
 
   @@index([officeId])
   @@index([organizationId])
   @@index([partnerId])
   @@map("user")
+}
+
+enum MembershipScope {
+  OFFICE
+  GROUP
+  PLATFORM
+}
+
+// Roles a user holds. A user may hold several (e.g. a manager who also takes
+// calls) and switches the ACTIVE one; nav/data/actions follow the active role.
+// `User.role` remains the user's primary/default role.
+model Membership {
+  id        String          @id @default(uuid())
+  userId    String          @map("user_id")
+  role      Role
+  scopeType MembershipScope  @default(OFFICE) @map("scope_type")
+  scopeId   String?          @map("scope_id") // officeId / organizationId; null for PLATFORM
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role, scopeId])
+  @@index([userId])
+  @@map("membership")
 }
 
 // ---------- channel partners (v1 schema; self-serve portal is later) ----------

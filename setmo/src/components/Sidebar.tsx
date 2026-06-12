@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/ui/Icon";
+import { RoleSwitcher } from "@/components/RoleSwitcher";
 import { createClient } from "@/lib/supabase/client";
 
 type NavItem = { href: string; label: string; icon: IconName; badge?: string; ai?: boolean };
@@ -38,23 +39,34 @@ export function Sidebar({
   name,
   roleLabel,
   initials,
+  roles = [],
 }: {
   role: string;
   name: string;
   roleLabel: string;
   initials: string;
+  roles?: string[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const nav = NAV_BY_ROLE[role] ?? NAV_SETTER;
 
-  const isActive = (href: string) =>
-    pathname === href || (href !== "/dashboard" && pathname.startsWith(href + "/")) ||
-    // session & results map back to Practice
-    (href === "/practice" && (pathname.startsWith("/session") || pathname.startsWith("/results")));
+  // Highlight only the MOST specific matching item, so index routes like
+  // /office don't stay lit when you're on /office/team. Session & results map
+  // back to Practice.
+  const activeHref = (() => {
+    const hrefs = nav.map((n) => n.href);
+    const matched = hrefs.filter((h) => pathname === h || pathname.startsWith(h + "/"));
+    if ((pathname.startsWith("/session") || pathname.startsWith("/results")) && hrefs.includes("/practice")) {
+      matched.push("/practice");
+    }
+    return matched.sort((a, b) => b.length - a.length)[0] ?? null;
+  })();
+  const isActive = (href: string) => href === activeHref;
 
   async function logout() {
     try {
+      await fetch("/api/role", { method: "DELETE" });
       await createClient().auth.signOut();
     } catch {
       /* ignore */
@@ -87,6 +99,7 @@ export function Sidebar({
       </nav>
 
       <div className="sb-foot">
+        {roles.length > 1 && <RoleSwitcher roles={roles} activeRole={role} />}
         <div className="sb-user" role="button" tabIndex={0} onClick={logout} title="Sign out">
           <div className="av">{initials}</div>
           <div style={{ minWidth: 0 }}>

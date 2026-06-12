@@ -17,6 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="shell">
         <Sidebar
           role={activeRole}
+          roles={user.roles}
           name={fullName(user.firstName, user.lastName)}
           roleLabel={ROLE_LABEL[activeRole]}
           initials={initialsOf(user.firstName, user.lastName)}
