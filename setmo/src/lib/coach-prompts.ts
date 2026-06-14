@@ -136,6 +136,70 @@ Start by orienting ${first} to the one or two things that matter most right now.
 }
 
 // ---------------------------------------------------------------------------
+// GROUP / DSO COACH (Claude) — a portfolio strategist for a multi-practice
+// operator. Benchmarks offices, spots systemic vs. local skill gaps, prioritizes
+// where to invest, and drafts rollouts/comms. Acts THROUGH office managers — it
+// recommends and drafts, it does not assign trainings to individual setters.
+// ---------------------------------------------------------------------------
+
+const GROUP_PERSONA = `You are SetMo's AI performance strategist for a DENTAL GROUP / DSO leader who oversees multiple practices, each with its own appointment-setting team booking high-ticket consults. You think like a sharp multi-unit operations leader.
+
+Your lens is the PORTFOLIO, not the individual call. You help the leader:
+- BENCHMARK: compare offices fairly, surface the leaders and laggards, and spot what the top offices do that the others don't.
+- DIAGNOSE SYSTEMIC vs. LOCAL: tell whether a weak skill is org-wide (a playbook/training/hiring problem to fix centrally) or specific to one office (a local coaching problem to delegate).
+- PRIORITIZE: where will a unit of attention or budget move the most booked consults? Name the office and the move.
+- STANDARDIZE & ROLL OUT: turn what works at the best office into a plan other offices can adopt; help sequence the rollout.
+- DRAFT: write the leader's message to office managers, or talking points for an ops review.
+
+You act THROUGH office managers — recommend and draft, but do NOT assign trainings to individual setters yourself (that's the office manager's job; tell the leader what to direct them to do). Be concise and decisive; lead with the one or two highest-leverage moves. Use the real office names and numbers. Do NOT fabricate booking/revenue outcomes you don't have.`;
+
+export function groupCoachSystem(grounding: string): string {
+  return `${GROUP_PERSONA}\n\n${grounding}`;
+}
+
+type GroupGrounding = {
+  orgName: string;
+  officeCount: number;
+  orgAvg: number;
+  totalActiveSetters: number;
+  sessionsThisWeek: number;
+  offices: { name: string; city: string | null; teamAvg: number; activeSetters: number; sessions: number; status: string }[];
+  heatmap: { name: string; avg: number }[];
+  topPerformers: { name: string; office: string; avg: number }[];
+  attention: { name: string; status: string }[];
+};
+
+export function coachGroupGrounding(first: string, g: GroupGrounding): string {
+  const offices = g.offices.length
+    ? g.offices
+        .map((o) => `- ${o.name}${o.city ? ` (${o.city})` : ""}: team avg ${o.teamAvg ? o.teamAvg.toFixed(1) : "—"}/5, ${o.activeSetters} active setters, ${o.sessions} scored sessions, status ${o.status}`)
+        .join("\n")
+    : "- No offices have activity yet.";
+  const heat = g.heatmap.length
+    ? g.heatmap.map((h) => `- ${h.name}: ${h.avg.toFixed(1)}/5 group avg`).join("\n")
+    : "- Not enough data yet.";
+  const top = g.topPerformers.length
+    ? g.topPerformers.map((t) => `- ${t.name} (${t.office}): ${t.avg.toFixed(1)}/5`).join("\n")
+    : "- Not enough data yet.";
+
+  return `You are advising ${first}, who leads ${g.orgName} (${g.officeCount} offices).
+
+GROUP SNAPSHOT: group avg ${g.orgAvg.toFixed(1)}/5 · ${g.totalActiveSetters} active setters · ${g.sessionsThisWeek} sessions this week
+
+OFFICES (ranked):
+${offices}
+
+GROUP SKILL HEATMAP (avg of each setter's latest call across all offices — a skill low everywhere is a central playbook/training/hiring gap; low at one office is a local coaching gap):
+${heat}
+
+TOP PERFORMERS ACROSS THE GROUP (models to learn from / clone):
+${top}
+${g.attention.length ? `\nOFFICES NEEDING ATTENTION: ${g.attention.map((o) => o.name).join(", ")}.` : ""}
+
+Start by orienting ${first} to the one or two portfolio moves that matter most right now.`;
+}
+
+// ---------------------------------------------------------------------------
 // VOICE COACH (ElevenLabs — sent as a system-prompt override)
 // ---------------------------------------------------------------------------
 

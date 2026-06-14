@@ -1,6 +1,7 @@
 import { requireUser, getActiveRole, isManagerRole } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
 import { getOfficeOverview } from "@/lib/office";
+import { getGroupOverview } from "@/lib/group";
 import { CoachWorkspace } from "@/components/coach/CoachWorkspace";
 
 const GENERAL_STARTERS = [
@@ -19,8 +20,44 @@ export default async function CoachPage({
   const { session } = await searchParams;
   const first = user.firstName ?? "there";
 
+  const activeRole = getActiveRole(user);
+
+  // Group / DSO leader → Portfolio strategist (chat, multi-office grounded).
+  if (activeRole === "GROUP_ADMIN" && user.organizationId) {
+    const g = await getGroupOverview(user.organizationId);
+    const lagging = g.attention.map((o) => o.name).slice(0, 2);
+    const welcome = `Hey ${first} 👋 I'm your portfolio strategist. Across ${g.officeCount} practices you're averaging ${g.orgAvg.toFixed(1)}/5${
+      lagging.length ? `, with ${lagging.join(" & ")} lagging` : ""
+    }. Want me to show you where to focus across the group?`;
+    return (
+      <>
+        <div className="topbar">
+          <div className="tb-greet">
+            <h1>Coach</h1>
+            <p>Your AI portfolio strategist — benchmark practices and decide where to invest.</p>
+          </div>
+          <div className="tb-right">
+            <span className="chip purple">AI Coach</span>
+          </div>
+        </div>
+        <CoachWorkspace
+          variant="manager"
+          voiceEnabled={false}
+          intro={`Hey ${first} — let's look across the group.`}
+          welcome={welcome}
+          starters={[
+            "Which practices need my attention?",
+            "Is our weakest skill systemic or local?",
+            "What does our top office do that others don't?",
+            "Draft a message to my office managers for this week.",
+          ]}
+        />
+      </>
+    );
+  }
+
   // Office Admin / manager → Practice Performance Coach (team-grounded).
-  if (isManagerRole(getActiveRole(user)) && user.officeId) {
+  if (isManagerRole(activeRole) && user.officeId) {
     const o = await getOfficeOverview(user.officeId);
     const watch = o.attention.map((t) => t.name).slice(0, 2);
     const welcome = `Hey ${first} 👋 I'm your practice performance coach. Your team is averaging ${o.teamAvg.toFixed(1)}/5 across ${o.activeSetters} active setter${o.activeSetters === 1 ? "" : "s"}${

@@ -4,12 +4,15 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
 import { getOfficeCoachContext } from "@/lib/office";
+import { getGroupCoachContext } from "@/lib/group";
 import {
   coachChatSystem,
   coachGroundingFromCall,
   coachGeneralGrounding,
   adminCoachSystem,
   coachAdminGrounding,
+  groupCoachSystem,
+  coachGroupGrounding,
 } from "@/lib/coach-prompts";
 import { error, json } from "@/lib/api";
 
@@ -43,8 +46,12 @@ export async function POST(req: Request) {
   const first = user.firstName ?? "there";
   const apiMessages = messages.map((m) => ({ role: m.role, content: m.content }));
 
+  const activeRole = getActiveRole(user);
   try {
-    if (isManagerRole(getActiveRole(user)) && user.officeId) {
+    if (activeRole === "GROUP_ADMIN" && user.organizationId) {
+      return await groupChat(first, user.organizationId, apiMessages);
+    }
+    if (isManagerRole(activeRole) && user.officeId) {
       return await managerChat(first, user.officeId, apiMessages);
     }
     return await setterChat(first, user.id, sessionId, apiMessages);
@@ -77,6 +84,32 @@ async function setterChat(
     system: coachChatSystem(grounding),
     messages: apiMessages,
   });
+  return json({ reply: textOf(res), actions: [] });
+}
+
+// ---- Group/DSO coach (portfolio strategist, analytical) ----
+async function groupChat(
+  first: string,
+  orgId: string,
+  apiMessages: { role: "user" | "assistant"; content: string }[]
+) {
+  const g = await getGroupCoachContext(orgId);
+  const system = groupCoachSystem(
+    coachGroupGrounding(first, {
+      orgName: g.orgName,
+      officeCount: g.officeCount,
+      orgAvg: g.orgAvg,
+      totalActiveSetters: g.totalActiveSetters,
+      sessionsThisWeek: g.sessionsThisWeek,
+      offices: g.offices.map((o) => ({ name: o.name, city: o.city, teamAvg: o.teamAvg, activeSetters: o.activeSetters, sessions: o.sessions, status: o.status })),
+      heatmap: g.heatmap.map((h) => ({ name: h.name, avg: h.avg })),
+      topPerformers: g.topPerformers,
+      attention: g.attention.map((o) => ({ name: o.name, status: o.status })),
+    })
+  );
+
+  const client = new Anthropic();
+  const res = await client.messages.create({ model: MODEL, max_tokens: 1500, system, messages: apiMessages });
   return json({ reply: textOf(res), actions: [] });
 }
 

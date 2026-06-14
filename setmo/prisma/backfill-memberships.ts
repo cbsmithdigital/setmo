@@ -31,13 +31,15 @@ async function main() {
     if (await grant(u.id, u.role, u.officeId, u.organizationId)) created++;
   }
 
-  // Demo: Sam (setter) also helps manage the practice — grant OFFICE_ADMIN.
+  // Demo: Sam wears multiple hats — setter, office admin, and DSO lead — so one
+  // login can demo all three role views + the role switcher.
   const sam = await prisma.user.findFirst({ where: { email: "sam@brightworkdental.com" } });
-  let samGranted = false;
-  if (sam?.officeId) samGranted = await grant(sam.id, "OFFICE_ADMIN", sam.officeId, sam.organizationId);
+  let samRoles = 0;
+  if (sam?.officeId && (await grant(sam.id, "OFFICE_ADMIN", sam.officeId, sam.organizationId))) samRoles++;
+  if (sam?.organizationId && (await grant(sam.id, "GROUP_ADMIN", sam.officeId, sam.organizationId))) samRoles++;
 
   console.log(`✅ Backfilled ${created} primary membership(s) across ${users.length} users.`);
-  console.log(samGranted ? "✅ Granted Sam a second role (OFFICE_ADMIN) — role switcher will appear for him." : "ℹ️ Sam already had the OFFICE_ADMIN membership.");
+  console.log(`✅ Granted Sam ${samRoles} new role(s). Sam now holds Setter + Office Admin + Group/DSO.`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

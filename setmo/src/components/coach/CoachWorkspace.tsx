@@ -31,18 +31,29 @@ export function CoachWorkspace({
   welcome,
   starters,
   variant = "setter",
+  voiceEnabled = true,
 }: {
   sessionId?: string;
   intro: string;
   welcome: string;
   starters: string[];
   variant?: "setter" | "manager";
+  voiceEnabled?: boolean;
 }) {
   const [mode, setMode] = useState<"choose" | "chat">("choose");
   const [voice, setVoice] = useState<{ open: boolean; focus?: string }>({ open: false });
   const copy = COPY[variant];
 
   const openVoice = (focus?: string) => setVoice({ open: true, focus });
+
+  // Chat-only (e.g. the DSO strategist) — skip the chooser, no voice.
+  if (!voiceEnabled) {
+    return (
+      <div className="content">
+        <CoachChat sessionId={sessionId} welcome={welcome} starters={starters} variant={variant} />
+      </div>
+    );
+  }
 
   return (
     <div className="content">

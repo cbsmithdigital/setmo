@@ -29,9 +29,15 @@ const NAV_OFFICE: NavItem[] = [
   { href: "/office/leaderboard", label: "Leaderboard", icon: "trophy" },
 ];
 
+const NAV_GROUP: NavItem[] = [
+  { href: "/group", label: "Portfolio", icon: "building" },
+  { href: "/coach", label: "Coach", icon: "chat", ai: true },
+];
+
 const NAV_BY_ROLE: Record<string, NavItem[]> = {
   SETTER: NAV_SETTER,
   OFFICE_ADMIN: NAV_OFFICE,
+  GROUP_ADMIN: NAV_GROUP,
 };
 
 export function Sidebar({
