@@ -17,6 +17,7 @@ export type ScoreTurn = { speaker: "you" | "lead"; text: string; t: number; inte
 
 export interface TranscriptScore {
   overallScore: number;
+  booked: boolean;
   skills: { skillKey: string; tier: "UNIVERSAL" | "SERVICE_SPECIFIC"; score: number; reasoning: string }[];
   wins: string[];
   misses: string[];
@@ -54,6 +55,7 @@ const ScoreZ = z.object({
   persona_coaching: z.string(),
   next_scenario: z.string(),
   narrative: z.string(),
+  booked: z.boolean(),
 });
 
 const clamp = (n: number) => Math.max(1, Math.min(5, Math.round(n * 10) / 10));
@@ -105,7 +107,9 @@ export async function scoreTranscript(opts: {
 
 Rubric:${RUBRIC_GUIDE}
 
-Also write: 2-3 specific "wins" (what the setter did well, concrete), 2-3 "misses" (specific growth areas), 1-3 replacement_phrases ({from: what they said, to: a stronger line}), persona_coaching (how to handle this lead type), next_scenario (a tougher rep to try), and a one-sentence encouraging narrative headline. overall = your holistic 1-5 for the call.`;
+Also write: 2-3 specific "wins" (what the setter did well, concrete), 2-3 "misses" (specific growth areas), 1-3 replacement_phrases ({from: what they said, to: a stronger line}), persona_coaching (how to handle this lead type), next_scenario (a tougher rep to try), and a one-sentence encouraging narrative headline. overall = your holistic 1-5 for the call.
+
+booked: set to true ONLY if the lead actually agreed to / scheduled a consultation appointment by the end of the call (a committed time, "yes I'll come in," or a clearly accepted booking). Set false if no appointment was secured. This is independent of how well the call was handled — a low-scoring call can still book, and a high-scoring call can fail to book.`;
 
   const user = `Practice: ${opts.office.name ?? "a dental practice"}${opts.office.city ? ` (${opts.office.city})` : ""}. Offer framing: ${opts.office.offerFraming ?? "n/a"}. Call duration: ${Math.round(opts.durationSeconds)}s.
 
@@ -143,6 +147,7 @@ ${transcriptText}`;
 
     return {
       overallScore: clamp(o.overall),
+      booked: o.booked,
       skills: [
         skillFromKey("rapport", o.rapport),
         skillFromKey("listening", o.listening),

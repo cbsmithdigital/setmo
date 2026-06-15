@@ -404,6 +404,7 @@ model Evaluation {
   personaCoaching         String?  @map("persona_coaching")
   recommendedNextScenario String?  @map("recommended_next_scenario")
   rawPayload              Json?    @map("raw_payload")
+  booked                  Boolean? // did the lead actually schedule a consult on this call (independent of score)
   scoredAt                DateTime? @map("scored_at") // null = transcript captured but not yet scored
   createdAt               DateTime @default(now()) @map("created_at")
 

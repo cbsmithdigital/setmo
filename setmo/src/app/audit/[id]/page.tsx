@@ -87,7 +87,10 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
           {rec && (
             <div className="ar-recover">
               <div className="l">Estimated recovery</div>
-              <div className="v"><span>+{rec.recoveredPerMonth} booked consults / mo</span> · ~${rec.dollarValue.toLocaleString()}</div>
+              <div className="v"><span>+{rec.treatmentStartsPerMonth} treatment start{rec.treatmentStartsPerMonth === 1 ? "" : "s"} / mo</span> · ~${rec.dollarValue.toLocaleString()}</div>
+              <div style={{ color: "var(--d-muted)", fontSize: 12, marginTop: 6 }}>
+                Closing the leaks above lifts your set rate ~+{rec.setRateLiftPts} pts and show rate ~+{rec.showRateLiftPts} pts — about {rec.treatmentStartsPerMonth} more treatment start{rec.treatmentStartsPerMonth === 1 ? "" : "s"} a month at ${rec.caseValue.toLocaleString()}/case.
+              </div>
             </div>
           )}
         </div>

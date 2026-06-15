@@ -93,6 +93,7 @@ export async function scoreSession(
   let personaCoaching = parsed.personaCoaching;
   let nextScenario = parsed.recommendedNextScenario;
   let narrative = parsed.narrative;
+  let booked: boolean | null = null;
   let source = "agent-feedback";
 
   const turns = extractTranscript(rawPayload);
@@ -115,6 +116,7 @@ export async function scoreSession(
       personaCoaching = scored.personaCoaching;
       nextScenario = scored.recommendedNextScenario;
       narrative = scored.narrative ?? parsed.narrative;
+      booked = scored.booked;
       source = "transcript-scorer";
     }
   } else if (!longEnough) {
@@ -135,6 +137,7 @@ export async function scoreSession(
         replacementPhrases: phrases,
         personaCoaching,
         recommendedNextScenario: nextScenario,
+        booked,
         scoredAt: new Date(),
       },
     });

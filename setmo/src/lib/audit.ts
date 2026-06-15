@@ -5,11 +5,13 @@ import type { ServiceKey } from "@/generated/prisma/client";
 
 // ---- tunable constants (the prospect-facing recovery math lives here) ----
 export const AUDIT_CALLS = 5;
-export const AUDIT_BOOKED_THRESHOLD = 4.0; // a call counts as "booked" at/above this overall
-export const ACHIEVABLE_RATE = 0.7; // set rate a trained setter can reach
 export const DEFAULT_CASE_VALUE = 12000; // full-arch default
 export const DEFAULT_MONTHLY_LEADS = 20;
 export const AUDIT_CALL_MAX_SECONDS = 12 * 60; // hard cap per audit call
+// recovery model
+const SKILL_TARGET = 4.2; // what a trained setter scores
+const SHOW_RATE = 0.65; // booked consults that actually show
+const CASE_ACCEPTANCE = 0.4; // shown consults that start treatment
 
 // Consumer/free email providers — these and duplicate domains route to manual approval.
 const FREE_EMAIL_DOMAINS = new Set([
@@ -38,24 +40,32 @@ export async function domainUsedBefore(domain: string, exceptId?: string): Promi
   return Boolean(prior);
 }
 
-// ---- the estimated-recovery model (see SetMo_product_charge_catalog §3) ----
+// ---- estimated-recovery model ----
+// Driven by the conversation MISSES: weak objection/closing caps the set rate,
+// weak rapport/discovery/value caps the show rate. We funnel a conservative lift
+// down to TREATMENT STARTS and keep the headline to a credible 1–3 / month.
+const clampRange = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+
 export function estimateRecovery(opts: {
-  bookedCount: number;
-  totalCalls?: number;
+  skillAvg: Record<string, number>;
   caseValueUsd?: number | null;
   monthlyLeads?: number | null;
 }) {
-  const totalCalls = opts.totalCalls || AUDIT_CALLS;
   const caseValue = opts.caseValueUsd ?? DEFAULT_CASE_VALUE;
   const monthlyLeads = opts.monthlyLeads ?? DEFAULT_MONTHLY_LEADS;
-  const currentRate = totalCalls ? opts.bookedCount / totalCalls : 0;
-  const gain = Math.max(0, ACHIEVABLE_RATE - currentRate);
-  const recoveredPerMonth = Math.round(monthlyLeads * gain);
+  const avgGap = (keys: string[]) => {
+    const gaps = keys.map((k) => Math.max(0, SKILL_TARGET - (opts.skillAvg[k] ?? SKILL_TARGET)));
+    return gaps.reduce((a, b) => a + b, 0) / (keys.length || 1);
+  };
+  const setRateLift = clampRange((avgGap(["objection", "closing"]) / 5) * 0.5, 0.05, 0.18);
+  const showRateLift = clampRange((avgGap(["rapport", "discovery", "painpoint", "value"]) / 5) * 0.4, 0.03, 0.12);
+  const rawStarts = monthlyLeads * (setRateLift + showRateLift) * SHOW_RATE * CASE_ACCEPTANCE;
+  const treatmentStartsPerMonth = Math.max(1, Math.min(3, Math.round(rawStarts) || 1));
   return {
-    currentRate,
-    achievableRate: ACHIEVABLE_RATE,
-    recoveredPerMonth,
-    dollarValue: recoveredPerMonth * caseValue,
+    setRateLiftPts: Math.round(setRateLift * 100), // whole percentage points
+    showRateLiftPts: Math.round(showRateLift * 100),
+    treatmentStartsPerMonth,
+    dollarValue: treatmentStartsPerMonth * caseValue,
     caseValue,
     monthlyLeads,
   };
@@ -91,7 +101,8 @@ export async function finalizeAudit(auditId: string) {
 
   const overalls = sessions.map((s) => Number(s.evaluation!.overallScore ?? 0));
   const overall = overalls.reduce((a, b) => a + b, 0) / overalls.length;
-  const bookedCount = overalls.filter((o) => o >= AUDIT_BOOKED_THRESHOLD).length;
+  // Real booking outcome (from the scorer), not inferred from the score.
+  const bookedCount = sessions.filter((s) => s.evaluation!.booked === true).length;
 
   // skill averages across the 5 calls
   const sums = new Map<string, { total: number; n: number }>();
@@ -103,14 +114,15 @@ export async function finalizeAudit(auditId: string) {
       sums.set(sk.skillKey, cur);
     }
   }
+  const skillAvg: Record<string, number> = {};
+  for (const [key, v] of sums) skillAvg[key] = v.total / v.n;
   const topLeaks = [...sums.entries()]
     .map(([key, v]) => ({ key, name: skillName(key), score: Number((v.total / v.n).toFixed(1)) }))
     .sort((a, b) => a.score - b.score)
     .slice(0, 3);
 
   const recovery = estimateRecovery({
-    bookedCount,
-    totalCalls: AUDIT_CALLS,
+    skillAvg,
     caseValueUsd: audit.caseValueUsd,
     monthlyLeads: audit.monthlyLeads,
   });
@@ -160,7 +172,7 @@ export async function buildAuditReport(auditId: string) {
       n: i + 1,
       persona: (s.personaSeed as { persona?: string } | null)?.persona ?? "Practice lead",
       score: o,
-      booked: o >= AUDIT_BOOKED_THRESHOLD,
+      booked: e.booked === true,
       win: (e.wins as string[] | null)?.[0] ?? null,
       miss: (e.misses as string[] | null)?.[0] ?? null,
       phrase: (e.replacementPhrases as { from: string; to: string }[] | null)?.[0] ?? null,
