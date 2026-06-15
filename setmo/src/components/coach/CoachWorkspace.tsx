@@ -7,18 +7,18 @@ import { VoiceCoach } from "@/components/coach/VoiceCoach";
 
 const COPY = {
   setter: {
-    prompt: "How do you want to work with your coach?",
-    chatTitle: "Chat with your coach",
+    prompt: "How do you want to work with Setty?",
+    chatTitle: "Chat with Setty",
     chatDesc: "Type it out. Get specific advice, better phrasing, and a breakdown of what to fix — at your own pace.",
-    voiceTitle: "Talk to your coach",
+    voiceTitle: "Talk to Setty",
     voiceDesc: "Practice out loud. Live role-play to rehearse the moment and lock it in. Uses your practice time.",
   },
   manager: {
-    prompt: "How do you want to work today?",
-    chatTitle: "Chat with your coach",
+    prompt: "How do you want to work with Setty today?",
+    chatTitle: "Chat with Setty",
     chatDesc: "Type it out. Diagnose the team, get a plan, assign trainings, and draft 1:1 notes — at your own pace.",
     voiceTitle: "Talk it through",
-    voiceDesc: "Think out loud with your management assistant — brainstorm, plan the week, or rehearse a 1:1. Uses your practice time.",
+    voiceDesc: "Think out loud with Setty — brainstorm, plan the week, or rehearse a 1:1. Uses your practice time.",
   },
 };
 

@@ -439,7 +439,7 @@ model AllowancePeriod {
   officeId        String   @map("office_id")
   periodStart     DateTime @map("period_start")
   periodEnd       DateTime @map("period_end")
-  includedSeconds BigInt   @default(0) @map("included_seconds") // seats × 3h × 3600
+  includedSeconds BigInt   @default(0) @map("included_seconds") // seats × 5h × 3600
   bundleSeconds   BigInt   @default(0) @map("bundle_seconds")
   consumedSeconds BigInt   @default(0) @map("consumed_seconds") // incremented server-side
 

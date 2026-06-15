@@ -31,7 +31,7 @@ export function SubscribeModal({
   const rate = discountRate(seats);
   const monthly = seats * PRICE_PER_SEAT * (1 - rate);
   const total = cadence === "QUARTERLY" ? monthly * 3 * 0.95 : monthly;
-  const includedHours = seats * 3;
+  const includedHours = seats * 5;
 
   async function go() {
     setErr(null);

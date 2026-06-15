@@ -60,7 +60,7 @@ export default async function ResultsPage({
                 Done
               </Link>
               <Link className="btn btn-ghost" href={`/coach?session=${r.sessionId}`}>
-                <Icon name="chat" /> Coach me on this call
+                <Icon name="chat" /> Coach me with Setty
               </Link>
               <Link className="btn btn-primary" href="/practice">
                 <Icon name="mic" /> Run another

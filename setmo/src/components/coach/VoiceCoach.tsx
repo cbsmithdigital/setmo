@@ -31,7 +31,7 @@ function Waveform({ active, bars = 36 }: { active: boolean; bars?: number }) {
 
 const COPY = {
   setter: {
-    chip: "Voice coach",
+    chip: "Setty",
     topic: "Practicing",
     endedTitle: "Nice rep!",
     endedSub: "Run it again any time — reps are how it sticks.",
@@ -39,7 +39,7 @@ const COPY = {
     listening: "Listening — take it away",
   },
   manager: {
-    chip: "Management assistant",
+    chip: "Setty",
     topic: "Working on",
     endedTitle: "Good session",
     endedSub: "Come back any time to plan, brainstorm, or rehearse.",
@@ -172,7 +172,7 @@ function Inner({
           <>
             <div style={{ textAlign: "center", margin: "8px 0" }}>
               <div className="muted" style={{ fontSize: 13 }}>
-                {phase === "connecting" ? "Connecting…" : speaking ? "Coach is speaking…" : muted ? "You're muted" : copy.listening}
+                {phase === "connecting" ? "Connecting…" : speaking ? "Setty is speaking…" : muted ? "You're muted" : copy.listening}
               </div>
               <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 44, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums", margin: "6px 0" }}>
                 {mmss(secs)}

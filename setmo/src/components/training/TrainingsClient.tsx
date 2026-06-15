@@ -137,10 +137,10 @@ export function TrainingsClient({
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
               <h2 style={{ fontSize: 21 }}>Help me say it better</h2>
-              <span className="chip purple" style={{ padding: "2px 9px", fontSize: 11 }}>AI Coach</span>
+              <span className="chip purple" style={{ padding: "2px 9px", fontSize: 11 }}>Setty</span>
             </div>
             <p className="muted" style={{ fontSize: 14.5, maxWidth: "40em" }}>
-              Chat or talk it through with your coach — figure out the exact words, or run a quick role-play of just the
+              Chat or talk it through with Setty — figure out the exact words, or run a quick role-play of just the
               moment you&apos;re stuck on.
             </p>
           </div>

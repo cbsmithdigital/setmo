@@ -31,7 +31,7 @@ export default async function GroupPage() {
         </div>
         <div className="tb-right">
           <Link className="btn btn-primary" href="/coach">
-            <Icon name="chat" /> Ask your strategist
+            <Icon name="chat" /> Ask Setty Advisor
           </Link>
         </div>
       </div>

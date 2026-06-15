@@ -113,7 +113,7 @@ export function CoachChat({
 
         {loading && (
           <div className="muted" style={{ fontSize: 13.5, paddingLeft: 45 }}>
-            Coach is thinking…
+            Setty is thinking…
           </div>
         )}
         {err && <div className="banner error">{err}</div>}

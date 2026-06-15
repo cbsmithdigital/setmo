@@ -166,7 +166,7 @@ async function main() {
       officeId: OFFICE_ID,
       periodStart,
       periodEnd,
-      includedSeconds: BigInt(12 * 180 * 60), // 12 seats × 3h
+      includedSeconds: BigInt(12 * 5 * 3600), // 12 seats × 5h
       bundleSeconds: BigInt(0),
       consumedSeconds: BigInt(Math.round(22.4 * 3600)),
     },

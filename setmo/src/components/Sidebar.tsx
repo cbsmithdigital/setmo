@@ -15,7 +15,7 @@ const NAV_SETTER: NavItem[] = [
   { href: "/practice", label: "Practice", icon: "mic" },
   { href: "/progress", label: "Progress", icon: "chart" },
   { href: "/trainings", label: "Trainings", icon: "book" },
-  { href: "/coach", label: "Coach", icon: "chat", ai: true },
+  { href: "/coach", label: "Setty", icon: "chat", ai: true },
   { href: "/library", label: "Saved", icon: "doc" },
   { href: "/leaderboard", label: "Leaderboard", icon: "trophy" },
 ];
@@ -25,14 +25,14 @@ const NAV_OFFICE: NavItem[] = [
   { href: "/office/team", label: "Team", icon: "team" },
   { href: "/office/catalog", label: "Service catalog", icon: "target" },
   { href: "/office/billing", label: "Usage & billing", icon: "card" },
-  { href: "/coach", label: "Coach", icon: "chat", ai: true },
+  { href: "/coach", label: "Setty", icon: "chat", ai: true },
   { href: "/library", label: "Saved", icon: "doc" },
   { href: "/office/leaderboard", label: "Leaderboard", icon: "trophy" },
 ];
 
 const NAV_GROUP: NavItem[] = [
   { href: "/group", label: "Portfolio", icon: "building" },
-  { href: "/coach", label: "Coach", icon: "chat", ai: true },
+  { href: "/coach", label: "Setty", icon: "chat", ai: true },
 ];
 
 const NAV_BY_ROLE: Record<string, NavItem[]> = {

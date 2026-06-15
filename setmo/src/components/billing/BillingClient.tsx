@@ -99,7 +99,7 @@ export function BillingClient({
               <div style={{ height: "100%", width: poolPct + "%", background: low ? "linear-gradient(90deg,#f59e0b,#ef4444)" : "var(--grad-mint)", borderRadius: 99 }} />
             </div>
             <p className="muted" style={{ fontSize: 12.5, marginBottom: 16 }}>
-              {data.seats} seats × 3 hrs = {data.seats * 3} hrs included, plus purchased bundles. No surprise overage —
+              {data.seats} seats × 5 hrs = {data.seats * 5} hrs included, plus purchased bundles. No surprise overage —
               sessions pause when the pool runs out.
             </p>
             <button className="btn btn-primary" onClick={() => setModal("bundle")}>

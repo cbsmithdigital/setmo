@@ -26,18 +26,18 @@ export default async function CoachPage({
   if (activeRole === "GROUP_ADMIN" && user.organizationId) {
     const g = await getGroupOverview(user.organizationId);
     const lagging = g.attention.map((o) => o.name).slice(0, 2);
-    const welcome = `Hey ${first} 👋 I'm your portfolio strategist. Across ${g.officeCount} practices you're averaging ${g.orgAvg.toFixed(1)}/5${
+    const welcome = `Hey ${first} 👋 I'm Setty Advisor. Across ${g.officeCount} practices you're averaging ${g.orgAvg.toFixed(1)}/5${
       lagging.length ? `, with ${lagging.join(" & ")} lagging` : ""
     }. Want me to show you where to focus across the group?`;
     return (
       <>
         <div className="topbar">
           <div className="tb-greet">
-            <h1>Coach</h1>
+            <h1>Setty Advisor</h1>
             <p>Your AI portfolio strategist — benchmark practices and decide where to invest.</p>
           </div>
           <div className="tb-right">
-            <span className="chip purple">AI Coach</span>
+            <span className="chip purple">Setty</span>
           </div>
         </div>
         <CoachWorkspace
@@ -60,18 +60,18 @@ export default async function CoachPage({
   if (isManagerRole(activeRole) && user.officeId) {
     const o = await getOfficeOverview(user.officeId);
     const watch = o.attention.map((t) => t.name).slice(0, 2);
-    const welcome = `Hey ${first} 👋 I'm your practice performance coach. Your team is averaging ${o.teamAvg.toFixed(1)}/5 across ${o.activeSetters} active setter${o.activeSetters === 1 ? "" : "s"}${
+    const welcome = `Hey ${first} 👋 I'm Setty, your office coach. Your team is averaging ${o.teamAvg.toFixed(1)}/5 across ${o.activeSetters} active setter${o.activeSetters === 1 ? "" : "s"}${
       watch.length ? `, and ${watch.join(" & ")} could use a nudge` : ""
     }. Want me to break down where to focus this week?`;
     return (
       <>
         <div className="topbar">
           <div className="tb-greet">
-            <h1>Coach</h1>
-            <p>Your AI performance coach — develop the team and lift booked-consult outcomes.</p>
+            <h1>Setty Office Coach</h1>
+            <p>Develop the team and lift booked-consult outcomes.</p>
           </div>
           <div className="tb-right">
-            <span className="chip purple">AI Coach</span>
+            <span className="chip purple">Setty</span>
           </div>
         </div>
         <CoachWorkspace
@@ -89,9 +89,9 @@ export default async function CoachPage({
     );
   }
 
-  let welcome = `Hey ${first} 👋 I'm your SetMo coach. Ask me anything about your calls — or open a session and hit "Coach me from this call" for feedback tied to that exact conversation.`;
+  let welcome = `Hey ${first} 👋 I'm Setty, your coach. Ask me anything about your calls — or open a session and hit "Coach me from this call" for feedback tied to that exact conversation.`;
   let starters = GENERAL_STARTERS;
-  let subhead = "Your AI coach — sharpen the skills your calls show you need.";
+  let subhead = "Setty — sharpen the skills your calls show you need.";
   let intro = `Hey ${first} — let's sharpen your next call.`;
 
   if (session) {
@@ -116,7 +116,7 @@ export default async function CoachPage({
     <>
       <div className="topbar">
         <div className="tb-greet">
-          <h1>Coach</h1>
+          <h1>Setty</h1>
           <p>{subhead}</p>
         </div>
         <div className="tb-right">
