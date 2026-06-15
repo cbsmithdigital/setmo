@@ -119,9 +119,12 @@ ${transcriptText}`;
       model: MODEL,
       max_tokens: 4096,
       thinking: { type: "adaptive" },
-      // `low` effort keeps scoring well under the function budget (medium ran ~54s
-      // on a 4-min call — right at the old 60s limit). Scoring is now also async.
-      output_config: { format: zodOutputFormat(ScoreZ), effort: "low" },
+      // `medium` for thorough, consistent 8-skill scoring. Latency (~54s) is no
+      // longer a constraint — scoring runs in the background (after(), 300s budget).
+      output_config: {
+        format: zodOutputFormat(ScoreZ),
+        effort: (process.env.SETMO_SCORER_EFFORT as "low" | "medium" | "high" | undefined) || "medium",
+      },
       system,
       messages: [{ role: "user", content: user }],
     });
