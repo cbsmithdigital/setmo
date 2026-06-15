@@ -152,6 +152,7 @@ model Office {
   depositPolicy    String?  @map("deposit_policy")
   seatCount        Int      @default(1) @map("seat_count")
   stripeCustomerId String?  @map("stripe_customer_id")
+  isProspect       Boolean  @default(false) @map("is_prospect") // created by a pre-sale Setter Audit, not yet a customer
   createdAt        DateTime @default(now()) @map("created_at")
 
   organization Organization?       @relation(fields: [organizationId], references: [id])
@@ -162,6 +163,7 @@ model Office {
   bundles      ConversationBundle[]
   subscription Subscription?
   outcomes     OfficeOutcome[]
+  audits       SetterAudit[]
 
   @@index([organizationId])
   @@map("office")
@@ -327,16 +329,61 @@ model Session {
   savedAt                DateTime?     @map("saved_at")
   shareToken             String?       @unique @map("share_token") // set when a read-only share link is generated
   sharedAt               DateTime?     @map("shared_at")
+  isAudit                Boolean       @default(false) @map("is_audit") // part of a pre-sale Setter Audit
+  auditId                String?       @map("audit_id")
 
-  setter     User        @relation(fields: [setterId], references: [id])
-  office     Office      @relation(fields: [officeId], references: [id])
-  agent      Agent?      @relation(fields: [agentId], references: [id])
+  setter     User         @relation(fields: [setterId], references: [id])
+  office     Office       @relation(fields: [officeId], references: [id])
+  agent      Agent?       @relation(fields: [agentId], references: [id])
   evaluation Evaluation?
+  audit      SetterAudit? @relation(fields: [auditId], references: [id])
 
   @@index([setterId])
   @@index([officeId])
   @@index([serviceType])
+  @@index([auditId])
   @@map("session")
+}
+
+enum SetterAuditStatus {
+  CREATED // intake done, email not yet verified
+  PENDING_APPROVAL // free-email or duplicate domain — awaiting platform-admin approval
+  ACTIVE // verified + approved, running the 5 calls
+  SCORED // all 5 scored, report ready
+}
+
+// The pre-sale Setter Audit: a prospect runs 5 calls, we score them and produce
+// a one-page report. One free per practice (by email domain). Light login via a
+// per-audit token (no Supabase account). Calls are owned by a prospect User in a
+// prospect Office.
+model SetterAudit {
+  id           String            @id @default(uuid())
+  officeId     String            @map("office_id") // prospect (or claimed) office
+  prospectUserId String          @map("prospect_user_id") // owns the audit's sessions
+  contactName  String            @map("contact_name")
+  practiceName String            @map("practice_name")
+  email        String
+  emailDomain  String            @map("email_domain")
+  token        String            @unique // verify-link param + ongoing access secret
+  status       SetterAuditStatus @default(CREATED)
+  emailVerified Boolean          @default(false) @map("email_verified")
+  approved     Boolean           @default(false)
+  isFree       Boolean           @default(true) @map("is_free")
+  caseValueUsd Int?              @map("case_value_usd")
+  monthlyLeads Int?              @map("monthly_leads")
+  overallScore Decimal?          @map("overall_score") @db.Decimal(2, 1)
+  bookedCount  Int?              @map("booked_count")
+  topLeakSkills Json?            @map("top_leak_skills")
+  estimatedRecovery Json?        @map("estimated_recovery")
+  stripePaymentIntent String?    @map("stripe_payment_intent")
+  baselineAt   DateTime?         @map("baseline_at")
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  office   Office    @relation(fields: [officeId], references: [id])
+  sessions Session[]
+
+  @@index([emailDomain])
+  @@map("setter_audit")
 }
 
 model Evaluation {

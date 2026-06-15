@@ -5,9 +5,8 @@ import "./marketing.css";
 
 export const dynamic = "force-dynamic";
 
-// Until the Setter Audit flow is built, the "free audit / start free" CTAs send
-// people into the app login; group sales CTAs open an email.
-const AUDIT_HREF = "/login";
+// The "free audit / start free" CTAs go to the Setter Audit front door.
+const AUDIT_HREF = "/audit";
 const DEMO_MAILTO = "mailto:hello@growdental.ai?subject=SetMo%20for%20our%20group";
 
 function Ck() {

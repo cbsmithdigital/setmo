@@ -136,6 +136,12 @@ export async function ingestPostCall(
     }
   });
 
+  // Setter Audit calls are scored, but never draw down a pool, drive
+  // recommendations, or hit a leaderboard (the prospect isn't a customer).
+  if (session.isAudit) {
+    return { ok: true, sessionId: session.id, source: source + "-audit" };
+  }
+
   // Draw down the pooled allowance from the authoritative duration.
   await drawDownUsage(session.officeId, duration);
 

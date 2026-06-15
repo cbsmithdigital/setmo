@@ -1621,6 +1621,91 @@
   color: #fff;
 }
 
+/* ---- Setter Audit flow (reuses the marketing theme) ---- */
+.mkt .audit-shell {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+.mkt .audit-card {
+  background: var(--paper);
+  border: 1px solid var(--m-line);
+  border-radius: var(--r-2xl);
+  padding: 36px;
+}
+.mkt .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.mkt .field label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.mkt .field .hint {
+  font-size: 12.5px;
+  color: var(--m-muted);
+  font-weight: 400;
+}
+.mkt input,
+.mkt textarea {
+  font-family: var(--font-dmsans);
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--cream);
+  border: 1.5px solid var(--m-line);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.18s;
+}
+.mkt input:focus,
+.mkt textarea:focus {
+  border-color: var(--purple);
+}
+.mkt .btn-block {
+  width: 100%;
+  justify-content: center;
+}
+.mkt .audit-steps {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.mkt .audit-steps .dot {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--m-line);
+}
+.mkt .audit-steps .dot.on {
+  background: var(--m-grad-mint);
+}
+.mkt .audit-note {
+  font-size: 13px;
+  color: var(--m-muted);
+  margin-top: 14px;
+}
+.mkt .banner {
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+.mkt .banner.error {
+  background: #fdecec;
+  border: 1px solid #f3c0c0;
+  color: #b42318;
+}
+.mkt .banner.ok {
+  background: var(--mint-soft);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: var(--mint-deep);
+}
+
 @keyframes mkt-reveal {
   from {
     transform: translateY(20px);

@@ -37,6 +37,7 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isAuthRoute =
     path === "/" || // public marketing/landing page
+    path.startsWith("/audit") || // pre-sale Setter Audit (token-cookie gated)
     path === "/login" ||
     path.startsWith("/invite") ||
     path.startsWith("/auth") ||
