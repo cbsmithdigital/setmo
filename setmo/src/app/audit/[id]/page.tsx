@@ -3,6 +3,7 @@ import Link from "next/link";
 import { loadAuditByCookie } from "@/lib/audit-auth";
 import { auditCallCounts, buildAuditReport, AUDIT_CALLS, AUDIT_CALL_MAX_SECONDS } from "@/lib/audit";
 import { AuditRunner } from "@/components/audit/AuditRunner";
+import { AuditPayButton } from "@/components/audit/AuditPayButton";
 import "../../marketing.css";
 
 export const dynamic = "force-dynamic";
@@ -46,8 +47,9 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
         <div className="audit-card">
           <h3 style={{ fontSize: 22, marginBottom: 10 }}>We&apos;re reviewing your request 🔍</h3>
           <p style={{ color: "var(--m-muted)", fontSize: 15.5 }}>
-            Because you used a personal email or your practice already used its free audit, we&apos;re confirming this one by hand. We&apos;ll email <b style={{ color: "var(--ink-soft)" }}>{audit.email}</b> shortly. Want it sooner? Reply to that email.
+            Because you used a personal email or your practice already used its free audit, we&apos;re confirming this one by hand. We&apos;ll email <b style={{ color: "var(--ink-soft)" }}>{audit.email}</b> shortly.
           </p>
+          <AuditPayButton id={id} />
         </div>
       </Shell>
     );

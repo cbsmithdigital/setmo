@@ -22,6 +22,8 @@ export async function POST(req: Request) {
       const session = event.data.object;
       if (session.metadata?.kind === "bundle" && session.payment_status === "paid") {
         await applyBundle(session);
+      } else if (session.metadata?.kind === "audit" && session.payment_status === "paid") {
+        await activatePaidAudit(session);
       }
       break;
     }
@@ -70,6 +72,26 @@ async function applyBundle(session: Stripe.Checkout.Session) {
       data: { bundleSeconds: { increment: BigInt(hours * 3600) } },
     });
   }
+}
+
+async function activatePaidAudit(session: Stripe.Checkout.Session) {
+  const auditId = session.metadata?.auditId;
+  if (!auditId) return;
+  const paymentRef = typeof session.payment_intent === "string" ? session.payment_intent : session.id;
+
+  const audit = await prisma.setterAudit.findUnique({ where: { id: auditId } });
+  if (!audit || audit.stripePaymentIntent) return; // idempotent
+
+  await prisma.setterAudit.update({
+    where: { id: auditId },
+    data: {
+      approved: true,
+      isFree: false,
+      stripePaymentIntent: paymentRef,
+      // Only open it up if it isn't already finished.
+      status: audit.status === "SCORED" ? "SCORED" : "ACTIVE",
+    },
+  });
 }
 
 async function syncSubscription(sub: Stripe.Subscription) {

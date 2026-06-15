@@ -83,6 +83,41 @@ export async function createBundleCheckout(opts: {
   return session.url;
 }
 
+// Additional Setter Audits (the first per practice is free).
+export const AUDIT_PRICE_USD = 50;
+
+/** Creates a one-time Checkout session for a paid Setter Audit. */
+export async function createAuditCheckout(opts: {
+  auditId: string;
+  customerEmail?: string;
+  practiceName: string;
+  origin: string;
+}): Promise<string> {
+  const stripe = getStripe();
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    ...(opts.customerEmail ? { customer_email: opts.customerEmail } : {}),
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: AUDIT_PRICE_USD * 100,
+          product_data: {
+            name: "SetMo Setter Assessment",
+            description: `Additional setter audit for ${opts.practiceName}`,
+          },
+        },
+      },
+    ],
+    metadata: { kind: "audit", auditId: opts.auditId },
+    success_url: `${opts.origin}/audit/${opts.auditId}?paid=1`,
+    cancel_url: `${opts.origin}/audit/${opts.auditId}?paid=cancel`,
+  });
+  if (!session.url) throw new Error("Stripe did not return a checkout URL");
+  return session.url;
+}
+
 export const MAX_SELF_SERVE_SEATS = 20;
 
 /**
