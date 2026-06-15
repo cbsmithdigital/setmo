@@ -26,8 +26,8 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      // Root route resolves the role-specific home.
-      router.replace("/");
+      // Resolver sends them to their role-specific home.
+      router.replace("/go");
       router.refresh();
     } catch (err) {
       setError(

@@ -68,7 +68,7 @@ export async function requireUser() {
 /** Requires the user to be acting as one of the given roles. */
 export async function requireRole(...roles: Role[]) {
   const user = await requireUser();
-  if (!roles.includes(getActiveRole(user))) redirect("/");
+  if (!roles.includes(getActiveRole(user))) redirect("/go");
   return user;
 }
 
