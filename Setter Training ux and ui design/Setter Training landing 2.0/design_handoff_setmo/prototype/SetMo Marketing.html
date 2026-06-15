@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SetMo — Set more appointments</title>
+<link rel="icon" type="image/png" href="assets/setmo-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* light marketing surfaces */
+  --cream:#f6f3ec;
+  --cream-2:#efeae0;
+  --paper:#ffffff;
+  --ink:#15131f;
+  --ink-soft:#3a3650;
+  --muted:#6f6a82;
+  --line:#e7e1d5;
+  /* brand */
+  --purple:#8b5cf6;
+  --purple-deep:#7c3aed;
+  --purple-soft:#ede9fe;
+  --mint:#34d399;
+  --mint-deep:#10b981;
+  --mint-soft:#d6f7ea;
+  --amber:#f7b955;
+  --grad:linear-gradient(135deg,#8b5cf6,#7c3aed);
+  --grad-mint:linear-gradient(135deg,#34d399,#10b981);
+  /* app dark (for embedded UI) */
+  --d-bg:#08080f;
+  --d-1:#0d0d18;
+  --d-2:#121220;
+  --d-3:#1a1a2e;
+  --d-4:#24243a;
+  --d-text:#e2e8f0;
+  --d-muted:#94a3b8;
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:24px; --r-2xl:32px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:'DM Sans',system-ui,sans-serif;
+  background:var(--cream);
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  line-height:1.5;
+  overflow-x:hidden;
+}
+h1,h2,h3,h4{font-family:'Lato',sans-serif;font-weight:900;letter-spacing:-0.03em;line-height:1.04;color:var(--ink)}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+.eyebrow{font-family:'DM Sans';font-weight:700;font-size:13px;letter-spacing:0.14em;text-transform:uppercase;color:var(--purple-deep)}
+.grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.mint-text{background:var(--grad-mint);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:9px;font-family:'DM Sans';font-weight:600;font-size:16px;padding:15px 26px;border-radius:999px;cursor:pointer;border:none;transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .25s ease}
+.btn-primary{background:var(--grad);color:#fff;box-shadow:0 10px 26px -8px rgba(124,58,237,.55)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 34px -8px rgba(124,58,237,.65)}
+.btn-ghost{background:var(--paper);color:var(--ink);border:1.5px solid var(--line)}
+.btn-ghost:hover{transform:translateY(-2px);border-color:#d8d0c0}
+.btn svg{width:18px;height:18px}
+
+/* nav */
+header.nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);background:rgba(246,243,236,.82);border-bottom:1px solid rgba(231,225,213,.7)}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;height:74px}
+.logo{display:flex;align-items:center;gap:10px;font-family:'Lato';font-weight:900;font-size:24px;letter-spacing:-0.04em}
+.logo .dot{width:34px;height:34px;border-radius:11px;background:var(--grad);display:grid;place-items:center;box-shadow:0 6px 16px -5px rgba(124,58,237,.6)}
+.logo .lm{width:36px;height:36px;object-fit:contain;display:block}
+.logo .mo{color:#0faf84}
+.logo .wm{display:inline}
+.logo .dot span{color:#fff;font-size:19px;font-weight:900;font-family:'Lato'}
+.nav-links{display:flex;gap:34px;align-items:center}
+.nav-links a{font-weight:500;color:var(--ink-soft);font-size:15.5px;transition:color .2s}
+.nav-links a:hover{color:var(--purple-deep)}
+.nav-cta{display:flex;align-items:center;gap:14px}
+.signin{font-weight:600;font-size:15.5px;color:var(--ink)}
+
+/* hero */
+.hero{position:relative;padding:74px 0 30px}
+.hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.badge{display:inline-flex;align-items:center;gap:8px;background:var(--paper);border:1px solid var(--line);padding:7px 14px 7px 8px;border-radius:999px;font-size:13.5px;font-weight:600;color:var(--ink-soft);margin-bottom:26px}
+.badge .pill{background:var(--purple-soft);color:var(--purple-deep);font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:999px}
+.hero h1{font-size:clamp(42px,5.6vw,72px);margin-bottom:22px}
+.hero p.lead{font-size:19px;color:var(--muted);max-width:30em;margin-bottom:32px;text-wrap:pretty}
+.hero-cta{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.hero-note{margin-top:20px;font-size:14px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.hero-note b{color:var(--ink-soft);font-weight:700}
+
+/* floating shapes */
+.blob{position:absolute;border-radius:50%;filter:blur(8px);opacity:.5;z-index:0}
+.shape{position:absolute;z-index:1}
+
+/* hero device */
+.device-stage{position:relative;z-index:2}
+.app-card{background:var(--d-1);border:1px solid #20203a;border-radius:var(--r-2xl);padding:22px;box-shadow:0 40px 90px -30px rgba(50,20,90,.5),0 14px 40px -18px rgba(124,58,237,.35);position:relative;overflow:hidden}
+.app-card::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 80% at 80% 0%,rgba(139,92,246,.16),transparent 60%);pointer-events:none}
+.ac-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;position:relative}
+.ac-live{display:flex;align-items:center;gap:9px;color:var(--mint);font-family:'DM Sans';font-weight:600;font-size:13px;letter-spacing:.04em;white-space:nowrap}
+.live-dot{width:9px;height:9px;border-radius:50%;background:var(--mint);box-shadow:0 0 0 0 rgba(52,211,153,.6);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.55)}70%{box-shadow:0 0 0 10px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+.ac-timer{font-family:'DM Sans';font-weight:600;color:var(--d-muted);font-size:13px}
+.ac-persona{color:var(--d-muted);font-size:12.5px;margin-bottom:4px}
+.ac-title{color:var(--d-text);font-family:'Lato';font-weight:900;font-size:20px;letter-spacing:-.02em;margin-bottom:18px}
+.wave{display:flex;align-items:center;gap:5px;height:64px;justify-content:center;margin:6px 0 20px}
+.wave i{width:5px;border-radius:999px;background:linear-gradient(180deg,#a78bfa,#7c3aed);animation:bar 1.1s ease-in-out infinite}
+@keyframes bar{0%,100%{height:14px}50%{height:46px}}
+.ac-foot{display:flex;gap:10px}
+.ac-btn{flex:1;text-align:center;padding:12px;border-radius:12px;font-family:'DM Sans';font-weight:600;font-size:13.5px}
+.ac-btn.end{background:var(--grad);color:#fff}
+.ac-btn.mute{background:var(--d-3);color:var(--d-muted)}
+/* floating score chip */
+.score-chip{position:absolute;right:-20px;bottom:-40px;background:var(--d-2);border:1px solid #2a2a45;border-radius:var(--r-xl);padding:16px 18px;box-shadow:0 24px 50px -20px rgba(0,0,0,.5);z-index:4;display:flex;align-items:center;gap:14px}
+.score-num{font-family:'Lato';font-weight:900;font-size:40px;line-height:1;background:var(--grad-mint);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.score-chip .meta{color:var(--d-muted);font-size:12px;line-height:1.35}
+.score-chip .meta b{color:var(--d-text);font-size:13px;display:block;font-weight:700}
+.streak-chip{position:absolute;left:-10px;top:-66px;background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:11px 15px;box-shadow:0 18px 40px -18px rgba(60,40,100,.3);z-index:4;display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px;white-space:nowrap}
+.streak-chip .ico{width:30px;height:30px;border-radius:9px;background:var(--mint-soft);display:grid;place-items:center;color:var(--mint-deep);font-size:16px}
+
+/* trust strip */
+.trust{padding:30px 0 14px}
+.trust p{text-align:center;color:var(--muted);font-size:13.5px;font-weight:600;letter-spacing:.04em;margin-bottom:20px}
+.logos{display:flex;justify-content:center;gap:54px;flex-wrap:wrap;align-items:center;opacity:.62}
+.logos .lg{font-family:'Lato';font-weight:900;font-size:21px;color:var(--ink);letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+.logos .lg .m{width:18px;height:18px;border-radius:5px;background:var(--ink);opacity:.85}
+
+/* stats */
+.stats{padding:60px 0}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.stat{background:var(--paper);border:1px solid var(--line);border-radius:var(--r-xl);padding:34px 30px;position:relative;overflow:hidden}
+.stat .big{font-family:'Lato';font-weight:900;font-size:58px;line-height:1;letter-spacing:-.04em;margin-bottom:12px}
+.stat p{color:var(--muted);font-size:15.5px;max-width:22em}
+.stat .deco{position:absolute;right:-30px;top:-30px;width:120px;height:120px;border-radius:50%;opacity:.10}
+
+/* section */
+section{position:relative}
+.sec{padding:84px 0}
+.sec-head{max-width:640px;margin-bottom:54px}
+.sec-head.center{margin:0 auto 56px;text-align:center}
+.sec-head h2{font-size:clamp(32px,4vw,50px);margin:16px 0 18px}
+.sec-head p{font-size:18px;color:var(--muted);text-wrap:pretty}
+
+/* steps */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.step{background:var(--paper);border:1px solid var(--line);border-radius:var(--r-xl);padding:32px 28px 30px;position:relative;transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s}
+.step:hover{transform:translateY(-6px);box-shadow:0 26px 50px -28px rgba(60,40,100,.3)}
+.step .n{font-family:'Lato';font-weight:900;font-size:15px;width:46px;height:46px;border-radius:14px;display:grid;place-items:center;color:#fff;background:var(--grad);margin-bottom:22px;box-shadow:0 10px 22px -8px rgba(124,58,237,.5)}
+.step:nth-child(2) .n{background:linear-gradient(135deg,#a78bfa,#8b5cf6)}
+.step:nth-child(3) .n{background:var(--grad-mint);box-shadow:0 10px 22px -8px rgba(16,185,129,.5)}
+.step h3{font-size:22px;margin-bottom:11px}
+.step p{color:var(--muted);font-size:15.5px}
+
+/* feature rows */
+.feat{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;padding:46px 0}
+.feat.rev .feat-copy{order:2}
+.feat-copy h2{font-size:clamp(28px,3.4vw,42px);margin:14px 0 18px}
+.feat-copy p.d{font-size:17.5px;color:var(--muted);margin-bottom:24px;text-wrap:pretty}
+.feat-list{display:flex;flex-direction:column;gap:14px}
+.feat-list li{display:flex;gap:13px;align-items:flex-start;list-style:none;font-size:16px;color:var(--ink-soft)}
+.feat-list .ck{flex:none;width:24px;height:24px;border-radius:8px;background:var(--mint-soft);color:var(--mint-deep);display:grid;place-items:center;margin-top:1px}
+.feat-list .ck svg{width:14px;height:14px}
+.feat-art{position:relative}
+
+/* dark mini panels reused as art */
+.darkpanel{background:var(--d-1);border:1px solid #20203a;border-radius:var(--r-2xl);padding:24px;box-shadow:0 36px 80px -34px rgba(50,20,90,.45);position:relative;overflow:hidden}
+.darkpanel::before{content:"";position:absolute;inset:0;background:radial-gradient(110% 70% at 100% 0%,rgba(139,92,246,.14),transparent 60%);pointer-events:none}
+.dp-label{color:var(--d-muted);font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px}
+.skill-row{display:flex;align-items:center;gap:14px;margin-bottom:13px}
+.skill-row .nm{color:var(--d-text);font-size:13.5px;width:130px;flex:none}
+.skill-row .track{flex:1;height:8px;border-radius:999px;background:#1c1c30;overflow:hidden}
+.skill-row .fill{height:100%;border-radius:999px;background:var(--grad)}
+.skill-row .fill.mint{background:var(--grad-mint)}
+.skill-row .sc{font-family:'Lato';font-weight:900;color:var(--d-text);font-size:14px;width:30px;text-align:right}
+.bigscore{display:flex;align-items:flex-end;gap:14px;margin-bottom:20px}
+.bigscore .v{font-family:'Lato';font-weight:900;font-size:66px;line-height:.85;background:var(--grad-mint);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.bigscore .o{color:var(--d-muted);font-size:18px;font-weight:600;padding-bottom:8px}
+.bigscore .delta{margin-left:auto;color:var(--mint);font-size:13px;font-weight:700;background:rgba(52,211,153,.12);padding:6px 11px;border-radius:999px;align-self:center}
+
+/* leaderboard art */
+.lb-row{display:flex;align-items:center;gap:14px;padding:11px 14px;border-radius:12px;margin-bottom:8px;background:var(--d-2)}
+.lb-row.me{background:linear-gradient(90deg,rgba(139,92,246,.18),rgba(139,92,246,.04));border:1px solid rgba(139,92,246,.4)}
+.lb-rank{font-family:'Lato';font-weight:900;color:var(--d-muted);width:24px;font-size:15px}
+.lb-row.me .lb-rank{color:#fff}
+.lb-av{width:34px;height:34px;border-radius:50%;flex:none;background:linear-gradient(135deg,#a78bfa,#7c3aed);display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;font-family:'DM Sans'}
+.lb-nm{color:var(--d-text);font-size:14px;font-weight:500;flex:1}
+.lb-sc{font-family:'Lato';font-weight:900;font-size:16px;background:var(--grad-mint);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.lb-move{color:var(--mint);font-size:11px;font-weight:700;width:34px;text-align:right}
+
+/* big quote band */
+.band{background:var(--ink);border-radius:var(--r-2xl);padding:70px;position:relative;overflow:hidden;color:#fff}
+.band::after{content:"";position:absolute;right:-60px;bottom:-90px;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(139,92,246,.55),transparent 70%)}
+.band .q{font-family:'Lato';font-weight:900;font-size:clamp(26px,3.4vw,40px);letter-spacing:-.03em;max-width:18em;line-height:1.12;position:relative;z-index:2}
+.band .who{margin-top:26px;display:flex;align-items:center;gap:13px;position:relative;z-index:2}
+.band .who .av{width:46px;height:46px;border-radius:50%;background:var(--grad)}
+.band .who b{display:block;font-weight:700;font-size:15px}
+.band .who span{color:#9b94b5;font-size:13.5px}
+
+/* pricing */
+.price-wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:30px;align-items:stretch}
+.price-card{background:var(--ink);color:#fff;border-radius:var(--r-2xl);padding:44px;position:relative;overflow:hidden}
+.price-card::before{content:"";position:absolute;inset:0;background:radial-gradient(90% 60% at 10% 0%,rgba(139,92,246,.30),transparent 55%);pointer-events:none}
+.price-card .amt{font-family:'Lato';font-weight:900;font-size:64px;letter-spacing:-.04em;line-height:1;position:relative}
+.price-card .amt sup{font-size:26px;vertical-align:18px;font-weight:700}
+.price-card .per{color:#a79fc4;font-size:16px;margin:8px 0 26px}
+.price-feats{display:flex;flex-direction:column;gap:13px;margin-bottom:30px;position:relative}
+.price-feats li{display:flex;gap:11px;list-style:none;color:#d7d2e6;font-size:15.5px}
+.price-feats .ck{flex:none;width:22px;height:22px;border-radius:7px;background:rgba(52,211,153,.18);color:var(--mint);display:grid;place-items:center}
+.price-feats .ck svg{width:13px;height:13px}
+.price-side{display:flex;flex-direction:column;gap:18px}
+.price-tile{background:var(--paper);border:1px solid var(--line);border-radius:var(--r-xl);padding:26px;flex:1}
+.price-tile h4{font-size:19px;margin-bottom:8px}
+.price-tile p{color:var(--muted);font-size:15px}
+.price-tile .vol{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+.price-tile .vol div{display:flex;justify-content:space-between;font-size:14.5px;padding:9px 0;border-top:1px solid var(--line)}
+.price-tile .vol b{color:var(--mint-deep);font-weight:700}
+
+/* faq */
+.faq{max-width:780px;margin:0 auto}
+.qa{border-bottom:1px solid var(--line)}
+.qa summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:20px;padding:24px 4px;font-family:'Lato';font-weight:700;font-size:19px;letter-spacing:-.01em}
+.qa summary::-webkit-details-marker{display:none}
+.qa .pm{flex:none;width:30px;height:30px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;transition:transform .3s,background .3s,border-color .3s;color:var(--purple-deep)}
+.qa[open] .pm{transform:rotate(45deg);background:var(--purple);border-color:var(--purple);color:#fff}
+.qa .ans{padding:0 4px 24px;color:var(--muted);font-size:16px;max-width:60ch}
+
+/* final CTA */
+.final{background:var(--grad);border-radius:var(--r-2xl);padding:80px;text-align:center;color:#fff;position:relative;overflow:hidden}
+.final::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 80% at 50% 120%,rgba(52,211,153,.4),transparent 60%);pointer-events:none}
+.final h2{color:#fff;font-size:clamp(34px,4.6vw,58px);margin-bottom:18px;position:relative}
+.final p{color:rgba(255,255,255,.86);font-size:19px;max-width:34em;margin:0 auto 34px;position:relative}
+.final .btn-primary{background:#fff;color:var(--purple-deep);box-shadow:0 14px 30px -10px rgba(0,0,0,.3)}
+.final .ghost-w{background:transparent;border:1.5px solid rgba(255,255,255,.5);color:#fff}
+
+/* footer */
+footer.ft{padding:64px 0 40px}
+.ft-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:30px;padding-bottom:40px;border-bottom:1px solid var(--line)}
+.ft-grid p{color:var(--muted);font-size:15px;margin-top:14px;max-width:26em}
+.ft-col h5{font-family:'DM Sans';font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);margin-bottom:16px}
+.ft-col a{display:block;color:var(--muted);font-size:15px;margin-bottom:11px;transition:color .2s}
+.ft-col a:hover{color:var(--purple-deep)}
+.ft-bot{display:flex;justify-content:space-between;align-items:center;padding-top:26px;color:var(--muted);font-size:14px;flex-wrap:wrap;gap:14px}
+
+/* founders badge */
+.founders{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,rgba(247,185,85,.18),rgba(247,185,85,.06));border:1px solid rgba(247,185,85,.5);color:#9a6a12;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:700;margin-top:18px}
+.founders .dotf{width:8px;height:8px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 0 rgba(247,185,85,.6);animation:pulse 2s infinite}
+
+/* ROI band */
+.roi{background:var(--ink);border-radius:var(--r-2xl);padding:64px 70px;position:relative;overflow:hidden;text-align:center;color:#fff}
+.roi::before{content:"";position:absolute;left:-80px;top:-90px;width:320px;height:320px;border-radius:50%;background:radial-gradient(circle,rgba(52,211,153,.4),transparent 70%)}
+.roi::after{content:"";position:absolute;right:-80px;bottom:-110px;width:320px;height:320px;border-radius:50%;background:radial-gradient(circle,rgba(139,92,246,.5),transparent 70%)}
+.roi h2{color:#fff;font-size:clamp(28px,3.8vw,46px);max-width:20em;margin:0 auto 18px;position:relative;z-index:2;line-height:1.1}
+.roi p{color:rgba(255,255,255,.82);font-size:19px;max-width:36em;margin:0 auto;position:relative;z-index:2}
+
+/* ladder */
+.ladder{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:stretch}
+.rung{background:var(--paper);border:1px solid var(--line);border-radius:var(--r-xl);padding:34px 30px;position:relative;overflow:hidden;transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s}
+.rung:hover{transform:translateY(-6px);box-shadow:0 26px 50px -28px rgba(60,40,100,.3)}
+.rung .lvl{display:flex;align-items:center;gap:11px;margin-bottom:18px}
+.rung .lvl .ico{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:#fff;flex:none}
+.rung:nth-child(1) .lvl .ico{background:var(--grad)}
+.rung:nth-child(2) .lvl .ico{background:linear-gradient(135deg,#a78bfa,#34d399)}
+.rung:nth-child(3) .lvl .ico{background:var(--grad-mint)}
+.rung .lvl .ico svg{width:21px;height:21px}
+.rung .lvl .tags b{display:block;font-family:'Lato';font-weight:900;font-size:18px;letter-spacing:-.02em}
+.rung .lvl .tags span{font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--purple-deep)}
+.rung:nth-child(3) .lvl .tags span{color:var(--mint-deep)}
+.rung p{color:var(--muted);font-size:15px;text-wrap:pretty}
+.rung .step-up{position:absolute;right:22px;top:22px;font-family:'Lato';font-weight:900;font-size:30px;color:var(--line)}
+.ladder-close{text-align:center;font-family:'Lato';font-weight:900;font-size:clamp(20px,2.4vw,28px);letter-spacing:-.02em;margin-top:40px;color:var(--ink)}
+.ladder-close span{background:var(--grad-mint);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+/* groups command center mockup */
+.cc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.cc-row{display:flex;align-items:center;gap:13px;padding:11px 13px;border-radius:11px;margin-bottom:8px;background:var(--d-2)}
+.cc-row.flag{background:linear-gradient(90deg,rgba(247,185,85,.16),rgba(247,185,85,.03));border:1px solid rgba(247,185,85,.4)}
+.cc-rank{font-family:'Lato';font-weight:900;color:var(--d-muted);width:20px;font-size:14px}
+.cc-nm{color:var(--d-text);font-size:13.5px;font-weight:500;flex:1}
+.cc-nm small{display:block;color:var(--d-muted);font-size:11.5px;font-weight:400}
+.cc-rate{font-family:'Lato';font-weight:900;font-size:15px;background:var(--grad-mint);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.cc-flagchip{font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#b8821f;background:rgba(247,185,85,.18);padding:3px 8px;border-radius:999px}
+.advisor{margin-top:14px;background:linear-gradient(120deg,rgba(139,92,246,.18),rgba(52,211,153,.05));border:1px solid rgba(139,92,246,.4);border-radius:14px;padding:15px 16px;display:flex;gap:12px}
+.advisor .ai{width:34px;height:34px;border-radius:10px;background:var(--grad);display:grid;place-items:center;color:#fff;flex:none}
+.advisor .ai svg{width:17px;height:17px}
+.advisor .tx{font-size:12.5px;color:var(--d-text);line-height:1.4}
+.advisor .tx b{color:var(--purple-2,#a78bfa);font-weight:700}
+
+/* audit report mockup */
+.audit-rep{text-align:left}
+.ar-top{display:flex;align-items:center;gap:18px;padding-bottom:18px;border-bottom:1px solid #20203a;margin-bottom:18px}
+.ar-score{font-family:'Lato';font-weight:900;font-size:54px;line-height:1;background:linear-gradient(135deg,#f7b955,#f59e0b);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.ar-top .lab{color:var(--d-muted);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+.ar-top .sub{color:var(--d-text);font-size:13.5px}
+.ar-leak{color:var(--d-muted);font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:12px}
+.ar-recover{margin-top:18px;background:linear-gradient(120deg,rgba(52,211,153,.16),rgba(52,211,153,.03));border:1px solid rgba(52,211,153,.4);border-radius:14px;padding:16px 18px}
+.ar-recover .l{color:var(--mint);font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px}
+.ar-recover .v{font-family:'Lato';font-weight:900;font-size:26px;color:#fff;letter-spacing:-.02em}
+.ar-recover .v span{background:var(--grad-mint);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+/* testimonials grid */
+.tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.tcard{background:var(--paper);border:1px solid var(--line);border-radius:var(--r-xl);padding:32px 30px;display:flex;flex-direction:column}
+.tcard.feat-t{background:var(--ink);color:#fff;border-color:var(--ink);position:relative;overflow:hidden}
+.tcard.feat-t::after{content:"";position:absolute;right:-50px;bottom:-70px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(139,92,246,.5),transparent 70%)}
+.tcard .quote{font-family:'Lato';font-weight:700;font-size:18px;line-height:1.32;letter-spacing:-.01em;margin-bottom:22px;flex:1;position:relative;z-index:2}
+.tcard.feat-t .quote{color:#fff}
+.tcard .who{display:flex;align-items:center;gap:12px;position:relative;z-index:2}
+.tcard .who .av{width:42px;height:42px;border-radius:50%;background:var(--grad);flex:none}
+.tcard.feat-t .who .av{background:var(--grad-mint)}
+.tcard .who b{display:block;font-weight:700;font-size:14.5px}
+.tcard .who span{font-size:12.5px;color:var(--muted)}
+.tcard.feat-t .who span{color:#9b94b5}
+
+/* 3-tier pricing */
+.founders-banner{background:linear-gradient(120deg,#15131f,#241a2e);border:1px solid rgba(247,185,85,.4);border-radius:var(--r-xl);padding:20px 28px;display:flex;align-items:center;gap:18px;margin-bottom:26px;color:#fff;position:relative;overflow:hidden}
+.founders-banner::before{content:"";position:absolute;right:-40px;top:-60px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,rgba(247,185,85,.3),transparent 70%)}
+.founders-banner .fb-ico{width:46px;height:46px;border-radius:13px;background:linear-gradient(135deg,#f7b955,#f59e0b);display:grid;place-items:center;color:#1a1205;flex:none;position:relative}
+.founders-banner .fb-ico svg{width:22px;height:22px}
+.founders-banner b{font-family:'Lato';font-weight:900;font-size:17px;letter-spacing:-.01em}
+.founders-banner p{color:rgba(255,255,255,.78);font-size:14px;margin-top:2px}
+.founders-banner .fb-close{margin-left:auto;flex:none;background:rgba(247,185,85,.16);color:#f7b955;font-weight:700;font-size:13px;padding:8px 14px;border-radius:999px;white-space:nowrap}
+.tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;align-items:stretch}
+.tier{background:var(--paper);border:1px solid var(--line);border-radius:var(--r-2xl);padding:34px 30px;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.tier.best{background:var(--ink);color:#fff;border-color:var(--ink)}
+.tier.best::before{content:"";position:absolute;inset:0;background:radial-gradient(90% 55% at 90% 0%,rgba(139,92,246,.32),transparent 55%);pointer-events:none}
+.tier .ttag{display:inline-flex;align-self:flex-start;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:5px 11px;border-radius:999px;margin-bottom:16px}
+.tier.good .ttag{background:var(--purple-soft);color:var(--purple-deep)}
+.tier.better .ttag{background:var(--mint-soft);color:var(--mint-deep)}
+.tier.best .ttag{background:linear-gradient(135deg,#f7b955,#f59e0b);color:#1a1205}
+.tier .tname{font-family:'Lato';font-weight:900;font-size:23px;margin-bottom:4px;position:relative}
+.tier .tdesc{font-size:13.5px;color:var(--muted);margin-bottom:18px;position:relative;min-height:38px}
+.tier.best .tdesc{color:#a79fc4}
+.tier .tprice{font-family:'Lato';font-weight:900;font-size:46px;letter-spacing:-.04em;line-height:1;position:relative}
+.tier .tprice small{font-size:15px;font-weight:600;color:var(--muted);letter-spacing:0}
+.tier.best .tprice small{color:#a79fc4}
+.tier .tfound{display:inline-flex;align-items:center;gap:7px;background:rgba(52,211,153,.14);border:1px solid rgba(52,211,153,.35);color:var(--mint-deep);font-size:13px;font-weight:700;padding:6px 12px;border-radius:999px;margin:14px 0 6px;position:relative}
+.tier.best .tfound{background:rgba(247,185,85,.16);border-color:rgba(247,185,85,.4);color:#f7b955}
+.tier .tcad{font-size:12.5px;color:var(--muted);margin-bottom:20px;position:relative}
+.tier.best .tcad{color:#a79fc4}
+.tier .tfeats{display:flex;flex-direction:column;gap:12px;margin-bottom:24px;flex:1;position:relative}
+.tier .tfeats li{display:flex;gap:11px;list-style:none;font-size:14.5px;color:var(--ink-soft);line-height:1.4}
+.tier.best .tfeats li{color:#d7d2e6}
+.tier .tfeats .ck{flex:none;width:22px;height:22px;border-radius:7px;background:var(--mint-soft);color:var(--mint-deep);display:grid;place-items:center;margin-top:1px}
+.tier.best .tfeats .ck{background:rgba(52,211,153,.18);color:var(--mint)}
+.tier .tfeats .ck svg{width:13px;height:13px}
+.tier .tfeats .inc{font-weight:700;color:var(--ink)}
+.tier.best .tfeats .inc{color:#fff}
+.tier .btn{justify-content:center;width:100%;position:relative}
+.tier.best .btn-primary{background:#fff;color:var(--purple-deep)}
+.tier .tfoot{font-size:12px;color:var(--muted);margin-top:12px;text-align:center;position:relative}
+
+/* commitment block */
+.commit{display:grid;grid-template-columns:1.3fr 1fr;gap:22px;margin-top:24px}
+.commit-card{border-radius:var(--r-xl);padding:30px 32px}
+.commit-card.win{background:linear-gradient(135deg,rgba(139,92,246,.12),rgba(52,211,153,.08));border:1px solid var(--line)}
+.commit-card.gua{background:var(--paper);border:1px solid var(--line)}
+.commit-card h4{font-size:20px;margin-bottom:10px}
+.commit-card p{color:var(--muted);font-size:15px;text-wrap:pretty}
+.commit-card .pillrow{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.commit-card .pillrow span{background:var(--paper);border:1px solid var(--line);font-size:12.5px;font-weight:700;color:var(--ink-soft);padding:6px 12px;border-radius:999px}
+
+@keyframes revealUp{from{transform:translateY(20px)}to{transform:none}}
+.reveal{animation:revealUp .7s cubic-bezier(.22,1,.36,1) both}
+@media (prefers-reduced-motion:reduce){.reveal{animation:none}}
+
+@media(max-width:980px){
+  .hero-grid{grid-template-columns:1fr;gap:64px}
+  .stats-grid,.steps{grid-template-columns:1fr}
+  .feat,.price-wrap,.ft-grid{grid-template-columns:1fr;gap:34px}
+  .feat.rev .feat-copy{order:0}
+  .nav-links{display:none}
+  .ft-grid{grid-template-columns:1fr 1fr}
+  .ladder,.tgrid,.tiers{grid-template-columns:1fr}
+  .commit{grid-template-columns:1fr}
+  .roi{padding:48px 32px}
+}
+@media(max-width:560px){
+  .wrap{padding:0 20px}
+  .band,.final{padding:44px 26px}
+  .price-card{padding:30px}
+}
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail">
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100" height="100" rx="22" fill="#7c3aed"/>
+  <text x="50" y="63" font-family="Lato, sans-serif" font-weight="900" font-size="34" fill="#fff" text-anchor="middle">S<tspan fill="#34d399">M</tspan></text>
+</svg>
+</template>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="logo" href="#top"><img class="lm" src="assets/setmo-icon.png" alt=""><span class="wm">Set<span class="mo">Mo</span></span></a>
+    <nav class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#groups">For Groups &amp; DSOs</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="signin" href="SetMo App.html">Sign in</a>
+      <a class="btn btn-primary" href="SetMo App.html">Start free<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </div>
+  </div>
+</header>
+
+<a id="top"></a>
+<section class="hero">
+  <div class="blob" style="width:340px;height:340px;background:var(--purple);left:-90px;top:40px"></div>
+  <div class="blob" style="width:260px;height:260px;background:var(--mint);right:6%;top:280px;opacity:.35"></div>
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <div class="badge"><span class="pill">New</span> A Grow Dental AI product</div>
+      <h1>Set more <span class="grad-text">appointments.</span></h1>
+      <p class="lead">SetMo lets your front desk practice high-value lead calls against a realistic AI patient — objectively scored and personally coached. Then it gives managers and groups the data to coach the whole team. Build the skill without burning a single real lead.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="SetMo App.html">Start for free<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        <a class="btn btn-ghost" href="#audit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 17V9M15 17v-4M12 17v-6"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>Get your free Setter Audit</a>
+      </div>
+      <div class="hero-note"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--mint-deep)" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg><span><b>Your first Setter Audit is free.</b> No real leads at risk, ever.</span></div>
+      <div class="founders"><span class="dotf"></span> Founding cohort open · limited seats</div>
+    </div>
+    <div class="device-stage">
+      <div class="streak-chip"><span class="ico">🔥</span><span>7-day streak<br><span style="color:var(--mint-deep);font-weight:700">+12% this week</span></span></div>
+      <div class="app-card">
+        <div class="ac-top">
+          <div class="ac-live"><span class="live-dot"></span>LIVE PRACTICE</div>
+          <div class="ac-timer">02:14 · 47 min left</div>
+        </div>
+        <div class="ac-persona">Implant / full-arch lead · adaptive difficulty</div>
+        <div class="ac-title">You're calling a new lead…</div>
+        <div class="wave" id="wave"></div>
+        <div class="ac-foot">
+          <div class="ac-btn mute">Mute</div>
+          <div class="ac-btn end">End call &amp; get feedback</div>
+        </div>
+      </div>
+      <div class="score-chip">
+        <div class="score-num">4.6</div>
+        <div class="meta"><b>Last session</b>up from 3.9 · objection handling +2</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="trust">
+  <div class="wrap">
+    <p style="text-align:center">BUILT FOR THE PRACTICES AND GROUPS CHASING HIGH-TICKET CASES</p>
+    <div class="logos">
+      <div class="lg"><span class="m"></span>Brightwork Dental</div>
+      <div class="lg"><span class="m"></span>Lakeside Implants</div>
+      <div class="lg"><span class="m"></span>Meridian DSO</div>
+      <div class="lg"><span class="m"></span>Coastal Smiles</div>
+      <div class="lg"><span class="m"></span>Apex Oral Care</div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" style="padding:54px 0 0">
+  <div class="wrap">
+    <div class="roi reveal">
+      <h2>A booked full-arch consult is worth <span class="mint-text">$10,000–15,000</span>. A fumbled one is worth nothing.</h2>
+      <p>SetMo is where your team gets sharp — before the call that pays for the year.</p>
+    </div>
+  </div>
+</section>
+
+<section class="stats">
+  <div class="wrap stats-grid">
+    <div class="stat reveal">
+      <div class="deco" style="background:var(--purple)"></div>
+      <div class="big grad-text">0</div>
+      <p>real leads burned while your team learns. Every rep is against an AI patient.</p>
+    </div>
+    <div class="stat reveal">
+      <div class="deco" style="background:var(--purple)"></div>
+      <div class="big grad-text">8</div>
+      <p>skills scored on every single call — from rapport to closing the appointment.</p>
+    </div>
+    <div class="stat reveal">
+      <div class="deco" style="background:var(--mint)"></div>
+      <div class="big mint-text">5 hrs</div>
+      <p>of guided practice included per seat, every month. Drill until it's second nature.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="how">
+  <div class="wrap">
+    <div class="sec-head center reveal">
+      <span class="eyebrow">How it works</span>
+      <h2>From nervous newbie to <span class="grad-text">closer</span> in three steps.</h2>
+      <p>No scripts to memorize, no live calls to fumble. Just reps — measured, coached, and repeatable.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal">
+        <div class="n">01</div>
+        <h3>Call a realistic AI lead</h3>
+        <p>Your setter starts a voice call with an AI that role-plays a difficult dental lead — complete with a hidden reason they're really calling. No two calls are the same.</p>
+      </div>
+      <div class="step reveal">
+        <div class="n">02</div>
+        <h3>Get objectively scored</h3>
+        <p>The AI grades the call against an 8-point rubric and talks through what landed, what didn't, and the exact phrases to use next time.</p>
+      </div>
+      <div class="step reveal">
+        <div class="n">03</div>
+        <h3>Improve with real coaching</h3>
+        <p>SetMo turns every call into progress tracking, targeted training with the reason attached, and team leaderboards that make practice stick.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="features" style="padding-top:30px">
+  <div class="wrap">
+
+    <div class="feat reveal">
+      <div class="feat-copy">
+        <span class="eyebrow">The signature moment</span>
+        <h2>A safe place to practice the calls that matter.</h2>
+        <p class="d">Implants, full-arch, dentures, cosmetic — the calls worth tens of thousands of dollars are the ones nobody wants a rookie practicing live. SetMo gives them an unlimited-feeling sandbox.</p>
+        <ul class="feat-list">
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Voice-first calls that feel real — the AI pushes back, stalls, and tests resolve.</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>A hidden persona and "why" every time, so reps never get stale.</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Difficulty that adapts as your setter gets better.</li>
+        </ul>
+      </div>
+      <div class="feat-art">
+        <div class="darkpanel">
+          <div class="ac-top" style="margin-bottom:16px">
+            <div class="ac-live"><span class="live-dot"></span>LIVE</div>
+            <div class="ac-timer">03:42 · 41 min left</div>
+          </div>
+          <div class="ac-persona">Implant / full-arch · undisclosed persona</div>
+          <div class="ac-title" style="font-size:18px">"I've been quoted $40k somewhere else…"</div>
+          <div class="wave" id="wave2"></div>
+          <div class="ac-foot">
+            <div class="ac-btn mute">Mute</div>
+            <div class="ac-btn end">End &amp; get feedback</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feat rev reveal">
+      <div class="feat-copy">
+        <span class="eyebrow">Objective scoring</span>
+        <h2>Scores you can trust, not gut feel.</h2>
+        <p class="d">Every call comes back graded across eight skills, one to five, with the reasoning attached. Wins are celebrated, misses are reframed as the next thing to work on.</p>
+        <ul class="feat-list">
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Universal skills (rapport, listening, objections, confidence, closing) plus service-specific ones.</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Specific wins, specific misses, and the replacement phrases to try.</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Scores recorded server-side, so leaderboards stay honest.</li>
+        </ul>
+      </div>
+      <div class="feat-art">
+        <div class="darkpanel">
+          <div class="bigscore">
+            <span class="v">4.6</span><span class="o">/ 5.0</span>
+            <span class="delta">▲ up from 3.9</span>
+          </div>
+          <div class="dp-label">Skill breakdown</div>
+          <div class="skill-row"><span class="nm">Rapport &amp; warmth</span><span class="track"><span class="fill" style="width:92%"></span></span><span class="sc">4.6</span></div>
+          <div class="skill-row"><span class="nm">Listening</span><span class="track"><span class="fill" style="width:88%"></span></span><span class="sc">4.4</span></div>
+          <div class="skill-row"><span class="nm">Objection handling</span><span class="track"><span class="fill mint" style="width:80%"></span></span><span class="sc">4.0</span></div>
+          <div class="skill-row"><span class="nm">Value building</span><span class="track"><span class="fill" style="width:96%"></span></span><span class="sc">4.8</span></div>
+          <div class="skill-row"><span class="nm">Closing</span><span class="track"><span class="fill mint" style="width:90%"></span></span><span class="sc">4.5</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feat reveal">
+      <div class="feat-copy">
+        <span class="eyebrow">Progress &amp; leaderboards</span>
+        <h2>Make getting better a little competitive.</h2>
+        <p class="d">Mint means progress. Streaks, climbing scores, and a leaderboard that ranks on improvement — not who made the most calls — keep the whole front desk in the game.</p>
+        <ul class="feat-list">
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Per-skill trends over time, by service type.</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Office and cross-practice leaderboards, fairness-weighted.</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Mint highlights for every win and upward move.</li>
+        </ul>
+      </div>
+      <div class="feat-art">
+        <div class="darkpanel">
+          <div class="dp-label">Office leaderboard · implants</div>
+          <div class="lb-row"><span class="lb-rank">1</span><span class="lb-av">JR</span><span class="lb-nm">Jordan Reyes</span><span class="lb-sc">4.8</span><span class="lb-move">▲2</span></div>
+          <div class="lb-row me"><span class="lb-rank">2</span><span class="lb-av">YOU</span><span class="lb-nm">You</span><span class="lb-sc">4.6</span><span class="lb-move">▲3</span></div>
+          <div class="lb-row"><span class="lb-rank">3</span><span class="lb-av">MK</span><span class="lb-nm">Maya Khan</span><span class="lb-sc">4.5</span><span class="lb-move">—</span></div>
+          <div class="lb-row"><span class="lb-rank">4</span><span class="lb-av">TD</span><span class="lb-nm">Theo Davis</span><span class="lb-sc">4.2</span><span class="lb-move">▲1</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="sec" id="ladder" style="padding-top:30px">
+  <div class="wrap">
+    <div class="sec-head center reveal">
+      <span class="eyebrow">One platform · three levels</span>
+      <h2>It doesn't stop at the <span class="grad-text">setter</span>.</h2>
+      <p>Every practice call produces signal. SetMo doesn't let it sit in a dashboard — it climbs. Setters get sharp, managers get a coach for their coaching, and groups get a command center. Same platform, three levels of your team.</p>
+    </div>
+    <div class="ladder">
+      <div class="rung reveal">
+        <div class="step-up">01</div>
+        <div class="lvl">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+          <div class="tags"><span>Team</span><b>For your setters</b></div>
+        </div>
+        <p>Your front desk practices the calls worth tens of thousands of dollars against a realistic AI patient, gets scored across all eight skills, and climbs the leaderboard. The reps they can't get on live leads — without the cost of a single live lead.</p>
+      </div>
+      <div class="rung reveal">
+        <div class="step-up">02</div>
+        <div class="lvl">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 6a3 3 0 0 1 0 6M15 20a6 6 0 0 1 6-6"/></svg></div>
+          <div class="tags"><span>Practice</span><b>For your office manager</b></div>
+        </div>
+        <p>Every setter's scores land in one place — and Setty, your office coach, reads them for you. Setty flags who's slipping, builds the training that fixes it, and talks through the call nobody's sure how to handle. The data stops being a report and starts making decisions.</p>
+      </div>
+      <div class="rung reveal">
+        <div class="step-up">03</div>
+        <div class="lvl">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 21V5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v16M13 9h6a1 1 0 0 1 1 1v11M4 21h17M7 8h2M7 12h2M16 13h1"/></svg></div>
+          <div class="tags"><span>Group / DSO</span><b>For your group</b></div>
+        </div>
+        <p>Running more than one location? See every office side by side — your standouts, your stragglers, and exactly what your best setters do differently. Setty Advisor is trained on your group's data, so your ops leaders get a recommendation, not just a chart. Find what's working in one office and roll it out to all of them.</p>
+      </div>
+    </div>
+    <div class="ladder-close reveal">Start with one setter. Grow into the whole group. <span>The platform climbs with you.</span></div>
+  </div>
+</section>
+
+<section class="sec" id="groups" style="padding-top:30px">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">For groups &amp; DSOs</span>
+      <h2>Make every location your <span class="mint-text">best</span> location.</h2>
+      <p>You already have a top performer — an office, a setter, a way of handling the $40k objection that just works. The problem is it lives in one building. SetMo finds it, proves it, and spreads it across the group.</p>
+    </div>
+    <div class="feat reveal" style="padding-top:10px">
+      <div class="feat-art">
+        <div class="darkpanel">
+          <div class="cc-head">
+            <div class="dp-label" style="margin:0">Group command center · set rate</div>
+            <span class="chip" style="font-size:11px;color:var(--d-muted);background:var(--d-3);padding:4px 10px;border-radius:999px">5 locations</span>
+          </div>
+          <div class="cc-row"><span class="cc-rank">1</span><span class="cc-nm">Lakeside Implants<small>Tucson, AZ</small></span><span class="cc-rate">68%</span></div>
+          <div class="cc-row"><span class="cc-rank">2</span><span class="cc-nm">Brightwork Dental<small>Austin, TX</small></span><span class="cc-rate">64%</span></div>
+          <div class="cc-row flag"><span class="cc-rank">3</span><span class="cc-nm">Coastal Smiles<small>Tampa, FL</small></span><span class="cc-flagchip">Outlier ▲14%</span><span class="cc-rate">61%</span></div>
+          <div class="cc-row"><span class="cc-rank">4</span><span class="cc-nm">Apex Oral Care<small>Denver, CO</small></span><span class="cc-rate">57%</span></div>
+          <div class="cc-row"><span class="cc-rank">5</span><span class="cc-nm">Summit Dental Co.<small>Boise, ID</small></span><span class="cc-rate">49%</span></div>
+          <div class="advisor">
+            <div class="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3l2 6 6 .5-4.5 4 1.5 6L12 16l-5.5 3.5 1.5-6L3.5 9.5 10 9z"/></svg></div>
+            <div class="tx"><b>Setty Advisor:</b> Coastal Smiles' objection-handling is up 14% this month — here's the drill they ran. Roll it out to Summit and Apex next.</div>
+          </div>
+        </div>
+      </div>
+      <div class="feat-copy">
+        <ul class="feat-list" style="gap:22px">
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><b style="color:var(--ink);font-weight:700;display:block;margin-bottom:3px">See every location at once.</b>One view across all your offices and brands — set rates, skill scores, and trends, ranked so your outliers surface on their own.</span></li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><b style="color:var(--ink);font-weight:700;display:block;margin-bottom:3px">Find what's actually working.</b>SetMo shows you what your top setters and offices do differently — the specific skills and phrases moving the needle. "They're just better" becomes something you can teach.</span></li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><b style="color:var(--ink);font-weight:700;display:block;margin-bottom:3px">Roll it out everywhere.</b>Turn your best office's playbook into the training every location runs — without flying anyone anywhere.</span></li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><b style="color:var(--ink);font-weight:700;display:block;margin-bottom:3px">Give your leaders Setty Advisor.</b>An AI trained on your group's data that reads every location's numbers and recommends the next move. A decision partner, not another dashboard.</span></li>
+        </ul>
+        <div style="margin-top:28px">
+          <a class="btn btn-primary" href="#">Talk to us about your group<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+          <p style="font-size:13.5px;color:var(--muted);margin-top:12px">Tell us what you're running and we'll map the rollout.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="audit" style="padding-top:30px">
+  <div class="wrap">
+    <div class="feat rev reveal">
+      <div class="feat-copy">
+        <span class="eyebrow">Start with the numbers</span>
+        <h2>See what your front desk is leaving on the table.</h2>
+        <p class="d">Before you change anything, find out what it's costing you. We'll score your setters' calls and show you exactly where booked consults are slipping away.</p>
+        <ul class="feat-list">
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>All five sessions scored on the same 8-point rubric your team trains against.</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>A report showing exactly where booked consults are slipping, call by call.</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>The gap translated into expected growth — recovered consults per month, and what that's worth in cases.</li>
+        </ul>
+        <p style="font-size:15px;color:var(--ink-soft);margin:22px 0 6px"><b>Your first audit is free</b> — one per office. Additional audits are $50 each.</p>
+        <p style="font-size:14.5px;color:var(--muted);max-width:34em">The report is yours to keep, whether you buy or not. But if the leak is as big as it usually is, SetMo is how you close it.</p>
+        <div style="margin-top:24px">
+          <a class="btn btn-primary" href="SetMo App.html">Get your free Setter Audit<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+          <p style="font-size:13px;color:var(--muted);margin-top:12px">No software to install. No real leads touched. Your calls, your numbers.</p>
+        </div>
+      </div>
+      <div class="feat-art">
+        <div class="darkpanel audit-rep">
+          <div class="dp-label">Setter Audit · Brightwork Dental</div>
+          <div class="ar-top">
+            <div class="ar-score">3.4</div>
+            <div>
+              <div class="lab">Overall · 5 leads scored</div>
+              <div class="sub">2 of 5 setable consults booked</div>
+            </div>
+          </div>
+          <div class="ar-leak">Top 3 leaking skills</div>
+          <div class="skill-row"><span class="nm">Objection handling</span><span class="track"><span class="fill" style="width:48%;background:linear-gradient(90deg,#f7b955,#f59e0b)"></span></span><span class="sc">2.4</span></div>
+          <div class="skill-row"><span class="nm">Pain-point discovery</span><span class="track"><span class="fill" style="width:56%;background:linear-gradient(90deg,#f7b955,#f59e0b)"></span></span><span class="sc">2.8</span></div>
+          <div class="skill-row"><span class="nm">Closing the appt</span><span class="track"><span class="fill" style="width:62%;background:linear-gradient(90deg,#f7b955,#f59e0b)"></span></span><span class="sc">3.1</span></div>
+          <div class="ar-recover">
+            <div class="l">Estimated recovery</div>
+            <div class="v"><span>+6 booked consults / mo</span> · ~$72,000</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="testimonials" style="padding-top:20px">
+  <div class="wrap">
+    <div class="tgrid">
+      <div class="tcard feat-t reveal">
+        <div class="quote">"New hires used to cost us real consults while they found their feet. Now they walk in already sharp."</div>
+        <div class="who"><div class="av"></div><div><b>Dr. Lena Okafor</b><span>Owner · Brightwork Dental</span></div></div>
+      </div>
+      <div class="tcard reveal">
+        <div class="quote">"I used to guess who needed help. Now SetMo tells me who's slipping and hands me the drill to fix it — before it costs us a case."</div>
+        <div class="who"><div class="av"></div><div><b>Renee Walsh</b><span>Office Manager · Coastal Smiles</span></div></div>
+      </div>
+      <div class="tcard reveal">
+        <div class="quote">"We could finally see which offices were actually better, and why. We took our top location's playbook group-wide in a quarter."</div>
+        <div class="who"><div class="av"></div><div><b>Marcus Webb</b><span>Director of Operations · Meridian DSO</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="pricing" style="padding-top:30px">
+  <div class="wrap">
+    <div class="sec-head center reveal">
+      <span class="eyebrow">Pricing</span>
+      <h2>One booked consult pays for the year. The rest is <span class="mint-text">upside</span>.</h2>
+      <p>Priced against the cases you'll close, not against other software. One extra booked high-ticket consult is worth far more than a year of seats — the math isn't close. Plans run by the quarter or the year; pay annually and save ~10%.</p>
+    </div>
+
+    <div class="founders-banner reveal">
+      <div class="fb-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2 6 6 .5-4.5 4 1.5 6L12 16l-5.5 3.5 1.5-6L3.5 9.5 10 9z"/></svg></div>
+      <div><b>Founding Cohort — locked pricing for early practices and groups.</b><p>Limited seats, closing August 1, 2026. Founding pricing stays locked for the life of your plan.</p></div>
+      <span class="fb-close">Closing Aug 1</span>
+    </div>
+
+    <div class="tiers">
+      <div class="tier good reveal">
+        <span class="ttag">Good · Team</span>
+        <div class="tname">Team</div>
+        <div class="tdesc">Train and score your setters.</div>
+        <div class="tprice">$199<small> / seat / mo</small></div>
+        <div class="tfound"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 3l2 6 6 .5-4.5 4 1.5 6L12 16l-5.5 3.5 1.5-6L3.5 9.5 10 9z"/></svg> Founders: $129 / seat</div>
+        <div class="tcad">Quarterly or annual — annual saves ~10%</div>
+        <ul class="tfeats">
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Setter practice against the AI patient, fully adaptive</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Full 8-point scoring, coaching &amp; replacement phrases</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Progress tracking, recommendations &amp; leaderboards</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>5 hours of active practice per seat, pooled across your team</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Top up anytime with prepaid conversation bundles</li>
+        </ul>
+        <a class="btn btn-primary" href="SetMo App.html">Start for free</a>
+        <div class="tfoot">10+ seats or more than one location? See Practice and Group.</div>
+      </div>
+
+      <div class="tier better reveal">
+        <span class="ttag">Better · Practice</span>
+        <div class="tname">Practice</div>
+        <div class="tdesc">Adds a manager dashboard + Setty Office Coach.</div>
+        <div class="tprice">$499<small> / location / mo</small></div>
+        <div class="tfound"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 3l2 6 6 .5-4.5 4 1.5 6L12 16l-5.5 3.5 1.5-6L3.5 9.5 10 9z"/></svg> Founders: $349</div>
+        <div class="tcad">Includes 1 office-manager seat + 2 setter seats. Extra setters $149/mo each (Founders $99).</div>
+        <ul class="tfeats">
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span class="inc">Everything in Team, plus:</span></li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Office-manager dashboard across your whole front desk</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><b style="font-weight:700">Setty Office Coach</b> — reads the scores, flags who to coach, builds the training</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Recommended trainings and decision support, on call</li>
+        </ul>
+        <a class="btn btn-ghost" href="#">Choose Practice</a>
+        <div class="tfoot">Most practices start here.</div>
+      </div>
+
+      <div class="tier best reveal">
+        <span class="ttag">Best · Group / DSO</span>
+        <div class="tname">Group / DSO</div>
+        <div class="tdesc">Command center + Setty Advisor across every office.</div>
+        <div class="tprice">Custom</div>
+        <div class="tfound"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 3l2 6 6 .5-4.5 4 1.5 6L12 16l-5.5 3.5 1.5-6L3.5 9.5 10 9z"/></svg> Founders: locked discount + roadmap input</div>
+        <div class="tcad">For groups running more than one location.</div>
+        <ul class="tfeats">
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span class="inc">Everything in Practice, plus:</span></li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Multi-location command center across offices and brands</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Outlier and top-performer detection, fairness-weighted</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><b style="font-weight:700">Setty Advisor</b> — decision support trained on your group's data</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Playbook rollout across every location</li>
+        </ul>
+        <a class="btn btn-primary" href="#">Talk to us</a>
+        <div class="tfoot">Owners &amp; ops leaders running multiple offices.</div>
+      </div>
+    </div>
+
+    <div class="commit">
+      <div class="commit-card win reveal">
+        <div class="pillrow"><span>85% usage in month one</span><span>Best-practices trainings in 3 weeks</span></div>
+        <h4>Commit to a quarter. Earn your first month back.</h4>
+        <p>SetMo runs on quarterly or annual plans — that's how the habit, and the results, actually form. Activate fast and your first month is on us: hit 85% of your included usage in month one and finish the best-practices trainings within your first three weeks, and we credit that month back. Conditions apply. Pay annually to save ~10%.</p>
+      </div>
+      <div class="commit-card gua reveal">
+        <h4>Still backed by a guarantee.</h4>
+        <p>If SetMo isn't sharpening your team's calls within 90 days, we'll make it right.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="faq" style="padding-top:30px">
+  <div class="wrap">
+    <div class="sec-head center reveal">
+      <span class="eyebrow">FAQ</span>
+      <h2>The questions owners and ops leaders ask.</h2>
+    </div>
+    <div class="faq">
+      <details class="qa" open><summary>Is this a real phone call?<span class="pm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg></span></summary><div class="ans">No — it's an in-browser voice conversation with an AI patient. Your setter is logged in and practicing safely; no real leads or phone lines are involved.</div></details>
+      <details class="qa"><summary>How is a setter scored?<span class="pm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg></span></summary><div class="ans">The AI grades each call across eight skills on a 1–5 scale — rapport, listening, discovery, pain-point exploration, objection handling, confidence, value building, and closing — with reasoning and specific feedback for each.</div></details>
+      <details class="qa"><summary>How does the free Setter Audit work?<span class="pm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg></span></summary><div class="ans">Every office gets one free audit. Your setter runs a live browser session against five simulated-but-setable leads — nothing to upload. We score all five on the same 8-point rubric and send back a report showing where booked consults are leaking and what recovering them is worth. Additional audits are $50 each.</div></details>
+      <details class="qa"><summary>What's the difference between Team, Practice, and Group?<span class="pm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg></span></summary><div class="ans">Team trains and scores your setters. Practice adds an office-manager dashboard and Setty Office Coach, which turns those scores into who-to-coach decisions and ready-made trainings (and includes the manager seat plus two setters). Group adds a multi-location command center and Setty Advisor for owners and ops leaders running more than one office.</div></details>
+      <details class="qa"><summary>Who is Setty?<span class="pm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg></span></summary><div class="ans">Setty is SetMo's AI coach. For your office manager, Setty Office Coach reads every setter's scores, points out who's slipping and why, drafts the next training, and talks through the calls and decisions you're not sure about. For groups, Setty Advisor does the same across every location for your ops leaders. The data turns into action instead of another report.</div></details>
+      <details class="qa"><summary>How does SetMo work across multiple locations?<span class="pm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg></span></summary><div class="ans">The Group command center puts every office side by side — set rates, skill scores, and trends — surfaces your outliers automatically, and shows what your best offices do differently. Setty Advisor, trained on your data, recommends what to roll out where, so you can take a top location's playbook group-wide.</div></details>
+      <details class="qa"><summary>Do I have to commit?<span class="pm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg></span></summary><div class="ans">SetMo runs on quarterly or annual plans — long enough for the habit and the results to take hold. To make month one count, we credit your first month back if you hit 85% of your usage and finish the best-practices trainings in your first three weeks (conditions apply). Annual plans save ~10%.</div></details>
+      <details class="qa"><summary>What counts against my hours?<span class="pm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg></span></summary><div class="ans">Only actual conversation time. Each seat includes 5 hours per month, pooled across your team. When the pool runs low you'll get a warning, and you can top up with a prepaid bundle — never a surprise overage.</div></details>
+      <details class="qa"><summary>Which call types are supported?<span class="pm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg></span></summary><div class="ans">SetMo launches with the implant / full-arch / denture agent — the most complex, highest-value call. Cosmetic, ortho, wisdom teeth, and general are on the roadmap and slot right in.</div></details>
+      <details class="qa"><summary>What's the Founders Cohort?<span class="pm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg></span></summary><div class="ans">A limited group of early practices and groups who lock in founding pricing and help shape the roadmap. Seats are capped and the offer closes August 1, 2026; founding pricing stays locked for the life of your plan.</div></details>
+      <details class="qa"><summary>Do you store patient data?<span class="pm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg></span></summary><div class="ans">No. Every persona is fictional and AI-generated. SetMo is a training tool — it handles employee performance and practice data only, with no patient health information involved.</div></details>
+    </div>
+  </div>
+</section>
+
+<section class="sec" style="padding-top:10px">
+  <div class="wrap">
+    <div class="final reveal">
+      <h2>Set more, starting today.</h2>
+      <p>Give your front desk the reps they can't get on live leads — and watch your set rate climb.</p>
+      <div class="hero-cta" style="justify-content:center">
+        <a class="btn btn-primary" href="SetMo App.html">Start for free<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        <a class="btn ghost-w" href="#groups">Talk to us about your group</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="ft">
+  <div class="wrap">
+    <div class="ft-grid">
+      <div>
+        <a class="logo" href="#top"><img class="lm" src="assets/setmo-icon.png" alt=""><span class="wm">Set<span class="mo">Mo</span></span></a>
+        <p>Train your front desk to set more high-ticket appointments — against a realistic AI patient, scored and coached. A Grow Dental AI product.</p>
+      </div>
+      <div class="ft-col"><h5>Product</h5><a href="#how">How it works</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#groups">For Groups</a><a href="SetMo App.html">Open the app</a></div>
+      <div class="ft-col"><h5>Company</h5><a href="#">About Grow Dental</a><a href="#">Careers</a><a href="#">Contact</a><a href="#">Blog</a></div>
+      <div class="ft-col"><h5>Legal</h5><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Security</a></div>
+    </div>
+    <div class="ft-bot">
+      <span>© 2026 Grow Dental AI. All rights reserved.</span>
+      <span>Set more appointments.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+// waveform bars
+function buildWave(id,count){
+  const el=document.getElementById(id); if(!el) return;
+  for(let i=0;i<count;i++){
+    const b=document.createElement('i');
+    b.style.animationDelay=(i*0.06)+'s';
+    b.style.height=(14+Math.random()*30)+'px';
+    el.appendChild(b);
+  }
+}
+buildWave('wave',34); buildWave('wave2',30);
+</script>
+</body>
+</html>
