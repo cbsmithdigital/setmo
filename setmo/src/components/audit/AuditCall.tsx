@@ -43,7 +43,20 @@ function Inner({ auditId, callNumber, totalCalls, maxSeconds, onDone }: { auditI
         const cfg = await res.json();
         if (!res.ok) { setErr(cfg.error ?? "Couldn't start the call."); setPhase("error"); return; }
         if (!cfg.configured) { setErr("Voice calls aren't configured yet."); setPhase("error"); return; }
-        conversation.startSession({ signedUrl: cfg.signedUrl, connectionType: "websocket", dynamicVariables: cfg.dynamicVariables, userId: cfg.setterId });
+        conversation.startSession({
+          signedUrl: cfg.signedUrl,
+          connectionType: "websocket",
+          dynamicVariables: cfg.dynamicVariables,
+          userId: cfg.setterId,
+          ...(cfg.systemPrompt || cfg.voiceId
+            ? {
+                overrides: {
+                  ...(cfg.systemPrompt ? { agent: { prompt: { prompt: cfg.systemPrompt }, firstMessage: cfg.firstMessage } } : {}),
+                  ...(cfg.voiceId ? { tts: { voiceId: cfg.voiceId } } : {}),
+                },
+              }
+            : {}),
+        });
         setSecs(0);
         setPhase("live");
       } catch {

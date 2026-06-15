@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { agentIdFor, getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
+import { generatePersona, buildLeadPrompt, personaLabel } from "@/lib/personas";
 import { error, json } from "@/lib/api";
 import type { ServiceKey } from "@/generated/prisma/client";
 
@@ -42,9 +43,19 @@ export async function POST(
     difficulty: session.difficulty,
   };
 
+  // Compose a fresh lead + matching voice, loaded as overrides so every rep is
+  // a different person with a different voice (not the agent's self-randomization).
+  const persona = await generatePersona();
+  const systemPrompt = buildLeadPrompt(persona, office ?? {}, user.firstName);
+  const firstMessage = persona.openingLine;
+
   await prisma.session.update({
     where: { id: session.id },
-    data: { status: "IN_PROGRESS", startedAt: new Date() },
+    data: {
+      status: "IN_PROGRESS",
+      startedAt: new Date(),
+      personaSeed: { persona: personaLabel(persona), ...persona },
+    },
   });
 
   if (!isElevenLabsConfigured()) {
@@ -58,7 +69,15 @@ export async function POST(
 
   try {
     const signedUrl = await getSignedUrl(agentId);
-    return json({ configured: true, signedUrl, dynamicVariables, setterId: user.id });
+    return json({
+      configured: true,
+      signedUrl,
+      dynamicVariables,
+      setterId: user.id,
+      systemPrompt,
+      firstMessage,
+      voiceId: persona.voice.id,
+    });
   } catch (e) {
     return error(e instanceof Error ? e.message : "Failed to start conversation", 502);
   }

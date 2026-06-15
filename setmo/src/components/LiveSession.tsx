@@ -118,6 +118,14 @@ function SessionInner({
         connectionType: "websocket",
         dynamicVariables: cfg.dynamicVariables,
         userId: cfg.setterId,
+        ...(cfg.systemPrompt || cfg.voiceId
+          ? {
+              overrides: {
+                ...(cfg.systemPrompt ? { agent: { prompt: { prompt: cfg.systemPrompt }, firstMessage: cfg.firstMessage } } : {}),
+                ...(cfg.voiceId ? { tts: { voiceId: cfg.voiceId } } : {}),
+              },
+            }
+          : {}),
       });
       setSecs(0);
       setPhase("live");
