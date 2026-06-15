@@ -27,20 +27,25 @@ export function bundleByHours(hours: number) {
   return BUNDLES.find((b) => b.hours === hours) ?? null;
 }
 
-// Seat pricing + volume discount (PRD §9). Over 20 seats is contact-us.
-export const PRICE_PER_SEAT = 59.99;
-export function seatDiscount(seats: number): { rate: number; label: string } {
-  if (seats >= 15 && seats <= 20) return { rate: 0.15, label: "15% volume discount (15–20 seats)" };
-  if (seats >= 10 && seats <= 14) return { rate: 0.1, label: "10% volume discount (10–14 seats)" };
-  return { rate: 0, label: "Standard pricing" };
-}
-
-/** Monthly (or quarterly, billed upfront) plan total for a seat count. */
-export function planTotal(seats: number, cadence: "MONTHLY" | "QUARTERLY") {
-  const monthly = seats * PRICE_PER_SEAT * (1 - seatDiscount(seats).rate);
-  // Quarterly billed upfront for 3 months with a modest 5% commitment discount.
-  return cadence === "QUARTERLY" ? monthly * 3 * 0.95 : monthly;
-}
+// 3-tier packaging — pure pricing model lives in ./pricing (client-safe).
+// Re-exported here so existing server callers can keep importing from @/lib/stripe.
+import {
+  TIERS,
+  ANNUAL_DISCOUNT,
+  setterSeatsFor,
+  type PlanConfig,
+} from "@/lib/pricing";
+export {
+  TIERS,
+  ANNUAL_DISCOUNT,
+  FOUNDERS_CLOSE_ISO,
+  foundersOpen,
+  setterSeatsFor,
+  planMonthly,
+  planTotal,
+  entitlements,
+} from "@/lib/pricing";
+export type { PlanTier, Cadence, PlanConfig } from "@/lib/pricing";
 
 /** Creates a one-time Checkout session for a conversation bundle. */
 export async function createBundleCheckout(opts: {
@@ -121,23 +126,69 @@ export async function createAuditCheckout(opts: {
 export const MAX_SELF_SERVE_SEATS = 20;
 
 /**
- * Creates a subscription Checkout session for a seat plan. Over 20 seats is
- * contact-us (PRD §9), so callers must validate the ceiling first. The volume
- * discount is baked into the per-seat unit amount; quarterly bills 3 months
- * upfront with a 5% commitment discount.
+ * Creates a tier-aware subscription Checkout session. Team bills per setter
+ * seat; Practice bills a location base (1 mgr + 2 setters) plus extra setter
+ * seats; Group is custom (sales-led) and is NOT self-serve. Quarterly bills 3
+ * months upfront; annual bills 12 months with ~10% off. Founders rates lock in.
  */
-export async function createSubscriptionCheckout(opts: {
+export async function createSubscriptionCheckout(opts: PlanConfig & {
   officeId: string;
   stripeCustomerId?: string | null;
   customerEmail?: string;
-  seats: number;
-  cadence: "MONTHLY" | "QUARTERLY";
   origin: string;
 }): Promise<string> {
+  if (opts.tier === "GROUP") throw new Error("Group / DSO plans are sales-led — contact us.");
   const stripe = getStripe();
-  const discounted = PRICE_PER_SEAT * (1 - seatDiscount(opts.seats).rate);
-  const quarterly = opts.cadence === "QUARTERLY";
-  const unitAmount = Math.round((quarterly ? discounted * 3 * 0.95 : discounted) * 100);
+  const k = opts.founder ? "founder" : "std";
+  const annual = opts.cadence === "ANNUAL";
+  const recurring = annual
+    ? ({ interval: "year", interval_count: 1 } as const)
+    : ({ interval: "month", interval_count: 3 } as const);
+  // multiply monthly → cadence amount, in cents
+  const cents = (monthly: number) => Math.round((annual ? monthly * 12 * (1 - ANNUAL_DISCOUNT) : monthly * 3) * 100);
+
+  const line_items: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+  if (opts.tier === "TEAM") {
+    line_items.push({
+      quantity: Math.max(1, opts.seats ?? 1),
+      price_data: {
+        currency: "usd",
+        unit_amount: cents(TIERS.TEAM.perSeatMonthly[k]),
+        recurring,
+        product_data: { name: `SetMo Team — setter seat${opts.founder ? " (Founders)" : ""}` },
+      },
+    });
+  } else {
+    line_items.push({
+      quantity: 1,
+      price_data: {
+        currency: "usd",
+        unit_amount: cents(TIERS.PRACTICE.baseMonthly[k]),
+        recurring,
+        product_data: { name: `SetMo Practice — location base, 1 manager + 2 setters${opts.founder ? " (Founders)" : ""}` },
+      },
+    });
+    const extra = Math.max(0, opts.extraSetters ?? 0);
+    if (extra > 0) {
+      line_items.push({
+        quantity: extra,
+        price_data: {
+          currency: "usd",
+          unit_amount: cents(TIERS.PRACTICE.extraSeatMonthly[k]),
+          recurring,
+          product_data: { name: `SetMo Practice — additional setter seat${opts.founder ? " (Founders)" : ""}` },
+        },
+      });
+    }
+  }
+
+  const meta = {
+    kind: "subscription",
+    officeId: opts.officeId,
+    planTier: opts.tier,
+    isFounder: String(opts.founder),
+    setterSeats: String(setterSeatsFor(opts)),
+  };
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
@@ -146,19 +197,9 @@ export async function createSubscriptionCheckout(opts: {
       : opts.customerEmail
         ? { customer_email: opts.customerEmail }
         : {}),
-    line_items: [
-      {
-        quantity: opts.seats,
-        price_data: {
-          currency: "usd",
-          unit_amount: unitAmount,
-          recurring: { interval: "month", interval_count: quarterly ? 3 : 1 },
-          product_data: { name: "SetMo seat — appointment-setter training" },
-        },
-      },
-    ],
-    subscription_data: { metadata: { officeId: opts.officeId } },
-    metadata: { kind: "subscription", officeId: opts.officeId },
+    line_items,
+    subscription_data: { metadata: meta },
+    metadata: meta,
     success_url: `${opts.origin}/office/billing?sub=success`,
     cancel_url: `${opts.origin}/office/billing?sub=cancel`,
   });

@@ -102,8 +102,15 @@ enum RecommendationStatus {
 }
 
 enum Cadence {
-  MONTHLY
+  MONTHLY // legacy — plans are now quarterly or annual only
   QUARTERLY
+  ANNUAL
+}
+
+enum PlanTier {
+  TEAM // per setter seat
+  PRACTICE // per location (1 manager + 2 setters) + extra setters
+  GROUP // custom / sales-led
 }
 
 enum SubscriptionStatus {
@@ -470,9 +477,11 @@ model Subscription {
   officeId             String             @unique @map("office_id")
   stripeCustomerId     String?            @map("stripe_customer_id")
   stripeSubscriptionId String?            @map("stripe_subscription_id")
-  seats                Int                @default(1)
-  cadence              Cadence            @default(MONTHLY)
-  pricePerSeat         Decimal            @default(59.99) @map("price_per_seat") @db.Decimal(6, 2)
+  seats                Int                @default(1) // setter seats (drives the pooled allowance)
+  planTier             PlanTier           @default(TEAM) @map("plan_tier")
+  isFounder            Boolean            @default(false) @map("is_founder")
+  cadence              Cadence            @default(QUARTERLY)
+  pricePerSeat         Decimal            @default(59.99) @map("price_per_seat") @db.Decimal(6, 2) // legacy
   status               SubscriptionStatus @default(ACTIVE)
   currentPeriodEnd     DateTime?          @map("current_period_end")
 

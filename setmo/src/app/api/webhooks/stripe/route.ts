@@ -104,35 +104,35 @@ async function syncSubscription(sub: Stripe.Subscription) {
   if (!officeId) return;
 
   const item = sub.items.data[0];
-  const seats = item?.quantity ?? 1;
   const interval = item?.price?.recurring?.interval;
-  const cadence = interval === "year" || interval === "month" ? (interval === "month" ? "MONTHLY" : "QUARTERLY") : "MONTHLY";
+  const intervalCount = item?.price?.recurring?.interval_count ?? 1;
+  const cadence = interval === "year" ? "ANNUAL" : interval === "month" && intervalCount === 3 ? "QUARTERLY" : "QUARTERLY";
   const status = sub.status === "active" ? "ACTIVE" : sub.status === "past_due" ? "PAST_DUE" : "CANCELED";
   const periodEnd = item?.current_period_end ? new Date(item.current_period_end * 1000) : null;
 
+  const planTier = (sub.metadata?.planTier as "TEAM" | "PRACTICE" | "GROUP") ?? "TEAM";
+  const isFounder = sub.metadata?.isFounder === "true";
+  // setter seats drive the pooled allowance; prefer the metadata we set at checkout
+  const seats = Number(sub.metadata?.setterSeats ?? item?.quantity ?? 1);
+
   await prisma.subscription.upsert({
     where: { officeId },
-    update: {
-      stripeCustomerId: customerId,
-      stripeSubscriptionId: sub.id,
-      seats,
-      cadence,
-      status,
-      currentPeriodEnd: periodEnd,
-    },
-    create: {
-      officeId,
-      stripeCustomerId: customerId,
-      stripeSubscriptionId: sub.id,
-      seats,
-      cadence,
-      status,
-      currentPeriodEnd: periodEnd,
-    },
+    update: { stripeCustomerId: customerId, stripeSubscriptionId: sub.id, seats, planTier, isFounder, cadence, status, currentPeriodEnd: periodEnd },
+    create: { officeId, stripeCustomerId: customerId, stripeSubscriptionId: sub.id, seats, planTier, isFounder, cadence, status, currentPeriodEnd: periodEnd },
   });
 
   await prisma.office.update({
     where: { id: officeId },
     data: { seatCount: seats, ...(customerId ? { stripeCustomerId: customerId } : {}) },
   });
+
+  // Keep the pooled allowance in sync: setter seats × 5h.
+  const { currentPeriod } = await import("@/lib/usage");
+  const period = await currentPeriod(officeId);
+  if (period) {
+    await prisma.allowancePeriod.update({
+      where: { id: period.id },
+      data: { includedSeconds: BigInt(seats * 5 * 3600) },
+    });
+  }
 }

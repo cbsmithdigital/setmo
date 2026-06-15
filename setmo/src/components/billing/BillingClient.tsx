@@ -6,16 +6,19 @@ import { BundleModal } from "@/components/billing/BundleModal";
 import { InviteModal } from "@/components/billing/InviteModal";
 import { SubscribeModal } from "@/components/billing/SubscribeModal";
 
+type Cadence = "QUARTERLY" | "ANNUAL";
 type BillingData = {
   allowance: { poolUsed: number; poolTotal: number };
   subscribed: boolean;
+  tier: "TEAM" | "PRACTICE" | "GROUP" | null;
+  tierName: string | null;
+  isFounder: boolean;
+  foundersOpen: boolean;
   seats: number;
   filled: number;
-  cadence: "MONTHLY" | "QUARTERLY";
-  pricePerSeat: number;
-  discountLabel: string;
-  monthlyTotal: number;
+  cadence: Cadence;
   quarterlyTotal: number;
+  annualTotal: number;
   nextInvoiceDate: string | null;
   bundles: { hours: number; priceUsd: number; popular?: boolean }[];
   invoices: { date: string; desc: string; amount: string; status: string; url: string | null }[];
@@ -33,13 +36,13 @@ export function BillingClient({
   subStatus?: string;
 }) {
   const [modal, setModal] = useState<null | "bundle" | "invite" | "subscribe">(null);
-  const [cadence, setCadence] = useState<"MONTHLY" | "QUARTERLY">(data.cadence);
+  const [cadence, setCadence] = useState<Cadence>(data.cadence);
 
   const { poolUsed, poolTotal } = data.allowance;
   const poolPct = poolTotal > 0 ? Math.round((poolUsed / poolTotal) * 100) : 0;
   const remain = Math.max(0, poolTotal - poolUsed);
   const low = poolPct > 80;
-  const total = cadence === "QUARTERLY" ? data.quarterlyTotal : data.monthlyTotal;
+  const total = cadence === "ANNUAL" ? data.annualTotal : data.quarterlyTotal;
   const seatsFree = Math.max(0, data.seats - data.filled);
 
   return (
@@ -108,21 +111,26 @@ export function BillingClient({
           </div>
 
           <div className="card card-pad rise" style={{ animationDelay: ".06s" }}>
-            <h3 style={{ fontSize: 18, marginBottom: 14 }}>Plan</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <h3 style={{ fontSize: 18 }}>{data.tierName ? `${data.tierName} plan` : "Plan"}</h3>
+              {data.isFounder && <span className="chip amber" style={{ padding: "3px 10px" }}>Founders</span>}
+            </div>
             <div style={{ display: "flex", alignItems: "flex-end", gap: 6, marginBottom: 4 }}>
               <span style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 40 }} className="grad-text">
-                ${total.toFixed(0)}
+                ${total.toLocaleString()}
               </span>
               <span className="muted" style={{ fontSize: 14, paddingBottom: 6 }}>
-                / {cadence === "QUARTERLY" ? "quarter" : "month"}
+                / {cadence === "ANNUAL" ? "year" : "quarter"}
               </span>
             </div>
             <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
-              {data.seats} seats · ${data.pricePerSeat}/seat · {data.discountLabel}
-              {cadence === "QUARTERLY" ? " · extra 5% quarterly" : ""}
+              {data.tier === "PRACTICE"
+                ? `Location base + ${Math.max(0, data.seats - 2)} extra setter${Math.max(0, data.seats - 2) === 1 ? "" : "s"} (1 mgr + 2 incl.)`
+                : `${data.seats} setter seat${data.seats === 1 ? "" : "s"}`}
+              {cadence === "ANNUAL" ? " · ~10% annual savings" : ""}
             </p>
             <div style={{ display: "flex", gap: 6, background: "var(--s1)", border: "1px solid var(--line)", borderRadius: 99, padding: 5, marginBottom: 16, width: "fit-content" }}>
-              {(["MONTHLY", "QUARTERLY"] as const).map((c) => (
+              {(["QUARTERLY", "ANNUAL"] as const).map((c) => (
                 <button
                   key={c}
                   onClick={() => setCadence(c)}
@@ -212,7 +220,13 @@ export function BillingClient({
       {modal === "bundle" && <BundleModal bundles={data.bundles} onClose={() => setModal(null)} />}
       {modal === "invite" && <InviteModal seatsFree={seatsFree} onClose={() => setModal(null)} />}
       {modal === "subscribe" && (
-        <SubscribeModal currentSeats={data.seats} currentCadence={data.cadence} onClose={() => setModal(null)} />
+        <SubscribeModal
+          currentTier={data.tier}
+          currentSeats={data.seats}
+          currentCadence={data.cadence}
+          foundersOpen={data.foundersOpen}
+          onClose={() => setModal(null)}
+        />
       )}
     </>
   );

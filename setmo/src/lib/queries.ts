@@ -370,9 +370,10 @@ export async function getOfficeCatalog(officeId: string) {
 
 // ---------- office billing ----------
 export async function getOfficeBilling(officeId: string) {
-  const { getStripe, isStripeConfigured, seatDiscount, planTotal, BUNDLES } = await import(
-    "@/lib/stripe"
-  );
+  const { getStripe, isStripeConfigured, BUNDLES } = await import("@/lib/stripe");
+  const { planTotal, foundersOpen, TIERS } = await import("@/lib/pricing");
+  type PlanTier = import("@/lib/pricing").PlanTier;
+  type Cadence = import("@/lib/pricing").Cadence;
 
   const [allowance, subscription, activeSetters, office] = await Promise.all([
     getAllowance(officeId),
@@ -382,8 +383,16 @@ export async function getOfficeBilling(officeId: string) {
   ]);
 
   const seats = subscription?.seats ?? office?.seatCount ?? 1;
-  const cadence = subscription?.cadence ?? "MONTHLY";
-  const discount = seatDiscount(seats);
+  const tier = (subscription?.planTier ?? null) as PlanTier | null;
+  const isFounder = subscription?.isFounder ?? false;
+  const cadence = (subscription?.cadence === "ANNUAL" ? "ANNUAL" : "QUARTERLY") as Cadence;
+  // Current-plan config for displaying the charged total.
+  const cfg = {
+    tier: (tier ?? "TEAM") as PlanTier,
+    founder: isFounder,
+    seats,
+    extraSetters: Math.max(0, seats - TIERS.PRACTICE.includedSetters),
+  };
 
   // Pull recent invoices from Stripe when wired up; otherwise empty.
   let invoices: { date: string; desc: string; amount: string; status: string; url: string | null }[] = [];
@@ -410,13 +419,15 @@ export async function getOfficeBilling(officeId: string) {
   return {
     allowance,
     subscribed: subscription?.status === "ACTIVE",
+    tier,
+    tierName: tier ? TIERS[tier].name : null,
+    isFounder,
+    foundersOpen: foundersOpen(),
     seats,
     filled: activeSetters,
     cadence,
-    pricePerSeat: Number(subscription?.pricePerSeat ?? 59.99),
-    discountLabel: discount.label,
-    monthlyTotal: planTotal(seats, "MONTHLY"),
-    quarterlyTotal: planTotal(seats, "QUARTERLY"),
+    quarterlyTotal: planTotal({ ...cfg, cadence: "QUARTERLY" }),
+    annualTotal: planTotal({ ...cfg, cadence: "ANNUAL" }),
     nextInvoiceDate: subscription?.currentPeriodEnd
       ? subscription.currentPeriodEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
       : null,

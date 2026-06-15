@@ -152,8 +152,8 @@ async function main() {
   // ---------- subscription ----------
   await prisma.subscription.upsert({
     where: { officeId: OFFICE_ID },
-    update: { seats: 12, cadence: "MONTHLY", status: "ACTIVE" },
-    create: { officeId: OFFICE_ID, seats: 12, cadence: "MONTHLY", pricePerSeat: "59.99", status: "ACTIVE" },
+    update: { seats: 12, planTier: "PRACTICE", isFounder: true, cadence: "QUARTERLY", status: "ACTIVE" },
+    create: { officeId: OFFICE_ID, seats: 12, planTier: "PRACTICE", isFounder: true, cadence: "QUARTERLY", status: "ACTIVE" },
   });
 
   // ---------- allowance period (current month; 36h pool, 22.4h used) ----------
