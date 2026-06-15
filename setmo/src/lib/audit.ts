@@ -61,14 +61,20 @@ export function estimateRecovery(opts: {
   };
 }
 
-/** Number of the audit's calls that have been scored (drives the N/5 runner). */
+export type AuditCallState = "waiting" | "scoring" | "scored";
+
+/** Per-call states for the runner: waiting (transcript not captured) → scoring
+ * (captured, awaiting the score) → scored. Drives the N/5 status bars. */
 export async function auditCallCounts(auditId: string) {
   const sessions = await prisma.session.findMany({
     where: { auditId },
-    select: { id: true, status: true, evaluation: { select: { id: true } } },
+    orderBy: { startedAt: "asc" },
+    select: { evaluation: { select: { scoredAt: true } } },
   });
-  const scored = sessions.filter((s) => s.evaluation).length;
-  return { total: sessions.length, scored };
+  const calls: AuditCallState[] = sessions.map((s) =>
+    !s.evaluation ? "waiting" : s.evaluation.scoredAt ? "scored" : "scoring"
+  );
+  return { total: sessions.length, scored: calls.filter((c) => c === "scored").length, calls };
 }
 
 /** Compute + persist the report once all 5 calls are scored. Idempotent. */
@@ -77,11 +83,11 @@ export async function finalizeAudit(auditId: string) {
   if (!audit) return null;
 
   const sessions = await prisma.session.findMany({
-    where: { auditId, evaluation: { isNot: null } },
+    where: { auditId, evaluation: { scoredAt: { not: null } } },
     include: { evaluation: { include: { skills: true } } },
     orderBy: { startedAt: "asc" },
   });
-  if (sessions.length < AUDIT_CALLS) return null; // not ready yet
+  if (sessions.length < AUDIT_CALLS) return null; // not all scored yet
 
   const overalls = sessions.map((s) => Number(s.evaluation!.overallScore ?? 0));
   const overall = overalls.reduce((a, b) => a + b, 0) / overalls.length;
@@ -128,7 +134,7 @@ export async function buildAuditReport(auditId: string) {
   if (!audit) return null;
 
   const sessions = await prisma.session.findMany({
-    where: { auditId, evaluation: { isNot: null } },
+    where: { auditId, evaluation: { scoredAt: { not: null } } },
     include: { evaluation: { include: { skills: true } } },
     orderBy: { startedAt: "asc" },
   });

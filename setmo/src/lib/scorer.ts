@@ -119,7 +119,9 @@ ${transcriptText}`;
       model: MODEL,
       max_tokens: 4096,
       thinking: { type: "adaptive" },
-      output_config: { format: zodOutputFormat(ScoreZ), effort: "medium" },
+      // `low` effort keeps scoring well under the function budget (medium ran ~54s
+      // on a 4-min call — right at the old 60s limit). Scoring is now also async.
+      output_config: { format: zodOutputFormat(ScoreZ), effort: "low" },
       system,
       messages: [{ role: "user", content: user }],
     });

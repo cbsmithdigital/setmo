@@ -12,52 +12,79 @@ const MIN_SETTER_TURNS = 2;
 const MIN_DURATION_SECS = 30;
 
 /**
- * Ingests an authoritative post-call evaluation (server-side only).
- * SetMo scores the call ITSELF from the transcript (Claude) — independent of
- * whether the agent ran its feedback monologue, and works on partial calls.
- * Falls back to parsing the agent's feedback prose when the scorer is off.
- * Idempotent on the session's evaluation. The ONLY path that writes scores.
+ * CAPTURE (fast, runs inline in the webhook). Resolves the session and persists
+ * the raw transcript immediately — BEFORE any scoring — so the one webhook we get
+ * is never lost (zero-retention account). Scoring is deferred to scoreSession(),
+ * which runs in the background. Returns needsScore so the caller can kick it off.
  */
 export async function ingestPostCall(
   rawPayload: unknown
-): Promise<{ ok: boolean; sessionId?: string; reason?: string; source?: string }> {
+): Promise<{ ok: boolean; sessionId?: string; reason?: string; needsScore?: boolean; kind?: string }> {
   const parsed = parsePostCall(rawPayload);
 
-  // Resolve the session: prefer our sessionId dynamic variable; fall back to
-  // the ElevenLabs conversation id if it was recorded at connect time.
   const session = parsed.sessionId
     ? await prisma.session.findUnique({ where: { id: parsed.sessionId } })
     : parsed.conversationId
-      ? await prisma.session.findUnique({
-          where: { elevenlabsConversationId: parsed.conversationId },
-        })
+      ? await prisma.session.findUnique({ where: { elevenlabsConversationId: parsed.conversationId } })
       : null;
 
   if (!session) return { ok: false, reason: "no matching session" };
 
   const duration = parsed.durationSeconds ?? session.durationSeconds ?? 0;
 
-  // Voice coaching: meter the time against the pool, but never score it.
+  // Voice coaching: meter the time against the pool, never score it.
   if (session.kind === "COACH") {
-    if (session.status === "COMPLETED") {
-      return { ok: true, sessionId: session.id, reason: "already metered" };
-    }
+    if (session.status === "COMPLETED") return { ok: true, sessionId: session.id, reason: "already metered" };
     await prisma.session.update({
       where: { id: session.id },
       data: { status: "COMPLETED", completedAt: new Date(), durationSeconds: duration },
     });
     await drawDownUsage(session.officeId, duration);
-    return { ok: true, sessionId: session.id, source: "coach-metered" };
+    return { ok: true, sessionId: session.id, kind: "coach" };
   }
 
-  const existing = await prisma.evaluation.findUnique({
-    where: { sessionId: session.id },
-  });
-  if (existing) return { ok: true, sessionId: session.id, reason: "already scored" };
+  const existing = await prisma.evaluation.findUnique({ where: { sessionId: session.id } });
+  if (existing?.scoredAt) return { ok: true, sessionId: session.id, reason: "already scored" };
 
-  // --- decide the score source ---
-  // Default to the agent's feedback prose (fallback). Prefer SetMo's own
-  // transcript scorer when configured and the call is long enough to score.
+  // Persist the raw transcript on the evaluation row (no scores yet).
+  if (existing) {
+    await prisma.evaluation.update({ where: { sessionId: session.id }, data: { rawPayload: rawPayload as object } });
+  } else {
+    await prisma.evaluation.create({ data: { sessionId: session.id, rawPayload: rawPayload as object } });
+  }
+  await prisma.session.update({
+    where: { id: session.id },
+    data: {
+      durationSeconds: duration,
+      completedAt: new Date(),
+      elevenlabsConversationId: parsed.conversationId ?? session.elevenlabsConversationId,
+    },
+  });
+
+  return { ok: true, sessionId: session.id, needsScore: true };
+}
+
+/**
+ * SCORE (deferred, runs in the background — can take 30–150s). Reads the captured
+ * transcript, runs the Claude scorer (or prose fallback), writes the evaluation +
+ * skills, stamps scoredAt, and runs the post-score side effects. Idempotent on
+ * scoredAt, so retries / a re-score sweep just no-op once it's done.
+ */
+export async function scoreSession(
+  sessionId: string
+): Promise<{ ok: boolean; reason?: string; source?: string }> {
+  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+  if (!session) return { ok: false, reason: "no session" };
+
+  const evaluation = await prisma.evaluation.findUnique({ where: { sessionId }, include: { skills: true } });
+  if (!evaluation?.rawPayload) return { ok: false, reason: "no captured transcript" };
+  if (evaluation.scoredAt) return { ok: true, reason: "already scored" };
+
+  const rawPayload = evaluation.rawPayload;
+  const parsed = parsePostCall(rawPayload);
+  const duration = session.durationSeconds ?? parsed.durationSeconds ?? 0;
+
+  // Default to the agent's feedback prose; prefer SetMo's transcript scorer.
   let skills = parsed.skills;
   let overall = parsed.overallScore;
   let wins = parsed.wins;
@@ -91,27 +118,16 @@ export async function ingestPostCall(
       source = "transcript-scorer";
     }
   } else if (!longEnough) {
-    // Too short to grade — keep a record but no skill scores (excluded from progress).
     skills = [];
     overall = null;
     source = "too-short";
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.session.update({
-      where: { id: session.id },
+    await tx.session.update({ where: { id: session.id }, data: { status: "SCORED" } });
+    await tx.evaluation.update({
+      where: { sessionId: session.id },
       data: {
-        status: "SCORED",
-        completedAt: new Date(),
-        durationSeconds: duration,
-        elevenlabsConversationId: parsed.conversationId ?? session.elevenlabsConversationId,
-        transcriptRef: session.transcriptRef,
-      },
-    });
-
-    const evaluation = await tx.evaluation.create({
-      data: {
-        sessionId: session.id,
         overallScore: overall != null ? overall.toFixed(1) : null,
         narrative,
         wins,
@@ -119,10 +135,10 @@ export async function ingestPostCall(
         replacementPhrases: phrases,
         personaCoaching,
         recommendedNextScenario: nextScenario,
-        rawPayload: rawPayload as object,
+        scoredAt: new Date(),
       },
     });
-
+    await tx.skillScore.deleteMany({ where: { evaluationId: evaluation.id } });
     if (skills.length) {
       await tx.skillScore.createMany({
         data: skills.map((s) => ({
@@ -138,28 +154,18 @@ export async function ingestPostCall(
 
   // Setter Audit calls are scored, but never draw down a pool, drive
   // recommendations, or hit a leaderboard (the prospect isn't a customer).
-  if (session.isAudit) {
-    return { ok: true, sessionId: session.id, source: source + "-audit" };
-  }
+  if (session.isAudit) return { ok: true, source: source + "-audit" };
 
-  // Draw down the pooled allowance from the authoritative duration.
   await drawDownUsage(session.officeId, duration);
-
-  // Recompute coaching recommendations + roll the setter's memory summary.
   await recomputeRecommendations(session.setterId);
   await updateSetterMemory(session.setterId);
-
-  // Refresh office + global leaderboards (fairness-weighted).
   await recomputeLeaderboards(session.officeId);
 
-  return { ok: true, sessionId: session.id, source };
+  return { ok: true, source };
 }
 
 /**
  * Stores the call recording from the ElevenLabs `post_call_audio` webhook.
- * The audio arrives inline (base64) because the account is zero-retention; we
- * persist it to Supabase Storage and reference it on the session. Matched to a
- * session by conversation id (set at /ended or score capture).
  */
 export async function ingestAudio(payload: unknown): Promise<{ ok: boolean; reason?: string }> {
   const root = (payload ?? {}) as Record<string, unknown>;

@@ -1,10 +1,13 @@
+import { after } from "next/server";
 import { verifyWebhookSignature } from "@/lib/elevenlabs";
-import { ingestPostCall, ingestAudio } from "@/lib/ingest";
+import { ingestPostCall, ingestAudio, scoreSession } from "@/lib/ingest";
 import { error, json } from "@/lib/api";
 
-// Allow up to 60s — the transcript scorer (Claude) runs inline. Idempotent, so
-// a retry after a slow first response just no-ops.
-export const maxDuration = 60;
+// The transcript is CAPTURED synchronously (fast, <5s) so the one webhook we get
+// on a zero-retention account is never lost; the slow Claude scorer runs in the
+// background via after() so we ack ElevenLabs immediately and never hit the
+// request timeout. maxDuration covers the background score (a long call ~150s).
+export const maxDuration = 300;
 
 // POST /api/webhooks/elevenlabs — the authoritative, server-side score capture.
 // This is the ONLY path that writes scores + durations. The browser is never
@@ -37,8 +40,18 @@ export async function POST(req: Request) {
     return json({ received: true, kind: "audio", ...result });
   }
 
-  // Default: the transcription event — the authoritative scoring path.
+  // Capture the transcript fast, then score in the background (after the 200).
   const result = await ingestPostCall(payload);
+  if (result.needsScore && result.sessionId) {
+    const id = result.sessionId;
+    after(async () => {
+      try {
+        await scoreSession(id);
+      } catch (e) {
+        console.error("scoreSession failed", id, e);
+      }
+    });
+  }
 
   // Always 200 once verified so ElevenLabs doesn't retry a non-actionable event.
   return json({ received: true, kind: "transcription", ...result });

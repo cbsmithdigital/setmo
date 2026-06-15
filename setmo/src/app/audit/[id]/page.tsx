@@ -153,8 +153,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
         contactName={audit.contactName}
         totalCalls={AUDIT_CALLS}
         maxSeconds={AUDIT_CALL_MAX_SECONDS}
-        initialScored={counts.scored}
-        initialTotal={counts.total}
+        initialCalls={counts.calls}
       />
     </Shell>
   );
