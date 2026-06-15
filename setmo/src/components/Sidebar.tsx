@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -56,6 +57,8 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const nav = NAV_BY_ROLE[role] ?? NAV_SETTER;
+  const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
 
   // Highlight only the MOST specific matching item, so index routes like
   // /office don't stay lit when you're on /office/team. Session & results map
@@ -81,17 +84,34 @@ export function Sidebar({
   }
 
   return (
-    <aside className="sidebar">
-      <Link className="sb-logo" href={nav[0].href}>
-        <Image src="/setmo-icon.png" alt="" width={34} height={34} style={{ objectFit: "contain" }} />
-        <span>
-          Set<span style={{ color: "var(--mint)" }}>Mo</span>
-        </span>
-      </Link>
+    <>
+      {/* mobile top bar (hidden on desktop) */}
+      <header className="mobilebar">
+        <button className="mobilebar-btn" onClick={() => setOpen(true)} aria-label="Open menu">
+          <span /><span /><span />
+        </button>
+        <Link className="sb-logo" href={nav[0].href} style={{ padding: 0, fontSize: 19 }}>
+          <Image src="/setmo-icon.png" alt="" width={26} height={26} style={{ objectFit: "contain" }} />
+          <span>Set<span style={{ color: "var(--mint)" }}>Mo</span></span>
+        </Link>
+      </header>
+
+      {open && <div className="nav-backdrop" onClick={close} />}
+
+      <aside className={"sidebar" + (open ? " open" : "")}>
+        <button className="sidebar-close" onClick={close} aria-label="Close menu">
+          <Icon name="x" size={20} />
+        </button>
+        <Link className="sb-logo" href={nav[0].href} onClick={close}>
+          <Image src="/setmo-icon.png" alt="" width={34} height={34} style={{ objectFit: "contain" }} />
+          <span>
+            Set<span style={{ color: "var(--mint)" }}>Mo</span>
+          </span>
+        </Link>
 
       <nav className="nav">
         {nav.map((n) => (
-          <Link key={n.href} href={n.href} className={"nav-i" + (isActive(n.href) ? " on" : "")}>
+          <Link key={n.href} href={n.href} onClick={close} className={"nav-i" + (isActive(n.href) ? " on" : "")}>
             <Icon name={n.icon} />
             {n.label}
             {n.badge && <span className="badge">{n.badge}</span>}
@@ -115,6 +135,7 @@ export function Sidebar({
           <Icon name="logout" size={16} style={{ marginLeft: "auto", color: "var(--muted)" }} />
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
