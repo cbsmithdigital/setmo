@@ -264,7 +264,7 @@ function SessionInner({
   // ---------- LIVE ----------
   const active = status === "connected" && !muted;
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", position: "relative", zIndex: 1 }}>
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", position: "relative", zIndex: 1, overflowX: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22px 32px" }}>
         <div className="chip mint" style={{ padding: "7px 14px", fontSize: 13 }}>
           <span className="live-dot" /> {status === "connected" ? "LIVE PRACTICE" : "CONNECTING…"}

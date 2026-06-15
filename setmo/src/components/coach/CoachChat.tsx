@@ -63,7 +63,7 @@ export function CoachChat({
       : { alignSelf: "flex-start" as const, background: "var(--s3)", color: "var(--text)" };
 
   return (
-    <div className="card card-pad" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 200px)", minHeight: 460 }}>
+    <div className="card card-pad coach-chat-card" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 200px)", minHeight: 460 }}>
       {onVoice && (
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
           <button className="btn btn-ghost" style={{ padding: "8px 14px", fontSize: 13.5 }} onClick={() => onVoice()}>

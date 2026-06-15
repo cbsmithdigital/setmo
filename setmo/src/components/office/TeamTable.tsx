@@ -51,7 +51,8 @@ export function TeamTable({ rows }: { rows: Row[] }) {
         ))}
       </div>
 
-      <div className="card rise" style={{ overflow: "hidden" }}>
+      <div className="card rise" style={{ overflowX: "auto" }}>
+        <div style={{ minWidth: 680 }}>
         <div
           style={{ display: "grid", gridTemplateColumns: cols, gap: 16, padding: "14px 22px", borderBottom: "1px solid var(--line)", fontSize: 11.5, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)" }}
         >
@@ -96,6 +97,7 @@ export function TeamTable({ rows }: { rows: Row[] }) {
             <div style={{ color: "var(--muted)" }}>›</div>
           </Link>
         ))}
+        </div>
       </div>
     </>
   );

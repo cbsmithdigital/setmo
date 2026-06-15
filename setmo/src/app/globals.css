@@ -766,6 +766,10 @@ a {
 
 /* responsive */
 @media (max-width: 880px) {
+  html,
+  body {
+    overflow-x: hidden; /* safety against any stray wide element / off-canvas drawer */
+  }
   .login-grid {
     grid-template-columns: 1fr !important;
   }
@@ -856,5 +860,21 @@ a {
   .topbar {
     flex-wrap: wrap;
     gap: 12px;
+    padding-top: 16px;
+    padding-bottom: 4px;
+  }
+  .tb-greet h1 {
+    font-size: 21px;
+  }
+
+  /* chat fills the viewport minus the mobile bar + header */
+  .coach-chat-card {
+    height: calc(100dvh - 172px) !important;
+    min-height: 360px !important;
+  }
+
+  /* let topbar action buttons breathe / wrap */
+  .tb-right {
+    flex-wrap: wrap;
   }
 }

@@ -184,25 +184,27 @@ export function BillingClient({
 
         {/* invoices */}
         <div className="eyebrow" style={{ marginBottom: 12 }}>Invoices</div>
-        <div className="card rise" style={{ overflow: "hidden", animationDelay: ".15s" }}>
+        <div className="card rise" style={{ overflowX: "auto", animationDelay: ".15s" }}>
           {data.invoices.length === 0 ? (
             <div className="card-pad muted" style={{ fontSize: 13.5 }}>
               No invoices yet. Seat charges and bundle receipts will appear here once billing is live.
             </div>
           ) : (
-            data.invoices.map((inv, i) => (
-              <div
-                key={i}
-                style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr 90px", gap: 16, alignItems: "center", padding: "14px 22px", borderTop: i ? "1px solid var(--line-soft)" : "none" }}
-              >
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{inv.date}</div>
-                <div className="muted" style={{ fontSize: 13.5 }}>{inv.desc}</div>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{inv.amount}</div>
-                <div>
-                  <span className="chip mint" style={{ padding: "3px 11px", fontSize: 12 }}>{inv.status}</span>
+            <div style={{ minWidth: 520 }}>
+              {data.invoices.map((inv, i) => (
+                <div
+                  key={i}
+                  style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr 90px", gap: 16, alignItems: "center", padding: "14px 22px", borderTop: i ? "1px solid var(--line-soft)" : "none" }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{inv.date}</div>
+                  <div className="muted" style={{ fontSize: 13.5 }}>{inv.desc}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{inv.amount}</div>
+                  <div>
+                    <span className="chip mint" style={{ padding: "3px 11px", fontSize: 12 }}>{inv.status}</span>
+                  </div>
                 </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       </div>
