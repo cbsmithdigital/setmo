@@ -40,6 +40,35 @@ export async function domainUsedBefore(domain: string, exceptId?: string): Promi
   return Boolean(prior);
 }
 
+// ---- per-call likely show rate ----
+// Whether a booked consult actually SHOWS is driven by how well the setter built
+// commitment on the call: pain severity surfaced, the lead's real "why", value
+// built, objections handled, and a firm commitment/scarcity at the close. Maps a
+// weighted skill composite (1–5) to a realistic show-rate band:
+//   exceptional ~70s · good ~50 · normal 35–40 · weak <35.
+const SHOW_WEIGHTS: Record<string, number> = {
+  painpoint: 0.25, // severe, well-surfaced pain → they show
+  discovery: 0.2, // got to the real "why"
+  value: 0.2, // built value beyond price
+  objection: 0.15, // resolved concerns
+  closing: 0.15, // firm commitment / scarcity
+  rapport: 0.05, // trust
+};
+
+export function callShowRate(skills: { skillKey: string; score: number }[]): number {
+  const map = new Map(skills.map((s) => [s.skillKey, s.score]));
+  let weighted = 0;
+  let wsum = 0;
+  for (const [key, w] of Object.entries(SHOW_WEIGHTS)) {
+    const sc = map.get(key);
+    if (sc == null) continue;
+    weighted += w * sc;
+    wsum += w;
+  }
+  const composite = wsum ? weighted / wsum : 3; // 1–5
+  return Math.max(18, Math.min(74, Math.round(14 * composite)));
+}
+
 // ---- estimated-recovery model ----
 // Driven by the conversation MISSES: weak objection/closing caps the set rate,
 // weak rapport/discovery/value caps the show rate. We funnel a conservative lift
@@ -173,6 +202,7 @@ export async function buildAuditReport(auditId: string) {
       persona: (s.personaSeed as { persona?: string } | null)?.persona ?? "Practice lead",
       score: o,
       booked: e.booked === true,
+      showRate: callShowRate(e.skills.map((sk) => ({ skillKey: sk.skillKey, score: Number(sk.score) }))),
       win: (e.wins as string[] | null)?.[0] ?? null,
       miss: (e.misses as string[] | null)?.[0] ?? null,
       phrase: (e.replacementPhrases as { from: string; to: string }[] | null)?.[0] ?? null,

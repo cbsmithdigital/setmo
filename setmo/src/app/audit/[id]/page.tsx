@@ -114,10 +114,23 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
           <h3 style={{ fontSize: 18, marginBottom: 14 }}>Call by call</h3>
           {r.perCall.map((c) => (
             <div key={c.n} style={{ padding: "12px 0", borderTop: c.n > 1 ? "1px solid var(--m-line)" : "none" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
                 <b style={{ fontFamily: "var(--font-lato)" }}>Call {c.n}</b>
                 <span style={{ fontSize: 12.5, color: "var(--m-muted)" }}>{c.persona}</span>
-                <span style={{ marginLeft: "auto", fontSize: 12.5, fontWeight: 700, color: c.booked ? "var(--mint-deep)" : "#b42318" }}>{c.booked ? "Booked ✓" : "Not booked"} · {c.score.toFixed(1)}</span>
+                <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 700 }}>
+                  <span style={{ color: c.booked ? "var(--mint-deep)" : "#b42318" }}>{c.booked ? "Booked ✓" : "Not booked"}</span>
+                  <span style={{ color: "var(--m-muted)" }}>· {c.score.toFixed(1)}</span>
+                  <span
+                    title="Likely show rate based on how well the call built commitment (the why, pain, value, objections, close)"
+                    style={{
+                      padding: "2px 9px", borderRadius: 999, fontSize: 11.5, fontWeight: 800,
+                      background: c.showRate >= 50 ? "var(--mint-soft)" : c.showRate >= 35 ? "var(--cream-2)" : "#fdecec",
+                      color: c.showRate >= 50 ? "var(--mint-deep)" : c.showRate >= 35 ? "var(--ink-soft)" : "#b42318",
+                    }}
+                  >
+                    ~{c.showRate}% show
+                  </span>
+                </span>
               </div>
               {c.win && <p style={{ fontSize: 13.5, color: "var(--ink-soft)", marginBottom: 3 }}>👍 {c.win}</p>}
               {c.miss && <p style={{ fontSize: 13.5, color: "var(--m-muted)", marginBottom: 3 }}>🎯 {c.miss}</p>}
