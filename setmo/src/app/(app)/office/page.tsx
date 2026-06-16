@@ -44,7 +44,33 @@ export default async function OfficeOverviewPage() {
           <StatTile lab="Team average" val={o.teamAvg.toFixed(1)} grad="var(--grad-mint)" sub="across active setters" />
           <StatTile lab="Active setters" val={String(o.activeSetters)} sub={`of ${o.seats} seats`} />
           <StatTile lab="Sessions this week" val={String(o.sessionsThisWeek)} sub="office-wide" subClass="up" />
-          <StatTile lab="Pool remaining" val={`${remain.toFixed(1)}h`} grad="var(--grad-num)" sub={`of ${o.allowance.poolTotal.toFixed(0)}h`} />
+          <div className="stat-tile">
+            <div className="lab">Office skills · this month</div>
+            {o.skills.length === 0 ? (
+              <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>No scored calls yet</div>
+            ) : (
+              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--mint)", marginBottom: 4 }}>Strongest</div>
+                  {o.topSkills.map((s) => (
+                    <div key={s.key} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, lineHeight: 1.5 }}>
+                      <span style={{ color: "var(--text-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</span>
+                      <b className="mint-text" style={{ fontFamily: "var(--font-lato)" }}>{s.avg.toFixed(1)}</b>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--amber)", marginBottom: 4 }}>Needs work</div>
+                  {o.gapSkills.map((s) => (
+                    <div key={s.key} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, lineHeight: 1.5 }}>
+                      <span style={{ color: "var(--text-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</span>
+                      <b style={{ fontFamily: "var(--font-lato)", color: "var(--amber)" }}>{s.avg.toFixed(1)}</b>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="grid g-2" style={{ gridTemplateColumns: "1.5fr 1fr", marginBottom: 18 }}>

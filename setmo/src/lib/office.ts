@@ -3,6 +3,40 @@ import { getAllowance, getSetterAnalytics, type AnalyticsRange } from "@/lib/que
 import { skillName, skillTier, rubricFor } from "@/lib/skills";
 import { fullName, initialsOf } from "@/lib/format";
 
+// The default analytics window for office views — this calendar month, matching
+// the setter dashboard + the team-member detail page so numbers agree.
+function thisMonthRange(): AnalyticsRange {
+  const n = new Date();
+  return { from: new Date(n.getFullYear(), n.getMonth(), 1), to: n };
+}
+
+// Average each skill across ALL real (≥1 min) sessions in the window for the
+// given offices — "good overall data," not just the last call.
+export async function skillAveragesOverSessions(officeIds: string[], range: AnalyticsRange) {
+  const sessions = await prisma.session.findMany({
+    where: {
+      officeId: { in: officeIds },
+      status: "SCORED",
+      durationSeconds: { gte: 60 },
+      startedAt: { gte: range.from, lte: range.to },
+      evaluation: { isNot: null },
+    },
+    include: { evaluation: { include: { skills: true } } },
+  });
+  const sums = new Map<string, { t: number; n: number }>();
+  for (const s of sessions)
+    for (const sk of s.evaluation!.skills) {
+      const c = sums.get(sk.skillKey) ?? { t: 0, n: 0 };
+      c.t += Number(sk.score);
+      c.n++;
+      sums.set(sk.skillKey, c);
+    }
+  const order = rubricFor("IMPLANT").map((s) => s.key);
+  return order
+    .filter((k) => sums.has(k))
+    .map((k) => ({ key: k, name: skillName(k), tier: skillTier(k), avg: Number((sums.get(k)!.t / sums.get(k)!.n).toFixed(1)) }));
+}
+
 export type SetterStatus = "top" | "rising" | "steady" | "watch" | "new";
 
 function computeStatus(avg: number, delta: number, count: number): SetterStatus {
@@ -28,16 +62,17 @@ export type TeamRow = {
   status: SetterStatus;
 };
 
-// Per-setter aggregates for the whole office, computed in one pass.
+// Per-setter aggregates for the whole office (this month), computed in one pass.
 export async function getOfficeTeam(officeId: string): Promise<TeamRow[]> {
+  const month = thisMonthRange();
   const [setters, sessions, recs] = await Promise.all([
     prisma.user.findMany({
       where: { officeId, role: "SETTER" },
       select: { id: true, firstName: true, lastName: true },
     }),
     prisma.session.findMany({
-      // exclude sub-minute hang-ups/interruptions from team aggregates
-      where: { officeId, status: "SCORED", durationSeconds: { gte: 60 } },
+      // this month, excluding sub-minute hang-ups/interruptions
+      where: { officeId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: month.from } },
       orderBy: { startedAt: "asc" },
       include: { evaluation: { select: { overallScore: true } } },
     }),
@@ -86,11 +121,12 @@ export async function getOfficeTeam(officeId: string): Promise<TeamRow[]> {
 }
 
 export async function getOfficeOverview(officeId: string) {
-  const [team, allowance, office, subscription] = await Promise.all([
+  const [team, allowance, office, subscription, skills] = await Promise.all([
     getOfficeTeam(officeId),
     getAllowance(officeId),
     prisma.office.findUnique({ where: { id: officeId } }),
     prisma.subscription.findUnique({ where: { officeId } }),
+    getOfficeSkillHeatmap(officeId),
   ]);
 
   const withSessions = team.filter((t) => t.sessions > 0);
@@ -103,6 +139,11 @@ export async function getOfficeOverview(officeId: string) {
     where: { officeId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: weekAgo } },
   });
 
+  // Office strengths + gaps (this month) for the overview card.
+  const ranked = [...skills].sort((a, b) => b.avg - a.avg);
+  const topSkills = ranked.slice(0, 2);
+  const gapSkills = ranked.slice(-2).reverse();
+
   return {
     practiceName: office?.name ?? "Your practice",
     city: office?.city ?? "",
@@ -112,36 +153,17 @@ export async function getOfficeOverview(officeId: string) {
     sessionsThisWeek,
     allowance,
     team,
+    skills,
+    topSkills,
+    gapSkills,
     attention: team.filter((t) => t.status === "watch" || t.status === "new"),
   };
 }
 
-// Team-wide skill averages from each setter's most recent scored call — shows
-// the office's systemic strengths/gaps (vs. one person's gap).
-export async function getOfficeSkillHeatmap(officeId: string) {
-  const sessions = await prisma.session.findMany({
-    where: { officeId, status: "SCORED", durationSeconds: { gte: 60 }, evaluation: { isNot: null } },
-    orderBy: { startedAt: "desc" },
-    include: { evaluation: { include: { skills: true } } },
-  });
-
-  const seen = new Set<string>();
-  const sums = new Map<string, { total: number; n: number }>();
-  for (const s of sessions) {
-    if (seen.has(s.setterId)) continue; // latest only, per setter
-    seen.add(s.setterId);
-    for (const sk of s.evaluation!.skills) {
-      const cur = sums.get(sk.skillKey) ?? { total: 0, n: 0 };
-      cur.total += Number(sk.score);
-      cur.n += 1;
-      sums.set(sk.skillKey, cur);
-    }
-  }
-
-  const order = rubricFor("IMPLANT").map((s) => s.key);
-  return [...sums.entries()]
-    .map(([key, v]) => ({ key, name: skillName(key), tier: skillTier(key), avg: v.total / v.n }))
-    .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+// Team-wide skill averages over this month (every real call, not just the last
+// one) — the office's systemic strengths/gaps.
+export async function getOfficeSkillHeatmap(officeId: string, range: AnalyticsRange = thisMonthRange()) {
+  return skillAveragesOverSessions([officeId], range);
 }
 
 // Everything the Office Admin coach needs to be grounded + to take actions.

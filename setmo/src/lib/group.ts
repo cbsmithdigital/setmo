@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
-import { skillName, skillTier, rubricFor } from "@/lib/skills";
 import { fullName } from "@/lib/format";
+import { skillAveragesOverSessions } from "@/lib/office";
 
 export type OfficeRollup = {
   id: string;
@@ -83,21 +83,10 @@ export async function getGroupOverview(orgId: string) {
   const active = officeRollups.filter((o) => o.activeSetters > 0);
   const orgAvg = active.length ? active.reduce((a, o) => a + o.teamAvg, 0) / active.length : 0;
 
-  // Org-wide skill heatmap (each active setter's latest call).
-  const order = rubricFor("IMPLANT").map((s) => s.key);
-  const heatSums = new Map<string, { total: number; n: number }>();
-  for (const rec of perSetter.values()) {
-    if (!rec.latestSkills) continue;
-    for (const sk of rec.latestSkills) {
-      const cur = heatSums.get(sk.skillKey) ?? { total: 0, n: 0 };
-      cur.total += sk.score;
-      cur.n += 1;
-      heatSums.set(sk.skillKey, cur);
-    }
-  }
-  const heatmap = [...heatSums.entries()]
-    .map(([key, v]) => ({ key, name: skillName(key), tier: skillTier(key), avg: v.total / v.n }))
-    .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+  // Org-wide skill heatmap — averaged over this month's real calls across every
+  // office (not each setter's last call), so it reflects current group-wide skill.
+  const now2 = new Date();
+  const heatmap = await skillAveragesOverSessions(officeIds, { from: new Date(now2.getFullYear(), now2.getMonth(), 1), to: now2 });
 
   // Top performers across the whole group.
   const topPerformers = [...perSetter.entries()]

@@ -51,7 +51,7 @@ export default async function GroupPage() {
             {g.offices.map((o, i) => {
               const st = STATUS[o.status];
               return (
-                <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 4px", borderTop: i ? "1px solid var(--line-soft)" : "none" }}>
+                <Link key={o.id} href={`/group/office/${o.id}`} style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 4px", borderTop: i ? "1px solid var(--line-soft)" : "none", borderRadius: 8 }}>
                   <div style={{ width: 26, textAlign: "center", fontFamily: "var(--font-lato)", fontWeight: 900, color: "var(--muted)" }}>{i + 1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 14.5 }}>{o.name}</div>
@@ -63,7 +63,8 @@ export default async function GroupPage() {
                   <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 18, width: 40, textAlign: "right" }} className={o.teamAvg >= 4.5 ? "mint-text" : "grad-text"}>
                     {o.teamAvg ? o.teamAvg.toFixed(1) : "—"}
                   </div>
-                </div>
+                  <div style={{ color: "var(--muted)" }}>›</div>
+                </Link>
               );
             })}
             {g.offices.length === 0 && <p className="muted" style={{ fontSize: 14 }}>No practices yet.</p>}
