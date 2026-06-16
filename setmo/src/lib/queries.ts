@@ -79,14 +79,16 @@ const RANGE_LABEL: Record<string, string> = {
 };
 
 // Resolve a timeframe from URL search params (shared by the setter Progress page
-// and the office team-member page). Default = last 30 days.
+// and the office team-member page). Default = this calendar month, matching the
+// dashboard's "skill level · this month" so the same setter reads identically
+// across the setter and office-manager views.
 export function resolveAnalyticsRange(sp: { range?: string; from?: string; to?: string }): {
   key: string;
   range: AnalyticsRange;
   label: string;
 } {
   const now = new Date();
-  const key = sp.range ?? "30d";
+  const key = sp.range ?? "month";
   if (key === "month") return { key, range: { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now }, label: RANGE_LABEL.month };
   if (key === "all") return { key, range: { from: new Date(2000, 0, 1), to: now }, label: RANGE_LABEL.all };
   if (key === "custom" && sp.from) {
