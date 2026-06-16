@@ -20,8 +20,10 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const dryRun = url.searchParams.get("dryRun") === "1";
   const only = url.searchParams.get("scope"); // office | group | setter | null
+  const onlyId = url.searchParams.get("id"); // limit to a single subject (testing)
   const testTo = url.searchParams.get("test"); // send every built digest to this one address (review/testing)
   const want = (s: string) => !only || only === s;
+  const pick = (ids: string[]) => (onlyId ? ids.filter((x) => x === onlyId) : ids);
 
   if (!dryRun && !isEmailConfigured()) return error("Email not configured", 503);
 
@@ -49,9 +51,9 @@ export async function GET(req: Request) {
     if (!dryRun) bucket.sent += await sendDigestEmail({ to, subject: d.subject, html: d.html });
   };
 
-  if (want("office")) for (const id of officeIds) await run(summary.offices, await buildOfficeDigest(id).catch(() => null));
-  if (want("group")) for (const id of orgIds) await run(summary.groups, await buildGroupDigest(id).catch(() => null));
-  if (want("setter")) for (const id of setterIds) await run(summary.setters, await buildSetterDigest(id).catch(() => null));
+  if (want("office")) for (const id of pick(officeIds)) await run(summary.offices, await buildOfficeDigest(id).catch(() => null));
+  if (want("group")) for (const id of pick(orgIds)) await run(summary.groups, await buildGroupDigest(id).catch(() => null));
+  if (want("setter")) for (const id of pick(setterIds)) await run(summary.setters, await buildSetterDigest(id).catch(() => null));
 
   return json({ ok: true, dryRun, summary, ...(dryRun ? { samples } : {}) });
 }
