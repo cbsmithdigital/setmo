@@ -12,8 +12,9 @@ export function OutcomesCard({
 }: {
   periodLabel: string;
   periodName: string;
-  initial: { consultsBooked: number | null; casesStarted: number | null; production: number | null; note: string | null } | null;
+  initial: { monthlyLeads: number | null; consultsBooked: number | null; casesStarted: number | null; production: number | null; note: string | null } | null;
 }) {
+  const [leads, setLeads] = useState(initial?.monthlyLeads?.toString() ?? "");
   const [consults, setConsults] = useState(initial?.consultsBooked?.toString() ?? "");
   const [cases, setCases] = useState(initial?.casesStarted?.toString() ?? "");
   const [production, setProduction] = useState(initial?.production?.toString() ?? "");
@@ -30,6 +31,7 @@ export function OutcomesCard({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           periodLabel,
+          monthlyLeads: num(leads),
           consultsBooked: num(consults),
           casesStarted: num(cases),
           production: num(production),
@@ -56,7 +58,11 @@ export function OutcomesCard({
         Log your real numbers each month. Your coach uses these to connect training to outcomes.
       </p>
 
-      <div className="grid g-3" style={{ gap: 12, marginBottom: 12 }}>
+      <div className="grid g-4" style={{ gap: 12, marginBottom: 12 }}>
+        <label style={field}>
+          <span style={lab}>New leads</span>
+          <input className="input" inputMode="numeric" placeholder="—" value={leads} onChange={(e) => setLeads(e.target.value)} />
+        </label>
         <label style={field}>
           <span style={lab}>Consults booked</span>
           <input className="input" inputMode="numeric" placeholder="—" value={consults} onChange={(e) => setConsults(e.target.value)} />

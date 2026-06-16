@@ -155,7 +155,26 @@ async function main() {
     }
   }
 
-  console.log(`\n✅ Meridian demo refreshed: ${totalSessions} sessions across ${PLAN.length} locations.`);
+  // Reported outcomes for the current month — a realistic mix so the funnel shows
+  // "Actual" vs "Projected" side by side. Brightwork reports leads+consults only
+  // (cases/production then project downstream); Coastal + Lakeside report fully.
+  const pk = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const OUTCOMES: { office: string; monthlyLeads: number; consultsBooked: number; casesStarted: number | null; production: number | null; note: string | null }[] = [
+    { office: "Brightwork Dental", monthlyLeads: 24, consultsBooked: 14, casesStarted: null, production: null, note: "Heavy implant marketing push mid-month." },
+    { office: "Coastal Smiles", monthlyLeads: 30, consultsBooked: 22, casesStarted: 6, production: 84000, note: "Two full-arch cases closed same week." },
+    { office: "Lakeside Implants", monthlyLeads: 26, consultsBooked: 18, casesStarted: 5, production: 60000, note: null },
+  ];
+  for (const oc of OUTCOMES) {
+    const office = await prisma.office.findFirst({ where: { name: oc.office } });
+    if (!office) continue;
+    await prisma.officeOutcome.upsert({
+      where: { officeId_periodLabel: { officeId: office.id, periodLabel: pk } },
+      create: { officeId: office.id, periodLabel: pk, monthlyLeads: oc.monthlyLeads, consultsBooked: oc.consultsBooked, casesStarted: oc.casesStarted, production: oc.production, note: oc.note },
+      update: { monthlyLeads: oc.monthlyLeads, consultsBooked: oc.consultsBooked, casesStarted: oc.casesStarted, production: oc.production, note: oc.note },
+    });
+  }
+
+  console.log(`\n✅ Meridian demo refreshed: ${totalSessions} sessions across ${PLAN.length} locations + ${OUTCOMES.length} reported outcomes (${pk}).`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

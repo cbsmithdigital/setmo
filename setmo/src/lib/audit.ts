@@ -11,7 +11,7 @@ export const AUDIT_CALL_MAX_SECONDS = 12 * 60; // hard cap per audit call
 // recovery model
 const SKILL_TARGET = 4.2; // what a trained setter scores
 const SHOW_RATE = 0.65; // booked consults that actually show
-const CASE_ACCEPTANCE = 0.4; // shown consults that start treatment
+export const CASE_ACCEPTANCE = 0.4; // shown consults that start treatment
 
 // Consumer/free email providers — these and duplicate domains route to manual approval.
 const FREE_EMAIL_DOMAINS = new Set([

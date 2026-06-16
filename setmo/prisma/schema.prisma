@@ -183,6 +183,7 @@ model OfficeOutcome {
   id             String   @id @default(uuid())
   officeId       String   @map("office_id")
   periodLabel    String   @map("period_label") // "2026-06"
+  monthlyLeads   Int?     @map("monthly_leads") // new high-value leads this month (grounds the projection)
   consultsBooked Int?     @map("consults_booked")
   casesStarted   Int?     @map("cases_started")
   production     Int? // whole dollars

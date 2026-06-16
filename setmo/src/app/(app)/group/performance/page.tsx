@@ -8,6 +8,8 @@ import { Icon } from "@/components/ui/Icon";
 import { ScoreOverTime } from "@/components/progress/ProgressCharts";
 import { ProgressControls } from "@/components/progress/ProgressControls";
 import { SkillMatrix } from "@/components/office/SkillMatrix";
+import { fmtMoney } from "@/components/office/OutcomesInsight";
+import { getGroupOutcomes, periodForRangeKey } from "@/lib/outcomes";
 
 const PRESETS = [
   { key: "month", label: "This month" },
@@ -43,6 +45,8 @@ export default async function GroupPerformancePage({
   const len = range.to.getTime() - range.from.getTime();
   const prior: AnalyticsRange = { from: new Date(range.from.getTime() - len), to: range.from };
   const g = await getGroupAnalytics(user.organizationId, range, prior);
+  const period = periodForRangeKey(key);
+  const outcomes = await getGroupOutcomes(user.organizationId, period.label);
 
   return (
     <>
@@ -165,6 +169,75 @@ export default async function GroupPerformancePage({
             A warm column across every location points to a group-wide playbook gap; a single warm row is a coaching target.
           </p>
           <SkillMatrix skills={g.matrix.skills} rows={g.matrix.rows} rowLabel="Location" hrefBase="/group/office" />
+        </div>
+
+        {/* outcomes & impact by location */}
+        <div className="card card-pad rise" style={{ animationDelay: ".25s", marginTop: 18 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
+            <h3 style={{ fontSize: 18 }}>Outcomes &amp; impact</h3>
+            <span className="chip" style={{ padding: "3px 10px", fontSize: 11.5 }}>{period.name}</span>
+          </div>
+          <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
+            Set rate &amp; show rate come from practice calls. Production is projected from those rates — each location&apos;s real entered numbers replace its projection.{" "}
+            {outcomes.reportedCount > 0
+              ? `${outcomes.reportedCount} of ${outcomes.locationCount} locations reported actuals.`
+              : "No locations have reported actuals yet."}
+          </p>
+
+          {outcomes.rows.length === 0 ? (
+            <p className="muted" style={{ fontSize: 13.5 }}>No scored practice calls this month yet.</p>
+          ) : (
+            <>
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 16 }}>
+                <div className="stat-tile" style={{ flex: 1, minWidth: 130 }}>
+                  <div className="lab">Group set rate</div>
+                  <div className="val" style={{ background: "var(--grad-mint)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent" }}>{outcomes.setRatePct}%</div>
+                </div>
+                <div className="stat-tile" style={{ flex: 1, minWidth: 130 }}>
+                  <div className="lab">Group show rate</div>
+                  <div className="val">{outcomes.showRatePct}%</div>
+                </div>
+                <div className="stat-tile" style={{ flex: 1, minWidth: 130 }}>
+                  <div className="lab">Treatment starts</div>
+                  <div className="val">{outcomes.totalCases}</div>
+                  <div className="sub">portfolio, this month</div>
+                </div>
+                <div className="stat-tile" style={{ flex: 1, minWidth: 130 }}>
+                  <div className="lab">Production</div>
+                  <div className="val">{fmtMoney(outcomes.totalProduction)}</div>
+                  <div className="sub">reported + projected</div>
+                </div>
+              </div>
+
+              <div style={{ overflowX: "auto", margin: "0 -4px", padding: "0 4px" }}>
+                <div style={{ minWidth: 520 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1.5fr 80px 80px 90px 1fr", gap: 8, padding: "0 4px 6px", fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--muted)" }}>
+                    <div>Location</div>
+                    <div style={{ textAlign: "center" }}>Set</div>
+                    <div style={{ textAlign: "center" }}>Show</div>
+                    <div style={{ textAlign: "center" }}>Cases</div>
+                    <div style={{ textAlign: "right" }}>Production</div>
+                  </div>
+                  {outcomes.rows.map((r, i) => (
+                    <div key={r.id} style={{ display: "grid", gridTemplateColumns: "1.5fr 80px 80px 90px 1fr", gap: 8, alignItems: "center", padding: "10px 4px", borderTop: i ? "1px solid var(--line-soft)" : "none" }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</div>
+                      <div style={{ textAlign: "center", fontFamily: "var(--font-lato)", fontWeight: 800 }}>{r.setRatePct}%</div>
+                      <div style={{ textAlign: "center", fontFamily: "var(--font-lato)", fontWeight: 800 }}>{r.showRatePct}%</div>
+                      <div style={{ textAlign: "center", fontFamily: "var(--font-lato)", fontWeight: 800 }}>{r.cases.value}</div>
+                      <div style={{ textAlign: "right", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+                        <span style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 15 }}>{fmtMoney(r.production.value)}</span>
+                        {r.anyReported ? (
+                          <span className="chip mint" style={{ padding: "1px 7px", fontSize: 10, fontWeight: 700 }}>Actual</span>
+                        ) : (
+                          <span className="chip" style={{ padding: "1px 7px", fontSize: 10, fontWeight: 700, color: "var(--muted)" }}>Projected</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </>

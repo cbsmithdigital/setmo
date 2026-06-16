@@ -5,6 +5,7 @@ import { error, json } from "@/lib/api";
 
 const Body = z.object({
   periodLabel: z.string().regex(/^\d{4}-\d{2}$/),
+  monthlyLeads: z.number().int().min(0).nullable().optional(),
   consultsBooked: z.number().int().min(0).nullable().optional(),
   casesStarted: z.number().int().min(0).nullable().optional(),
   production: z.number().int().min(0).nullable().optional(),
@@ -20,9 +21,10 @@ export async function POST(req: Request) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid request", 422);
-  const { periodLabel, consultsBooked, casesStarted, production, note } = parsed.data;
+  const { periodLabel, monthlyLeads, consultsBooked, casesStarted, production, note } = parsed.data;
 
   const data = {
+    monthlyLeads: monthlyLeads ?? null,
     consultsBooked: consultsBooked ?? null,
     casesStarted: casesStarted ?? null,
     production: production ?? null,
