@@ -441,6 +441,22 @@ model SetterMemory {
   @@map("setter_memory")
 }
 
+// Cached Setty "next move" recommendation per subject (a setter, an office, or a
+// group). Generated on demand, refreshed periodically — shown inline on the
+// dashboards and reused in the weekly digests.
+model CoachInsight {
+  id          String   @id @default(uuid())
+  scope       String // "SETTER" | "OFFICE" | "GROUP"
+  subjectId   String   @map("subject_id") // userId | officeId | organizationId
+  headline    String
+  body        String
+  model       String?
+  generatedAt DateTime @default(now()) @map("generated_at")
+
+  @@unique([scope, subjectId])
+  @@map("coach_insight")
+}
+
 model Training {
   id             String         @id @default(uuid())
   title          String

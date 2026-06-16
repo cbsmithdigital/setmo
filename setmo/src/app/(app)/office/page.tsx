@@ -9,6 +9,8 @@ import { InviteButton } from "@/components/office/InviteButton";
 import { OutcomesCard } from "@/components/office/OutcomesCard";
 import { OutcomesInsight } from "@/components/office/OutcomesInsight";
 import { getOfficeOutcomeFunnel } from "@/lib/outcomes";
+import { getInsight } from "@/lib/insights";
+import { SettyInsight } from "@/components/coach/SettyInsight";
 import { relativeShort } from "@/lib/format";
 
 function trendColor(status: string) {
@@ -19,9 +21,10 @@ export default async function OfficeOverviewPage() {
   const user = await requireRole("OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN");
   const o = await getOfficeOverview(user.officeId!);
   const period = currentPeriod();
-  const [outcome, funnel] = await Promise.all([
+  const [outcome, funnel, insight] = await Promise.all([
     getOutcome(user.officeId!, period.label),
     getOfficeOutcomeFunnel(user.officeId!, period.label),
+    getInsight("OFFICE", user.officeId!),
   ]);
   const seatsFree = Math.max(0, o.seats - o.activeSetters);
   const poolPct = o.allowance.poolTotal > 0 ? Math.round((o.allowance.poolUsed / o.allowance.poolTotal) * 100) : 0;
@@ -45,6 +48,8 @@ export default async function OfficeOverviewPage() {
       </div>
 
       <div className="content">
+        <SettyInsight scope="OFFICE" subjectId={user.officeId!} insight={insight} />
+
         <div className="grid g-4 rise" style={{ marginBottom: 18 }}>
           <StatTile lab="Team average" val={o.teamAvg.toFixed(1)} grad="var(--grad-mint)" sub="across active setters" />
           <StatTile lab="Active setters" val={String(o.activeSetters)} sub={`of ${o.seats} seats`} />

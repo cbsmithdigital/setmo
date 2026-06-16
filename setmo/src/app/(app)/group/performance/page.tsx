@@ -10,6 +10,8 @@ import { ProgressControls } from "@/components/progress/ProgressControls";
 import { SkillMatrix } from "@/components/office/SkillMatrix";
 import { fmtMoney } from "@/components/office/OutcomesInsight";
 import { getGroupOutcomes, periodForRangeKey } from "@/lib/outcomes";
+import { getInsight } from "@/lib/insights";
+import { SettyInsight } from "@/components/coach/SettyInsight";
 
 const PRESETS = [
   { key: "month", label: "This month" },
@@ -46,7 +48,10 @@ export default async function GroupPerformancePage({
   const prior: AnalyticsRange = { from: new Date(range.from.getTime() - len), to: range.from };
   const g = await getGroupAnalytics(user.organizationId, range, prior);
   const period = periodForRangeKey(key);
-  const outcomes = await getGroupOutcomes(user.organizationId, period.label);
+  const [outcomes, insight] = await Promise.all([
+    getGroupOutcomes(user.organizationId, period.label),
+    getInsight("GROUP", user.organizationId),
+  ]);
 
   return (
     <>
@@ -64,6 +69,8 @@ export default async function GroupPerformancePage({
       </div>
 
       <div className="content">
+        <SettyInsight scope="GROUP" subjectId={user.organizationId} insight={insight} />
+
         <div className="grid g-4 rise" style={{ marginBottom: 18 }}>
           <div className="stat-tile">
             <div className="lab">Group average</div>
