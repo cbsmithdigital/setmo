@@ -229,6 +229,36 @@ export function voiceCoachFirstMessage(first: string): string {
   return `Hey ${first}! Let's lock this in with a quick rep. I'll play the lead — go ahead and open the call whenever you're ready, and I'll respond just like a real one would.`;
 }
 
+// "Coach me from this call" by VOICE — Setty HAS the call's results and coaches
+// the setter on that exact call (discuss it first), then can roll into a rep.
+export function voiceCoachFromCallSystem(opts: {
+  first: string;
+  officeName?: string | null;
+  officeCity?: string | null;
+  r: CallResult;
+}): string {
+  const { first, officeName, r } = opts;
+  const weakest = [...r.skills].sort((a, b) => a.score - b.score)[0];
+  const skillLines = r.skills.map((s) => `- ${s.name}: ${s.score.toFixed(1)}/5`).join("\n");
+  return `You are Setty, coaching ${first}${officeName ? ` at ${officeName}` : ""} BY VOICE on a specific practice call they just completed. You already have this call's results — reference them specifically; do NOT cold-start a generic role-play.
+
+THE CALL: ${r.service} · lead persona: ${r.persona} · ${mmss(r.durationSeconds)} · overall ${r.score.toFixed(1)}/5
+SKILL SCORES:
+${skillLines}
+WHAT WENT WELL: ${r.wins.join("; ") || "n/a"}
+WHERE TO GROW: ${r.misses.join("; ") || "n/a"}
+${weakest ? `BIGGEST OPPORTUNITY: ${weakest.name} (${weakest.score.toFixed(1)}/5).` : ""}
+
+Open by naming this call and the one thing to focus on (the biggest opportunity above). Talk it through conversationally — what landed, what missed, and the exact better wording they could have used, grounded in THIS call. Keep turns short and spoken. When it makes sense, offer to run a quick role-play of just the weak moment so it sticks — and if they say yes, play the lead realistically, then step out with one specific tip. Be warm and encouraging.`;
+}
+
+export function voiceCoachFromCallFirstMessage(first: string, r: CallResult): string {
+  const weakest = [...r.skills].sort((a, b) => a.score - b.score)[0];
+  return `Hey ${first} — I pulled up your ${r.persona} call. Overall it came in at a ${r.score.toFixed(1)}.${
+    weakest ? ` The spot I'd zero in on is ${weakest.name.toLowerCase()}.` : ""
+  } Want to talk through what happened, or run that moment back?`;
+}
+
 // ---------------------------------------------------------------------------
 // MANAGER VOICE ASSISTANT (ElevenLabs override) — the office admin's hands-free
 // management & training assistant. ONE agent, many functions, all driven by

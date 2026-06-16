@@ -8,6 +8,8 @@ import { coachAgentId, managerCoachAgentId, getSignedUrl, isElevenLabsConfigured
 import {
   voiceCoachSystem,
   voiceCoachFirstMessage,
+  voiceCoachFromCallSystem,
+  voiceCoachFromCallFirstMessage,
   managerVoiceSystem,
   managerVoiceFirstMessage,
 } from "@/lib/coach-prompts";
@@ -40,19 +42,17 @@ export async function POST(req: Request) {
   const callSessionId = parsed.success ? parsed.data.sessionId : undefined;
   const rawFocus = parsed.success ? parsed.data.focus : undefined;
 
-  // Resolve focus + persona from the call being coached (if any).
   const office = user.office;
   let persona: string | null = null;
   let focus = (rawFocus && rawFocus.trim()) || "";
 
-  if (callSessionId) {
-    const r = await getSessionResult(callSessionId, user);
-    if (r) {
-      persona = r.persona;
-      if (!focus) {
-        const weakest = [...r.skills].sort((a, b) => a.score - b.score)[0];
-        if (weakest) focus = `getting more comfortable with ${weakest.name.toLowerCase()}`;
-      }
+  // "Coach me from this call" → load the call so voice Setty can discuss it.
+  const call = callSessionId ? await getSessionResult(callSessionId, user) : null;
+  if (call) {
+    persona = call.persona;
+    if (!focus) {
+      const weakest = [...call.skills].sort((a, b) => a.score - b.score)[0];
+      if (weakest) focus = `getting more comfortable with ${weakest.name.toLowerCase()}`;
     }
   }
   if (!focus) focus = "high-ticket appointment-setting fundamentals";
@@ -63,15 +63,18 @@ export async function POST(req: Request) {
     return error("Your practice pool is used up. Buy a bundle or wait for the reset.", 402);
   }
 
-  const systemPrompt = voiceCoachSystem({
-    first,
-    officeName: office?.name,
-    officeCity: office?.city,
-    offerFraming: office?.offerFraming,
-    persona,
-    focus,
-  });
-  const firstMessage = voiceCoachFirstMessage(first);
+  // Call-grounded coaching when launched from a specific call; otherwise a fresh rep.
+  const systemPrompt = call
+    ? voiceCoachFromCallSystem({ first, officeName: office?.name, officeCity: office?.city, r: call })
+    : voiceCoachSystem({
+        first,
+        officeName: office?.name,
+        officeCity: office?.city,
+        offerFraming: office?.offerFraming,
+        persona,
+        focus,
+      });
+  const firstMessage = call ? voiceCoachFromCallFirstMessage(first, call) : voiceCoachFirstMessage(first);
 
   if (!isElevenLabsConfigured() || !coachAgentId()) {
     return json({ configured: false, systemPrompt, firstMessage, focus });
