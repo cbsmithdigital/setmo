@@ -26,6 +26,44 @@ export default async function CoachPage({
 
   const activeRole = getActiveRole(user);
 
+  // "Coach me from this call" — a specific call is being coached. This takes
+  // priority over the role-based coach (it's grounded in that exact call, for
+  // whoever can view it), so the transcript + scores load into Setty.
+  if (session) {
+    const r = await getSessionResult(session, user);
+    if (r) {
+      const lowest = [...r.skills].sort((a, b) => a.score - b.score)[0];
+      const welcome = `Let's break down ${r.isOwner ? "your" : `${r.setterName}'s`} ${r.persona} call (scored ${r.score.toFixed(1)}/5). Where do you want to start${
+        lowest ? ` — ${lowest.name.toLowerCase()}?` : "?"
+      }`;
+      return (
+        <>
+          <div className="topbar">
+            <div className="tb-greet">
+              <h1>Coach Setty</h1>
+              <p>Coaching on {r.isOwner ? "your" : `${r.setterName}'s`} {r.persona} call · {r.service}</p>
+            </div>
+            <div className="tb-right">
+              <span className="chip purple">Setty</span>
+            </div>
+          </div>
+          <CoachWorkspace
+            sessionId={session}
+            intro={`Let's work on ${r.isOwner ? "your" : `${r.setterName}'s`} ${r.persona} call (scored ${r.score.toFixed(1)}/5).`}
+            welcome={welcome}
+            starters={[
+              "What was the biggest miss on this call?",
+              lowest ? `How do I improve ${lowest.name.toLowerCase()}?` : "Where did momentum slip?",
+              "Rewrite the weakest moment with better wording.",
+              "Give me a stronger close that could have been used.",
+            ]}
+          />
+        </>
+      );
+    }
+    // call not viewable/scored yet — fall through to the role-based coach
+  }
+
   // Group / DSO leader → Portfolio strategist (chat, multi-office grounded).
   if (activeRole === "GROUP_ADMIN" && user.organizationId) {
     const g = await getGroupOverview(user.organizationId);
@@ -117,41 +155,20 @@ export default async function CoachPage({
     );
   }
 
-  let welcome = `Hey ${first} 👋 I'm Setty, your coach. Ask me anything about your calls — or open a session and hit "Coach me from this call" for feedback tied to that exact conversation.`;
-  let starters = GENERAL_STARTERS;
-  let subhead = "Setty — sharpen the skills your calls show you need.";
-  let intro = `Hey ${first} — let's sharpen your next call.`;
-
-  if (session) {
-    const r = await getSessionResult(session, user);
-    if (r) {
-      const lowest = [...r.skills].sort((a, b) => a.score - b.score)[0];
-      welcome = `Let's break down your ${r.persona} call (scored ${r.score.toFixed(1)}/5). Where do you want to start${
-        lowest ? ` — your ${lowest.name.toLowerCase()}?` : "?"
-      }`;
-      starters = [
-        "What was my biggest miss on this call?",
-        lowest ? `How do I improve my ${lowest.name.toLowerCase()}?` : "Where did I lose momentum?",
-        "Rewrite my weakest moment with better wording.",
-        "Give me a stronger close I could have used.",
-      ];
-      subhead = `Coaching on your ${r.persona} call · ${r.service}`;
-      intro = `Let's work on your ${r.persona} call (scored ${r.score.toFixed(1)}/5).`;
-    }
-  }
+  const welcome = `Hey ${first} 👋 I'm Setty, your coach. Ask me anything about your calls — or open a call and hit "Coach me from this call" for feedback tied to that exact conversation.`;
 
   return (
     <>
       <div className="topbar">
         <div className="tb-greet">
-          <h1>Setty</h1>
-          <p>{subhead}</p>
+          <h1>Coach Setty</h1>
+          <p>Setty — sharpen the skills your calls show you need.</p>
         </div>
         <div className="tb-right">
-          <span className="chip purple">AI Coach</span>
+          <span className="chip purple">Setty</span>
         </div>
       </div>
-      <CoachWorkspace sessionId={session} intro={intro} welcome={welcome} starters={starters} />
+      <CoachWorkspace intro={`Hey ${first} — let's sharpen your next call.`} welcome={welcome} starters={GENERAL_STARTERS} />
     </>
   );
 }

@@ -48,13 +48,28 @@ export async function POST(req: Request) {
 
   const activeRole = getActiveRole(user);
   try {
+    // "Coach me from this call" — ground in the specific call for whoever can
+    // view it, regardless of active role (this is call coaching, not team/group).
+    if (sessionId) {
+      const r = await getSessionResult(sessionId, user);
+      if (r) {
+        const client = new Anthropic();
+        const res = await client.messages.create({
+          model: MODEL,
+          max_tokens: 1024,
+          system: coachChatSystem(coachGroundingFromCall(first, r)),
+          messages: apiMessages,
+        });
+        return json({ reply: textOf(res), actions: [] });
+      }
+    }
     if (activeRole === "GROUP_ADMIN" && user.organizationId) {
       return await groupChat(first, user.organizationId, apiMessages);
     }
     if (isManagerRole(activeRole) && user.officeId) {
       return await managerChat(first, user.officeId, apiMessages);
     }
-    return await setterChat(first, user.id, sessionId, apiMessages);
+    return await setterChat(first, user.id, undefined, apiMessages);
   } catch (e) {
     return error(e instanceof Error ? e.message : "Coach failed", 502);
   }
