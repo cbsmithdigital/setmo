@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getAllowance, getSetterAnalytics, type AnalyticsRange } from "@/lib/queries";
-import { skillName, skillTier, rubricFor } from "@/lib/skills";
+import { skillName, skillTier, skillShort, rubricFor } from "@/lib/skills";
 import { fullName, initialsOf } from "@/lib/format";
 
 // The default analytics window for office views — this calendar month, matching
@@ -62,17 +62,17 @@ export type TeamRow = {
   status: SetterStatus;
 };
 
-// Per-setter aggregates for the whole office (this month), computed in one pass.
-export async function getOfficeTeam(officeId: string): Promise<TeamRow[]> {
-  const month = thisMonthRange();
+// Per-setter aggregates for the whole office over a window (default: this month),
+// computed in one pass.
+export async function getOfficeTeam(officeId: string, range: AnalyticsRange = thisMonthRange()): Promise<TeamRow[]> {
   const [setters, sessions, recs] = await Promise.all([
     prisma.user.findMany({
       where: { officeId, role: "SETTER" },
       select: { id: true, firstName: true, lastName: true },
     }),
     prisma.session.findMany({
-      // this month, excluding sub-minute hang-ups/interruptions
-      where: { officeId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: month.from } },
+      // windowed, excluding sub-minute hang-ups/interruptions
+      where: { officeId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to } },
       orderBy: { startedAt: "asc" },
       include: { evaluation: { select: { overallScore: true } } },
     }),
@@ -120,13 +120,13 @@ export async function getOfficeTeam(officeId: string): Promise<TeamRow[]> {
   return rows.sort((a, b) => b.avg - a.avg);
 }
 
-export async function getOfficeOverview(officeId: string) {
+export async function getOfficeOverview(officeId: string, range: AnalyticsRange = thisMonthRange()) {
   const [team, allowance, office, subscription, skills] = await Promise.all([
-    getOfficeTeam(officeId),
+    getOfficeTeam(officeId, range),
     getAllowance(officeId),
     prisma.office.findUnique({ where: { id: officeId } }),
     prisma.subscription.findUnique({ where: { officeId } }),
-    getOfficeSkillHeatmap(officeId),
+    getOfficeSkillHeatmap(officeId, range),
   ]);
 
   const withSessions = team.filter((t) => t.sessions > 0);
@@ -164,6 +164,50 @@ export async function getOfficeOverview(officeId: string) {
 // one) — the office's systemic strengths/gaps.
 export async function getOfficeSkillHeatmap(officeId: string, range: AnalyticsRange = thisMonthRange()) {
   return skillAveragesOverSessions([officeId], range);
+}
+
+// Setter × skill heatmap matrix for the office over a window — same shape the
+// SkillMatrix component renders for the group (one level down).
+export async function getOfficeSkillMatrix(officeId: string, range: AnalyticsRange = thisMonthRange()) {
+  const [setters, sessions] = await Promise.all([
+    prisma.user.findMany({ where: { officeId, role: "SETTER" }, select: { id: true, firstName: true, lastName: true } }),
+    prisma.session.findMany({
+      where: { officeId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null } },
+      include: { evaluation: { include: { skills: true } } },
+    }),
+  ]);
+  const order = rubricFor("IMPLANT").map((s) => s.key);
+  const r1 = (n: number) => Number(n.toFixed(1));
+
+  // per-setter accumulators
+  const acc = new Map<string, { overalls: number[]; sums: Map<string, { t: number; n: number }> }>();
+  for (const s of sessions) {
+    if (s.evaluation!.skills.length === 0 || s.evaluation!.overallScore == null) continue;
+    const a = acc.get(s.setterId) ?? { overalls: [] as number[], sums: new Map<string, { t: number; n: number }>() };
+    a.overalls.push(Number(s.evaluation!.overallScore));
+    for (const k of s.evaluation!.skills) {
+      const c = a.sums.get(k.skillKey) ?? { t: 0, n: 0 };
+      c.t += Number(k.score);
+      c.n++;
+      a.sums.set(k.skillKey, c);
+    }
+    acc.set(s.setterId, a);
+  }
+
+  const nameById = new Map(setters.map((u) => [u.id, fullName(u.firstName, u.lastName)]));
+  const rows = [...acc.entries()]
+    .map(([id, a]) => ({
+      id,
+      name: nameById.get(id) ?? "Setter",
+      avg: r1(a.overalls.reduce((x, y) => x + y, 0) / a.overalls.length),
+      cells: order.map((k) => {
+        const c = a.sums.get(k);
+        return { key: k, score: c ? r1(c.t / c.n) : null };
+      }),
+    }))
+    .sort((a, b) => b.avg - a.avg);
+
+  return { skills: order.map((k) => ({ key: k, short: skillShort(k) })), rows };
 }
 
 // Everything the Office Admin coach needs to be grounded + to take actions.
