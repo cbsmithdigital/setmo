@@ -568,7 +568,9 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer) 
     where: { id: sessionId },
     include: { evaluation: { include: { skills: true } }, setter: true },
   });
-  if (!session || !session.evaluation) return null;
+  // The transcript is captured (evaluation row created) before scoring finishes;
+  // only treat the call as ready once it's actually been scored.
+  if (!session || !session.evaluation || !session.evaluation.scoredAt) return null;
 
   // The setter owns their call; office/group/platform admins may view any call
   // in their office (read-only — setter-only actions are hidden in the UI).

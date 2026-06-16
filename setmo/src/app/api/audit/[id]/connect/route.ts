@@ -61,6 +61,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       systemPrompt,
       firstMessage,
       voiceId: persona.voice.id,
+      personaName: persona.name,
     });
   } catch (e) {
     return error(e instanceof Error ? e.message : "Couldn't start the call", 502);

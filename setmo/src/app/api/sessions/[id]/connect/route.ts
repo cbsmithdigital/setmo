@@ -77,6 +77,7 @@ export async function POST(
       systemPrompt,
       firstMessage,
       voiceId: persona.voice.id,
+      personaName: persona.name,
     });
   } catch (e) {
     return error(e instanceof Error ? e.message : "Failed to start conversation", 502);

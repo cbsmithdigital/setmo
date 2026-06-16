@@ -112,8 +112,9 @@ export async function generatePersona(): Promise<Persona> {
     });
     const o = res.parsed_output;
     if (!o) return { ...fallback, voice: pickVoice(gender) };
-    // keep the LLM's chosen gender consistent with the voice
-    return { ...o, gender, voice: pickVoice(gender) };
+    // Pick the voice from the persona's OWN gender (matches the name), not the
+    // pre-picked hint — the LLM occasionally composes the other gender.
+    return { ...o, voice: pickVoice(o.gender) };
   } catch {
     return { ...fallback, voice: pickVoice(gender) };
   }

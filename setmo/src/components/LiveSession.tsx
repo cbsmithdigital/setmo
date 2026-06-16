@@ -50,6 +50,7 @@ function SessionInner({
   const [muted, setMuted] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [wrapNote, setWrapNote] = useState("Grading 8 skills and writing your feedback.");
+  const [personaName, setPersonaName] = useState<string | null>(null);
 
   const conversation = useConversation({
     micMuted: muted,
@@ -88,7 +89,7 @@ function SessionInner({
       } catch {
         /* keep polling */
       }
-      if (tries > 30) {
+      if (tries > 72) {
         clearInterval(poll);
         setWrapNote("Still scoring — your result will appear on your dashboard shortly.");
       }
@@ -113,6 +114,7 @@ function SessionInner({
         setPhase("error");
         return;
       }
+      setPersonaName(cfg.personaName ?? null);
       conversation.startSession({
         signedUrl: cfg.signedUrl,
         connectionType: "websocket",
@@ -296,7 +298,7 @@ function SessionInner({
           }}
         />
         <div className="muted" style={{ fontSize: 14, position: "relative" }}>
-          {serviceLabel} lead · undisclosed persona
+          {status === "connected" ? "On the call with" : "Calling"} {personaName ?? "a new lead"}
         </div>
         <div
           style={{

@@ -7,9 +7,10 @@ import { uploadRecording } from "@/lib/storage";
 import { parsePostCall, extractTranscript } from "@/lib/elevenlabs";
 import { scoreTranscript, isScorerConfigured } from "@/lib/scorer";
 
-// Below this, a call is treated as too short to score (accidental hang-ups).
+// Below this, a call is treated as too short to score (hang-ups / interruptions).
+// Under a minute is excluded from scoring + averages.
 const MIN_SETTER_TURNS = 2;
-const MIN_DURATION_SECS = 30;
+const MIN_DURATION_SECS = 60;
 
 /**
  * CAPTURE (fast, runs inline in the webhook). Resolves the session and persists

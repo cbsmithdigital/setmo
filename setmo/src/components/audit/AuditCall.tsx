@@ -22,6 +22,7 @@ function Inner({ auditId, callNumber, totalCalls, maxSeconds, onDone }: { auditI
   const [phase, setPhase] = useState<Phase>("connecting");
   const [secs, setSecs] = useState(0);
   const [err, setErr] = useState<string | null>(null);
+  const [personaName, setPersonaName] = useState<string | null>(null);
   const started = useRef(false);
 
   const conversation = useConversation({
@@ -43,6 +44,7 @@ function Inner({ auditId, callNumber, totalCalls, maxSeconds, onDone }: { auditI
         const cfg = await res.json();
         if (!res.ok) { setErr(cfg.error ?? "Couldn't start the call."); setPhase("error"); return; }
         if (!cfg.configured) { setErr("Voice calls aren't configured yet."); setPhase("error"); return; }
+        setPersonaName(cfg.personaName ?? null);
         conversation.startSession({
           signedUrl: cfg.signedUrl,
           connectionType: "websocket",
@@ -104,7 +106,7 @@ function Inner({ auditId, callNumber, totalCalls, maxSeconds, onDone }: { auditI
           </div>
         ) : (
           <>
-            <div style={{ color: "#94a3b8", fontSize: 13, marginBottom: 2 }}>Implant / full-arch lead · undisclosed persona</div>
+            <div style={{ color: "#94a3b8", fontSize: 13, marginBottom: 2 }}>{phase === "connecting" ? "Calling" : "On the call with"} {personaName ?? "a new lead"}</div>
             <div style={{ textAlign: "center", margin: "10px 0" }}>
               <div style={{ color: "#94a3b8", fontSize: 13 }}>{phase === "connecting" ? "Connecting…" : speaking ? "Lead is speaking…" : "Listening — take the call"}</div>
               <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 42, fontVariantNumeric: "tabular-nums", margin: "6px 0" }}>{mmss(secs)}</div>
