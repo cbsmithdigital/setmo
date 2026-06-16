@@ -47,6 +47,23 @@ export async function sendInviteEmail(opts: {
 
 const ADMIN_EMAIL = process.env.SETMO_ADMIN_EMAIL || process.env.RESEND_FROM_EMAIL;
 
+/** Generic transactional send (weekly digests). Returns recipients actually sent to. */
+export async function sendDigestEmail(opts: { to: string[]; subject: string; html: string }): Promise<number> {
+  const resend = getResend();
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!resend || !from || opts.to.length === 0) return 0;
+  let sent = 0;
+  for (const to of opts.to) {
+    try {
+      await resend.emails.send({ from, to, subject: opts.subject, html: opts.html });
+      sent++;
+    } catch {
+      /* skip a bad address, keep going */
+    }
+  }
+  return sent;
+}
+
 /** Verify-your-email link to unlock the Setter Audit report. */
 export async function sendAuditVerifyEmail(opts: { to: string; link: string; practiceName: string }): Promise<boolean> {
   const resend = getResend();
