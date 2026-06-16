@@ -69,6 +69,36 @@ function evalSkills(skills: { skillKey: string; score: unknown }[]): SkillRow[] 
 export type AnalyticsRange = { from: Date; to: Date };
 const ANALYTICS_MIN_DURATION = 60;
 
+const RANGE_LABEL: Record<string, string> = {
+  "30d": "Last 30 days",
+  month: "This month",
+  "3m": "Last 3 months",
+  "6m": "Last 6 months",
+  all: "All time",
+  custom: "Custom range",
+};
+
+// Resolve a timeframe from URL search params (shared by the setter Progress page
+// and the office team-member page). Default = last 30 days.
+export function resolveAnalyticsRange(sp: { range?: string; from?: string; to?: string }): {
+  key: string;
+  range: AnalyticsRange;
+  label: string;
+} {
+  const now = new Date();
+  const key = sp.range ?? "30d";
+  if (key === "month") return { key, range: { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now }, label: RANGE_LABEL.month };
+  if (key === "all") return { key, range: { from: new Date(2000, 0, 1), to: now }, label: RANGE_LABEL.all };
+  if (key === "custom" && sp.from) {
+    const from = new Date(sp.from);
+    const to = sp.to ? new Date(sp.to + "T23:59:59") : now;
+    return { key, range: { from, to }, label: RANGE_LABEL.custom };
+  }
+  const days = key === "3m" ? 90 : key === "6m" ? 180 : 30;
+  const norm = key === "3m" || key === "6m" ? key : "30d";
+  return { key: norm, range: { from: new Date(now.getTime() - days * 86400_000), to: now }, label: RANGE_LABEL[norm] };
+}
+
 type SessionWithEval = {
   startedAt: Date;
   durationSeconds: number | null;
@@ -86,7 +116,14 @@ function isRealScored(s: SessionWithEval): boolean {
 }
 const shortDate = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-export async function getSetterAnalytics(setterId: string, current: AnalyticsRange, prior: AnalyticsRange | null) {
+const SKILL_PALETTE = ["#a78bfa", "#fbbf24", "#fb7185", "#60a5fa", "#f472b6", "#22d3ee", "#f59e0b", "#c084fc"];
+
+export async function getSetterAnalytics(
+  setterId: string,
+  current: AnalyticsRange,
+  prior: AnalyticsRange | null,
+  opts: { allSkills?: boolean } = {}
+) {
   const earliest = prior && prior.from < current.from ? prior.from : current.from;
   const sessions = await prisma.session.findMany({
     where: { setterId, status: "SCORED", startedAt: { gte: earliest, lte: current.to } },
@@ -141,14 +178,19 @@ export async function getSetterAnalytics(setterId: string, current: AnalyticsRan
     if (!mostImproved || s.delta > mostImproved.delta) mostImproved = { name: s.name, delta: s.delta };
   }
 
-  // chart series: overall + current top + the two lowest
-  const byScore = [...perSkill].sort((a, b) => a.score - b.score);
-  const lowest = byScore.slice(0, 2);
-  const top = byScore[byScore.length - 1];
+  // chart series. Default = overall + top + the two lowest (focused). allSkills =
+  // overall + every rubric skill (the office team-member view).
   const series: { key: string; name: string; color: string }[] = [{ key: "overall", name: "Overall", color: "#34d399" }];
-  if (top && !lowest.some((l) => l.key === top.key)) series.push({ key: top.key, name: top.name, color: "#a78bfa" });
-  const focusColors = ["#fbbf24", "#fb7185"];
-  lowest.forEach((l, i) => series.push({ key: l.key, name: l.name, color: focusColors[i] ?? "#94a3b8" }));
+  if (opts.allSkills) {
+    perSkill.forEach((s, i) => series.push({ key: s.key, name: s.name, color: SKILL_PALETTE[i % SKILL_PALETTE.length] }));
+  } else {
+    const byScore = [...perSkill].sort((a, b) => a.score - b.score);
+    const lowest = byScore.slice(0, 2);
+    const top = byScore[byScore.length - 1];
+    if (top && !lowest.some((l) => l.key === top.key)) series.push({ key: top.key, name: top.name, color: "#a78bfa" });
+    const focusColors = ["#fbbf24", "#fb7185"];
+    lowest.forEach((l, i) => series.push({ key: l.key, name: l.name, color: focusColors[i] ?? "#94a3b8" }));
+  }
 
   const points = cur.map((s, i) => {
     const p: Record<string, number | string | null> = {

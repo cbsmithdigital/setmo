@@ -1,37 +1,9 @@
 import { requireUser } from "@/lib/auth";
-import { getSetterProgress, type AnalyticsRange } from "@/lib/queries";
+import { getSetterProgress, resolveAnalyticsRange } from "@/lib/queries";
 import { StatTile } from "@/components/ui/StatTile";
 import { Sparkline, Delta } from "@/components/ui/widgets";
 import { ScoreOverTime, UniversalRadar } from "@/components/progress/ProgressCharts";
 import { ProgressControls } from "@/components/progress/ProgressControls";
-
-const PRESET_LABEL: Record<string, string> = {
-  "30d": "Last 30 days",
-  month: "This month",
-  "3m": "Last 3 months",
-  "6m": "Last 6 months",
-  all: "All time",
-  custom: "Custom range",
-};
-
-function resolveRange(sp: { range?: string; from?: string; to?: string }): { key: string; range: AnalyticsRange; label: string } {
-  const now = new Date();
-  const key = sp.range ?? "30d";
-  if (key === "month") {
-    return { key, range: { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now }, label: PRESET_LABEL.month };
-  }
-  if (key === "all") {
-    return { key, range: { from: new Date(2000, 0, 1), to: now }, label: PRESET_LABEL.all };
-  }
-  if (key === "custom" && sp.from) {
-    const from = new Date(sp.from);
-    const to = sp.to ? new Date(sp.to + "T23:59:59") : now;
-    return { key, range: { from, to }, label: PRESET_LABEL.custom };
-  }
-  const days = key === "3m" ? 90 : key === "6m" ? 180 : 30;
-  const norm = key === "3m" || key === "6m" ? key : "30d";
-  return { key: norm, range: { from: new Date(now.getTime() - days * 86400_000), to: now }, label: PRESET_LABEL[norm] };
-}
 
 export default async function ProgressPage({
   searchParams,
@@ -40,7 +12,7 @@ export default async function ProgressPage({
 }) {
   const user = await requireUser();
   const sp = await searchParams;
-  const { key, range, label } = resolveRange(sp);
+  const { key, range, label } = resolveAnalyticsRange(sp);
   const d = await getSetterProgress(user.id, user.officeId!, range);
   const { stats } = d;
 

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getAllowance } from "@/lib/queries";
+import { getAllowance, getSetterAnalytics, type AnalyticsRange } from "@/lib/queries";
 import { skillName, skillTier, rubricFor } from "@/lib/skills";
 import { fullName, initialsOf } from "@/lib/format";
 
@@ -36,7 +36,8 @@ export async function getOfficeTeam(officeId: string): Promise<TeamRow[]> {
       select: { id: true, firstName: true, lastName: true },
     }),
     prisma.session.findMany({
-      where: { officeId, status: "SCORED" },
+      // exclude sub-minute hang-ups/interruptions from team aggregates
+      where: { officeId, status: "SCORED", durationSeconds: { gte: 60 } },
       orderBy: { startedAt: "asc" },
       include: { evaluation: { select: { overallScore: true } } },
     }),
@@ -99,7 +100,7 @@ export async function getOfficeOverview(officeId: string) {
 
   const weekAgo = new Date(Date.now() - 7 * 86400_000);
   const sessionsThisWeek = await prisma.session.count({
-    where: { officeId, status: "SCORED", startedAt: { gte: weekAgo } },
+    where: { officeId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: weekAgo } },
   });
 
   return {
@@ -119,7 +120,7 @@ export async function getOfficeOverview(officeId: string) {
 // the office's systemic strengths/gaps (vs. one person's gap).
 export async function getOfficeSkillHeatmap(officeId: string) {
   const sessions = await prisma.session.findMany({
-    where: { officeId, status: "SCORED", evaluation: { isNot: null } },
+    where: { officeId, status: "SCORED", durationSeconds: { gte: 60 }, evaluation: { isNot: null } },
     orderBy: { startedAt: "desc" },
     include: { evaluation: { include: { skills: true } } },
   });
@@ -173,19 +174,22 @@ export async function getOutcome(officeId: string, periodLabel: string) {
   return prisma.officeOutcome.findUnique({ where: { officeId_periodLabel: { officeId, periodLabel } } });
 }
 
-export async function getOfficeSetterDetail(officeId: string, setterId: string) {
+export async function getOfficeSetterDetail(officeId: string, setterId: string, range?: AnalyticsRange) {
   const setter = await prisma.user.findFirst({
     where: { id: setterId, officeId, role: "SETTER" },
     select: { id: true, firstName: true, lastName: true },
   });
   if (!setter) return null;
 
-  const [sessions, rec] = await Promise.all([
-    prisma.session.findMany({
-      where: { setterId, status: "SCORED" },
-      orderBy: { startedAt: "asc" },
-      include: { evaluation: { include: { skills: true } } },
-    }),
+  // Same period analytics the setter sees — windowed, vs the previous period,
+  // <1-min calls excluded, and the chart carries all 8 skills + overall.
+  const now = new Date();
+  const current: AnalyticsRange = range ?? { from: new Date(now.getTime() - 30 * 86400_000), to: now };
+  const len = current.to.getTime() - current.from.getTime();
+  const prior: AnalyticsRange = { from: new Date(current.from.getTime() - len), to: current.from };
+
+  const [a, rec] = await Promise.all([
+    getSetterAnalytics(setterId, current, prior, { allSkills: true }),
     prisma.recommendation.findFirst({
       where: { setterId, status: "ACTIVE" },
       orderBy: { createdAt: "desc" },
@@ -193,45 +197,19 @@ export async function getOfficeSetterDetail(officeId: string, setterId: string) 
     }),
   ]);
 
-  const scored = sessions.filter((s) => s.evaluation);
-  const overalls = scored.map((s) => Number(s.evaluation!.overallScore ?? 0));
-  const count = scored.length;
-  const avg = count ? overalls.reduce((a, b) => a + b, 0) / count : 0;
-  const delta = count > 1 ? overalls[count - 1] - overalls[count - 2] : 0;
-  const usageHours = scored.reduce((a, s) => a + (s.durationSeconds ?? 0), 0) / 3600;
-
-  const points = scored.map((s, i) => ({
-    label: i === count - 1 ? "Now" : `S${i + 1}`,
-    overall: Number(s.evaluation!.overallScore ?? 0),
-    objection: Number(s.evaluation!.skills.find((k) => k.skillKey === "objection")?.score ?? 0),
-  }));
-
-  const latest = scored.length ? scored[scored.length - 1].evaluation!.skills : [];
-  const order = rubricFor("IMPLANT").map((s) => s.key);
-  const snapshot = latest
-    .map((sk) => ({
-      key: sk.skillKey,
-      name: skillName(sk.skillKey),
-      tier: skillTier(sk.skillKey),
-      score: Number(sk.score),
-    }))
-    .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
-
-  const focus = snapshot.reduce<(typeof snapshot)[number] | null>(
-    (m, s) => (!m || s.score < m.score ? s : m),
-    null
-  );
-
   return {
     id: setter.id,
     name: fullName(setter.firstName, setter.lastName),
-    avg,
-    delta: Number(delta.toFixed(1)),
-    usageHours,
-    sessions: count,
-    focus,
-    points,
-    snapshot,
+    avg: a.overallAvg,
+    delta: a.overallDelta,
+    hasPrior: a.hasPrior,
+    usageHours: a.hours,
+    sessions: a.reps,
+    focus: a.focus,
+    mostImproved: a.mostImproved,
+    points: a.points,
+    series: a.series,
+    snapshot: a.perSkill,
     recommendation: rec ? { skill: skillName(rec.skillKey), reason: rec.reason, training: rec.training.title } : null,
   };
 }

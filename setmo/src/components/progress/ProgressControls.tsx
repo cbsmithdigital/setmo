@@ -14,7 +14,17 @@ const PRESETS: { key: string; label: string }[] = [
 // Timeframe selector. Changing it updates the URL (?range=…), which re-renders
 // the page's server data for that window. Progress is always compared to the
 // immediately-preceding equal window.
-export function ProgressControls({ active, from, to }: { active: string; from?: string; to?: string }) {
+export function ProgressControls({
+  active,
+  from,
+  to,
+  basePath = "/progress",
+}: {
+  active: string;
+  from?: string;
+  to?: string;
+  basePath?: string;
+}) {
   const router = useRouter();
   const [cFrom, setCFrom] = useState(from ?? "");
   const [cTo, setCTo] = useState(to ?? "");
@@ -25,7 +35,7 @@ export function ProgressControls({ active, from, to }: { active: string; from?: 
         {PRESETS.map((p) => (
           <button
             key={p.key}
-            onClick={() => router.push(`/progress?range=${p.key}`)}
+            onClick={() => router.push(`${basePath}?range=${p.key}`)}
             className={"btn " + (active === p.key ? "btn-primary" : "")}
             style={{ padding: "6px 13px", fontSize: 13, color: active === p.key ? "#fff" : "var(--muted)" }}
           >
@@ -40,7 +50,7 @@ export function ProgressControls({ active, from, to }: { active: string; from?: 
         <button
           className={"btn " + (active === "custom" ? "btn-primary" : "btn-ghost")}
           disabled={!cFrom || !cTo}
-          onClick={() => router.push(`/progress?range=custom&from=${cFrom}&to=${cTo}`)}
+          onClick={() => router.push(`${basePath}?range=custom&from=${cFrom}&to=${cTo}`)}
           style={{ padding: "7px 14px", fontSize: 13 }}
         >
           Apply

@@ -36,7 +36,7 @@ export function ScoreOverTime({
       <LineChart data={points} margin={{ top: 8, right: 12, bottom: 4, left: -12 }}>
         <CartesianGrid stroke="#1c1c30" vertical={false} />
         <XAxis dataKey="label" stroke="#64708a" tick={{ fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#1c1c30" }} />
-        <YAxis domain={[2.5, 5]} ticks={[3, 3.5, 4, 4.5, 5]} stroke="#64708a" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+        <YAxis domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} stroke="#64708a" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
         <Tooltip
           contentStyle={{ background: "#121220", border: "1px solid #24243a", borderRadius: 12, fontSize: 13 }}
           labelStyle={{ color: "#94a3b8" }}
