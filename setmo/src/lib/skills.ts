@@ -54,6 +54,21 @@ export function skillTier(key: string): SkillTierKey {
   return SKILL_BY_KEY.get(key)?.tier ?? "universal";
 }
 
+// Compact labels for dense grids (the location×skill heatmap matrix headers).
+const SKILL_SHORT: Record<string, string> = {
+  rapport: "Rapport",
+  listening: "Listening",
+  discovery: "Discovery",
+  painpoint: "Pain-point",
+  objection: "Objection",
+  confidence: "Confidence",
+  value: "Value",
+  closing: "Closing",
+};
+export function skillShort(key: string): string {
+  return SKILL_SHORT[key] ?? skillName(key);
+}
+
 // The ordered rubric for a given service type. v1 only ships implant/denture.
 export function rubricFor(serviceType: string): SkillDef[] {
   switch (serviceType) {

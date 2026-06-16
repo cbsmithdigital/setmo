@@ -72,6 +72,8 @@ const ANALYTICS_MIN_DURATION = 60;
 const RANGE_LABEL: Record<string, string> = {
   "30d": "Last 30 days",
   month: "This month",
+  lastmonth: "Last month",
+  "60d": "Last 60 days",
   "3m": "Last 3 months",
   "6m": "Last 6 months",
   all: "All time",
@@ -90,14 +92,19 @@ export function resolveAnalyticsRange(sp: { range?: string; from?: string; to?: 
   const now = new Date();
   const key = sp.range ?? "month";
   if (key === "month") return { key, range: { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now }, label: RANGE_LABEL.month };
+  if (key === "lastmonth") {
+    const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const to = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, -1); // last instant of previous month
+    return { key, range: { from, to }, label: RANGE_LABEL.lastmonth };
+  }
   if (key === "all") return { key, range: { from: new Date(2000, 0, 1), to: now }, label: RANGE_LABEL.all };
   if (key === "custom" && sp.from) {
     const from = new Date(sp.from);
     const to = sp.to ? new Date(sp.to + "T23:59:59") : now;
     return { key, range: { from, to }, label: RANGE_LABEL.custom };
   }
-  const days = key === "3m" ? 90 : key === "6m" ? 180 : 30;
-  const norm = key === "3m" || key === "6m" ? key : "30d";
+  const days = key === "3m" ? 90 : key === "6m" ? 180 : key === "60d" ? 60 : 30;
+  const norm = key === "3m" || key === "6m" || key === "60d" ? key : "30d";
   return { key: norm, range: { from: new Date(now.getTime() - days * 86400_000), to: now }, label: RANGE_LABEL[norm] };
 }
 

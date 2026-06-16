@@ -32,6 +32,7 @@ const NAV_OFFICE: NavItem[] = [
 
 const NAV_GROUP: NavItem[] = [
   { href: "/group", label: "Portfolio", icon: "building" },
+  { href: "/group/performance", label: "Performance", icon: "chart" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
 ];
 

@@ -3,9 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-const PRESETS: { key: string; label: string }[] = [
+type Preset = { key: string; label: string };
+const DEFAULT_PRESETS: Preset[] = [
   { key: "30d", label: "30 days" },
   { key: "month", label: "This month" },
+  { key: "lastmonth", label: "Last month" },
+  { key: "60d", label: "60 days" },
   { key: "3m", label: "3 months" },
   { key: "6m", label: "6 months" },
   { key: "all", label: "All time" },
@@ -19,11 +22,13 @@ export function ProgressControls({
   from,
   to,
   basePath = "/progress",
+  presets = DEFAULT_PRESETS,
 }: {
   active: string;
   from?: string;
   to?: string;
   basePath?: string;
+  presets?: Preset[];
 }) {
   const router = useRouter();
   const [cFrom, setCFrom] = useState(from ?? "");
@@ -31,8 +36,8 @@ export function ProgressControls({
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-      <div style={{ display: "flex", gap: 5, background: "var(--s1)", border: "1px solid var(--line)", borderRadius: 99, padding: 4 }}>
-        {PRESETS.map((p) => (
+      <div style={{ display: "flex", gap: 5, background: "var(--s1)", border: "1px solid var(--line)", borderRadius: 99, padding: 4, flexWrap: "wrap" }}>
+        {presets.map((p) => (
           <button
             key={p.key}
             onClick={() => router.push(`${basePath}?range=${p.key}`)}
