@@ -84,11 +84,11 @@ export default async function DashboardPage() {
             className="card card-pad"
             style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}
           >
-            <div className="eyebrow">Current skill level</div>
-            <Ring value={d.avg} size={150} label="overall avg" />
+            <div className="eyebrow">Skill level · this month</div>
+            <Ring value={d.avg} size={150} label="month avg" />
             {d.avgDelta !== 0 && (
               <div className="chip mint">
-                <Delta v={d.avgDelta} /> vs last session
+                <Delta v={d.avgDelta} /> vs last month
               </div>
             )}
           </div>

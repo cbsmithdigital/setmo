@@ -61,6 +61,128 @@ function evalSkills(skills: { skillKey: string; score: unknown }[]): SkillRow[] 
 }
 
 // ---------- setter dashboard ----------
+// ============================================================================
+// Time-windowed setter analytics. Aggregates over a date range (not the latest
+// call), compares to the immediately-preceding equal window, and EXCLUDES calls
+// under a minute or with no rubric (hang-ups/interruptions don't count).
+// ============================================================================
+export type AnalyticsRange = { from: Date; to: Date };
+const ANALYTICS_MIN_DURATION = 60;
+
+type SessionWithEval = {
+  startedAt: Date;
+  durationSeconds: number | null;
+  personaSeed: unknown;
+  id: string;
+  evaluation: { overallScore: unknown; skills: { skillKey: string; score: unknown }[] } | null;
+};
+function isRealScored(s: SessionWithEval): boolean {
+  return (
+    !!s.evaluation &&
+    (s.evaluation.skills?.length ?? 0) > 0 &&
+    (s.durationSeconds ?? 0) >= ANALYTICS_MIN_DURATION &&
+    s.evaluation.overallScore != null
+  );
+}
+const shortDate = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+export async function getSetterAnalytics(setterId: string, current: AnalyticsRange, prior: AnalyticsRange | null) {
+  const earliest = prior && prior.from < current.from ? prior.from : current.from;
+  const sessions = await prisma.session.findMany({
+    where: { setterId, status: "SCORED", startedAt: { gte: earliest, lte: current.to } },
+    orderBy: { startedAt: "asc" },
+    include: { evaluation: { include: { skills: true } } },
+  });
+  const real = sessions.filter(isRealScored);
+  const inR = (s: { startedAt: Date }, r: AnalyticsRange) => s.startedAt >= r.from && s.startedAt <= r.to;
+  const cur = real.filter((s) => inR(s, current));
+  const pri = prior ? real.filter((s) => inR(s, prior)) : [];
+
+  const order = rubricFor("IMPLANT").map((s) => s.key);
+  const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+  const skillAvgMap = (set: typeof cur) => {
+    const sums = new Map<string, { t: number; n: number }>();
+    for (const s of set) for (const sk of s.evaluation!.skills) {
+      const c = sums.get(sk.skillKey) ?? { t: 0, n: 0 };
+      c.t += Number(sk.score);
+      c.n++;
+      sums.set(sk.skillKey, c);
+    }
+    const m = new Map<string, number>();
+    for (const [k, v] of sums) m.set(k, v.t / v.n);
+    return m;
+  };
+  const curSkill = skillAvgMap(cur);
+  const priSkill = skillAvgMap(pri);
+  const skillIn = (s: typeof cur[number], key: string) => {
+    const sk = s.evaluation!.skills.find((x) => x.skillKey === key);
+    return sk ? Number(sk.score) : null;
+  };
+
+  const overallAvg = Number(mean(cur.map((s) => Number(s.evaluation!.overallScore))).toFixed(1));
+  const overallPrev = Number(mean(pri.map((s) => Number(s.evaluation!.overallScore))).toFixed(1));
+  const hasPrior = pri.length > 0;
+  const overallDelta = hasPrior ? Number((overallAvg - overallPrev).toFixed(1)) : 0;
+
+  const perSkill = order
+    .filter((k) => curSkill.has(k))
+    .map((k) => {
+      const score = Number(curSkill.get(k)!.toFixed(1));
+      const prev = priSkill.has(k) ? Number(priSkill.get(k)!.toFixed(1)) : null;
+      const spark = cur.map((s) => skillIn(s, k)).filter((v): v is number => v != null).slice(-6);
+      return { key: k, name: skillName(k), tier: skillTier(k), score, prev, delta: prev != null ? Number((score - prev).toFixed(1)) : 0, spark };
+    });
+
+  const best = perSkill.reduce<(typeof perSkill)[number] | null>((m, s) => (!m || s.score > m.score ? s : m), null);
+  const focus = perSkill.reduce<(typeof perSkill)[number] | null>((m, s) => (!m || s.score < m.score ? s : m), null);
+  let mostImproved: { name: string; delta: number } | null = null;
+  for (const s of perSkill) {
+    if (s.prev == null) continue;
+    if (!mostImproved || s.delta > mostImproved.delta) mostImproved = { name: s.name, delta: s.delta };
+  }
+
+  // chart series: overall + current top + the two lowest
+  const byScore = [...perSkill].sort((a, b) => a.score - b.score);
+  const lowest = byScore.slice(0, 2);
+  const top = byScore[byScore.length - 1];
+  const series: { key: string; name: string; color: string }[] = [{ key: "overall", name: "Overall", color: "#34d399" }];
+  if (top && !lowest.some((l) => l.key === top.key)) series.push({ key: top.key, name: top.name, color: "#a78bfa" });
+  const focusColors = ["#fbbf24", "#fb7185"];
+  lowest.forEach((l, i) => series.push({ key: l.key, name: l.name, color: focusColors[i] ?? "#94a3b8" }));
+
+  const points = cur.map((s, i) => {
+    const p: Record<string, number | string | null> = {
+      label: i === cur.length - 1 ? "Now" : shortDate(s.startedAt),
+      overall: Number(Number(s.evaluation!.overallScore).toFixed(1)),
+    };
+    for (const sr of series) {
+      if (sr.key === "overall") continue;
+      p[sr.key] = skillIn(s, sr.key);
+    }
+    return p;
+  });
+
+  const universal = perSkill.filter((s) => s.tier === "universal").map((s) => ({ key: s.key, name: s.name.split(" ")[0], value: s.score }));
+  const weekAgo = new Date(Date.now() - 7 * 86400_000);
+
+  return {
+    reps: cur.length,
+    repsThisWeek: cur.filter((s) => s.startedAt >= weekAgo).length,
+    hours: cur.reduce((a, s) => a + (s.durationSeconds ?? 0), 0) / 3600,
+    overallAvg,
+    overallPrev,
+    overallDelta,
+    hasPrior,
+    perSkill,
+    best,
+    focus,
+    mostImproved,
+    series,
+    points,
+    universal,
+  };
+}
+
 export async function getSetterHome(user: {
   id: string;
   officeId: string | null;
@@ -86,14 +208,15 @@ export async function getSetterHome(user: {
     }),
   ]);
 
-  // chronological scores for deltas
-  const scored = [...sessions].reverse(); // oldest -> newest
+  // Recent list — real scored sessions only (≥1 min, has rubric), with the
+  // session-to-session delta for the row.
+  const realSessions = sessions.filter(isRealScored);
+  const chron = [...realSessions].reverse(); // oldest -> newest
   const scoreOf = (s: (typeof sessions)[number]) =>
     s.evaluation?.overallScore != null ? Number(s.evaluation.overallScore) : 0;
-
-  const recent = sessions.map((s) => {
-    const idx = scored.findIndex((x) => x.id === s.id);
-    const prev = idx > 0 ? scoreOf(scored[idx - 1]) : null;
+  const recent = realSessions.map((s) => {
+    const idx = chron.findIndex((x) => x.id === s.id);
+    const prev = idx > 0 ? scoreOf(chron[idx - 1]) : null;
     const cur = scoreOf(s);
     return {
       id: s.id,
@@ -105,28 +228,16 @@ export async function getSetterHome(user: {
     };
   });
 
-  // latest skill snapshot
-  const latest = sessions.find((s) => s.evaluation?.skills.length);
-  const prevWithSkills = sessions
-    .slice(1)
-    .find((s) => s.evaluation?.skills.length);
-  const skills = latest ? evalSkills(latest.evaluation!.skills) : [];
-  const avg = skills.length
-    ? skills.reduce((a, b) => a + b.score, 0) / skills.length
-    : 0;
-  const prevAvg =
-    prevWithSkills && prevWithSkills.evaluation
-      ? prevWithSkills.evaluation.skills.reduce((a, b) => a + Number(b.score), 0) /
-        prevWithSkills.evaluation.skills.length
-      : avg;
-  const best = skills.reduce<SkillRow | null>(
-    (m, s) => (!m || s.score > m.score ? s : m),
-    null
-  );
-  const focus = skills.reduce<SkillRow | null>(
-    (m, s) => (!m || s.score < m.score ? s : m),
-    null
-  );
+  // Skill level = THIS MONTH's average vs LAST MONTH (period aggregate, not the
+  // last call), so it reflects sustained progress instead of one noisy session.
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const month = await getSetterAnalytics(user.id, { from: monthStart, to: now }, { from: prevMonthStart, to: monthStart });
+  const skills = month.perSkill;
+  const avg = month.overallAvg;
+  const best = month.best;
+  const focus = month.focus;
 
   // leaderboard names
   const subjectIds = board.map((b) => b.subjectId);
@@ -159,7 +270,7 @@ export async function getSetterHome(user: {
     recent,
     skills,
     avg,
-    avgDelta: Number((avg - prevAvg).toFixed(1)),
+    avgDelta: month.overallDelta,
     best,
     focus,
     leaderboard,
@@ -172,113 +283,32 @@ export async function getSetterHome(user: {
 }
 
 // ---------- setter progress ----------
-export async function getSetterProgress(userId: string, officeId: string) {
-  const [sessions, allowance] = await Promise.all([
-    prisma.session.findMany({
-      where: { setterId: userId, status: "SCORED" },
-      orderBy: { startedAt: "asc" }, // chronological
-      include: { evaluation: { include: { skills: true } } },
-    }),
+// `range` is the selected window; we always compare to the immediately-preceding
+// equal-length window (so "this month vs last month" etc. just works).
+export async function getSetterProgress(userId: string, officeId: string, range?: AnalyticsRange) {
+  const now = new Date();
+  const current: AnalyticsRange = range ?? { from: new Date(now.getTime() - 30 * 86400_000), to: now };
+  const len = current.to.getTime() - current.from.getTime();
+  const prior: AnalyticsRange = { from: new Date(current.from.getTime() - len), to: current.from };
+
+  const [a, allowance] = await Promise.all([
+    getSetterAnalytics(userId, current, prior),
     getAllowance(officeId),
   ]);
 
-  // Only count sessions that actually produced skill scores — abandoned/short
-  // calls with no rubric shouldn't drag the charts down to zero.
-  const scored = sessions.filter((s) => (s.evaluation?.skills.length ?? 0) > 0);
-  const n = scored.length;
-  const avgOf = (a: number[]) =>
-    a.length ? Number((a.reduce((x, y) => x + y, 0) / a.length).toFixed(1)) : 0;
-
-  // Per session: overall + a map of skillKey -> score, aligned by session (not
-  // by a per-skill array — that's what caused the cross-skill mismatch).
-  const rows = scored.map((s, i) => {
-    const map = new Map<string, number>();
-    for (const sk of s.evaluation!.skills) map.set(sk.skillKey, Number(sk.score));
-    const overall =
-      s.evaluation!.overallScore != null ? Number(s.evaluation!.overallScore) : avgOf([...map.values()]);
-    return { label: i === n - 1 ? "Now" : `S${i + 1}`, overall, map };
-  });
-
-  const order = rubricFor("IMPLANT").map((s) => s.key);
-  const histOf = (key: string) =>
-    rows.map((r) => r.map.get(key)).filter((v): v is number => v != null);
-
-  // Latest snapshot (current per-skill score + delta vs the previous session).
-  const latestSkills = scored.length ? scored[scored.length - 1].evaluation!.skills : [];
-  const snapshot = latestSkills
-    .map((sk) => {
-      const hist = histOf(sk.skillKey);
-      const cur = Number(sk.score);
-      const prev = hist.length > 1 ? hist[hist.length - 2] : cur;
-      return {
-        key: sk.skillKey,
-        name: skillName(sk.skillKey),
-        tier: skillTier(sk.skillKey),
-        score: cur,
-        prev,
-        delta: Number((cur - prev).toFixed(1)),
-        spark: hist.slice(-5),
-      };
-    })
-    .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
-
-  const universal = snapshot
-    .filter((s) => s.tier === "universal")
-    .map((s) => ({ key: s.key, name: s.name.split(" ")[0], value: s.score }));
-
-  // Chart series: overall + current top skill + the two lowest (focus) skills.
-  const byScore = [...snapshot].sort((a, b) => a.score - b.score);
-  const lowest = byScore.slice(0, 2);
-  const topSkill = byScore[byScore.length - 1];
-  const series: { key: string; name: string; color: string }[] = [
-    { key: "overall", name: "Overall", color: "#34d399" },
-  ];
-  if (topSkill && !lowest.some((l) => l.key === topSkill.key)) {
-    series.push({ key: topSkill.key, name: topSkill.name, color: "#a78bfa" });
-  }
-  const focusColors = ["#fbbf24", "#fb7185"];
-  lowest.forEach((l, i) => series.push({ key: l.key, name: l.name, color: focusColors[i] ?? "#94a3b8" }));
-
-  const points = rows.map((r) => {
-    const p: Record<string, number | string | null> = {
-      label: r.label,
-      overall: Number(r.overall.toFixed(1)),
-    };
-    for (const s of series) {
-      if (s.key === "overall") continue;
-      const v = r.map.get(s.key);
-      p[s.key] = v != null ? v : null;
-    }
-    return p;
-  });
-
-  // Stats.
-  const overalls = rows.map((r) => r.overall);
-  const overallAvg = overalls.length ? overalls[overalls.length - 1] : 0;
-  const overallDelta = overalls.length > 1 ? overallAvg - overalls[0] : 0;
-  let mostImproved: { name: string; delta: number } | null = null;
-  for (const key of order) {
-    const hist = histOf(key);
-    if (hist.length < 2) continue;
-    const d = hist[hist.length - 1] - hist[0];
-    if (!mostImproved || d > mostImproved.delta) mostImproved = { name: skillName(key), delta: d };
-  }
-  const practiceHours = scored.reduce((a, s) => a + (s.durationSeconds ?? 0), 0) / 3600;
-  const weekAgo = new Date(Date.now() - 7 * 86400_000);
-  const repsThisWeek = scored.filter((s) => s.startedAt >= weekAgo).length;
-
   return {
-    points,
-    series,
-    universal,
-    snapshot,
+    points: a.points,
+    series: a.series,
+    universal: a.universal,
+    snapshot: a.perSkill,
     stats: {
-      overallAvg,
-      overallDelta: Number(overallDelta.toFixed(1)),
-      mostImproved,
-      totalReps: n,
-      repsThisWeek,
-      practiceHours,
+      overallAvg: a.overallAvg,
+      overallDelta: a.overallDelta,
+      hasPrior: a.hasPrior,
+      mostImproved: a.mostImproved,
+      totalReps: a.reps,
+      repsThisWeek: a.repsThisWeek,
+      practiceHours: a.hours,
     },
     allowance,
   };
