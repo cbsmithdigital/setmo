@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { fullName } from "@/lib/format";
 import { IMPLANT_RUBRIC } from "@/lib/skills";
 import { listGoalsForOffice, rewardQueueForOffice } from "@/lib/goals";
+import { getIncentiveProvider } from "@/lib/incentives";
 import { GoalsManager } from "@/components/goals/GoalsManager";
 
 export default async function OfficeGoalsPage() {
@@ -30,6 +31,7 @@ export default async function OfficeGoalsPage() {
           setters={setters.map((s) => ({ id: s.id, name: fullName(s.firstName, s.lastName) }))}
           offices={[]}
           skills={IMPLANT_RUBRIC.map((s) => ({ key: s.key, name: s.name }))}
+          providerAutomated={getIncentiveProvider().automated}
         />
       </div>
     </>

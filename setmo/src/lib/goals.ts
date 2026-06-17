@@ -299,7 +299,9 @@ export async function decideReward(participantId: string, action: "approve" | "m
 
   await prisma.goalParticipant.update({ where: { id: participantId }, data: { rewardStatus: "APPROVED", approvedById: byUserId } });
 
-  if (action === "marksent") {
+  // Custom (non-cash) incentives like PTO can't be transmitted by a vendor —
+  // approving them just records manual fulfillment.
+  if (action === "marksent" || p.goal.rewardType === "CUSTOM") {
     await prisma.goalParticipant.update({ where: { id: participantId }, data: { rewardStatus: "SENT", sentAt: new Date(), providerRef: "manual" } });
     return { ok: true, status: "SENT" };
   }

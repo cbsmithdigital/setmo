@@ -53,6 +53,7 @@ export function GoalsManager({
   setters,
   offices,
   skills,
+  providerAutomated,
 }: {
   scope: "OFFICE" | "GROUP";
   goals: GoalSummary[];
@@ -60,6 +61,7 @@ export function GoalsManager({
   setters: { id: string; name: string; officeName?: string }[];
   offices: { id: string; name: string }[];
   skills: { key: string; name: string }[];
+  providerAutomated?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -126,7 +128,9 @@ export function GoalsManager({
       {queue.length > 0 && (
         <div className="card card-pad rise" style={{ marginBottom: 18, background: "linear-gradient(150deg,rgba(52,211,153,.12),var(--s2))" }}>
           <h3 style={{ fontSize: 17, marginBottom: 4 }}>🎉 Rewards to approve ({queue.length})</h3>
-          <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>These goals were achieved. Approve to send the incentive, mark it sent if you handled it yourself, or decline.</p>
+          <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
+            These goals were achieved. {providerAutomated ? "“Approve & send” emails the gift card via Tremendous." : "“Approve & send” records the reward — you deliver it."} Use “Mark sent” for anything you handled yourself, or decline.
+          </p>
           {queue.map((q) => (
             <div key={q.participantId} style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "11px 0", borderTop: "1px solid var(--line-soft)" }}>
               <div style={{ flex: 1, minWidth: 200 }}>

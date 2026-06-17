@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { fullName } from "@/lib/format";
 import { IMPLANT_RUBRIC } from "@/lib/skills";
 import { listGoalsForGroup, rewardQueueForGroup } from "@/lib/goals";
+import { getIncentiveProvider } from "@/lib/incentives";
 import { GoalsManager } from "@/components/goals/GoalsManager";
 
 export default async function GroupGoalsPage() {
@@ -38,6 +39,7 @@ export default async function GroupGoalsPage() {
           setters={setters.map((s) => ({ id: s.id, name: fullName(s.firstName, s.lastName), officeName: s.office?.name }))}
           offices={offices}
           skills={IMPLANT_RUBRIC.map((s) => ({ key: s.key, name: s.name }))}
+          providerAutomated={getIncentiveProvider().automated}
         />
       </div>
     </>
