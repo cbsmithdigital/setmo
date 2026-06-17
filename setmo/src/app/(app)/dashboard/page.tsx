@@ -6,6 +6,8 @@ import { Ring, AllowanceMeter, Delta } from "@/components/ui/widgets";
 import { greeting, mmss, whenLabel } from "@/lib/format";
 import { getInsight } from "@/lib/insights";
 import { SettyInsight } from "@/components/coach/SettyInsight";
+import { listGoalsForSetter } from "@/lib/goals";
+import { SetterGoals } from "@/components/goals/SetterGoals";
 
 function StatTile({
   lab,
@@ -40,7 +42,7 @@ function StatTile({
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const [d, insight] = await Promise.all([getSetterHome(user), getInsight("SETTER", user.id)]);
+  const [d, insight, goals] = await Promise.all([getSetterHome(user), getInsight("SETTER", user.id), listGoalsForSetter(user.id)]);
 
   return (
     <>
@@ -58,6 +60,7 @@ export default async function DashboardPage() {
 
       <div className="content">
         <SettyInsight scope="SETTER" subjectId={user.id} insight={insight} />
+        <SetterGoals goals={goals} compact />
 
         {/* hero CTA + ring */}
         <div className="grid g-2 rise" style={{ gridTemplateColumns: "1.5fr 1fr", marginBottom: 18 }}>

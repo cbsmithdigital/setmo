@@ -28,10 +28,11 @@ export function periodForRangeKey(key: string): { label: string; name: string } 
 
 // Practice booking signal over a window: set rate (scorer's booked flag on real
 // calls) and modeled show rate (mean per-call show rate).
-export async function practiceSignal(officeIds: string[], range: AnalyticsRange) {
+export async function practiceSignal(officeIds: string[], range: AnalyticsRange, setterId?: string) {
   const sessions = await prisma.session.findMany({
     where: {
       officeId: { in: officeIds },
+      ...(setterId ? { setterId } : {}),
       status: "SCORED",
       durationSeconds: { gte: 60 },
       startedAt: { gte: range.from, lte: range.to },

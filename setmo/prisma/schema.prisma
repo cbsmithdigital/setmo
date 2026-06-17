@@ -145,6 +145,7 @@ model Organization {
 
   offices Office[]
   users   User[]
+  goals   Goal[]
 
   @@map("organization")
 }
@@ -171,6 +172,7 @@ model Office {
   subscription Subscription?
   outcomes     OfficeOutcome[]
   audits       SetterAudit[]
+  goals        Goal[]
 
   @@index([organizationId])
   @@map("office")
@@ -223,6 +225,7 @@ model User {
   recommendations Recommendation[]
   managedAccounts ManagedAccount[] @relation("ConsultantManaged")
   memberships     Membership[]
+  goalParticipations GoalParticipant[]
 
   @@index([officeId])
   @@index([organizationId])
@@ -559,4 +562,141 @@ model LeaderboardEntry {
 
   @@index([scope, serviceType, periodKey])
   @@map("leaderboard_entry")
+}
+
+// ---------- goals & incentives ----------
+
+enum GoalCreatorScope {
+  OFFICE
+  GROUP
+}
+
+enum GoalTargetType {
+  SETTER
+  TEAM
+}
+
+enum GoalMetric {
+  OVERALL_SCORE
+  SKILL_SCORE
+  SET_RATE
+  SHOW_RATE
+  CONSULTS
+  CASES
+  PRODUCTION
+  REPS
+  PRACTICE_HOURS
+  STREAK_WEEKS
+  LEADERBOARD_RANK
+  PERSONAL_BEST
+  MANUAL
+}
+enum GoalComparator {
+  REACH
+  IMPROVE_BY
+  MAINTAIN
+  RANK_TOP
+}
+
+enum GoalWindow {
+  THIS_MONTH
+  LAST_30D
+  CUSTOM
+  ONGOING
+}
+
+enum GoalRecurrence {
+  NONE
+  MONTHLY
+}
+
+enum GoalRewardType {
+  GIFT_CARD
+  CUSTOM
+}
+
+enum GoalStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum RewardStatus {
+  NONE
+  PENDING
+  APPROVED
+  SENT
+  FAILED
+  DECLINED
+}
+
+// A goal an office or group sets for a setter or a whole team/practice. Tied to
+// the existing analytics; achievement is auto-detected, payout admin-approved.
+model Goal {
+  id                String           @id @default(uuid())
+  creatorScope      GoalCreatorScope @map("creator_scope")
+  officeId          String?          @map("office_id") // office goals, or the practice a group goal targets
+  organizationId    String?          @map("organization_id") // group goals
+  createdById       String           @map("created_by_id")
+  title             String
+  description       String?
+  targetType        GoalTargetType   @map("target_type")
+  metric            GoalMetric
+  skillKey          String?          @map("skill_key") // when metric = SKILL_SCORE
+  comparator        GoalComparator   @default(REACH)
+  targetValue       Float            @map("target_value")
+  window            GoalWindow       @default(THIS_MONTH)
+  startDate         DateTime?        @map("start_date")
+  endDate           DateTime?        @map("end_date")
+  recurrence        GoalRecurrence   @default(NONE)
+  seriesId          String?          @map("series_id") // links monthly-recurring instances
+  periodKey         String?          @map("period_key") // "2026-06" for a recurring instance
+  minQualifyingReps Int              @default(5) @map("min_qualifying_reps")
+  rewardType        GoalRewardType   @default(GIFT_CARD) @map("reward_type")
+  rewardAmountCents Int?             @map("reward_amount_cents")
+  rewardLabel       String?          @map("reward_label")
+  funderScope       GoalCreatorScope @map("funder_scope")
+  includeManager    Boolean          @default(false) @map("include_manager")
+  status            GoalStatus       @default(DRAFT)
+  teamValue         Float?           @map("team_value") // aggregate result for TEAM goals
+  teamAchieved      Boolean          @default(false) @map("team_achieved")
+  achievedAt        DateTime?        @map("achieved_at")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  office       Office?           @relation(fields: [officeId], references: [id])
+  organization Organization?     @relation(fields: [organizationId], references: [id])
+  participants GoalParticipant[]
+
+  @@index([officeId, status])
+  @@index([organizationId, status])
+  @@index([seriesId])
+  @@map("goal")
+}
+
+// Per-person assignment of a goal: progress + reward/payout status.
+model GoalParticipant {
+  id                String       @id @default(uuid())
+  goalId            String       @map("goal_id")
+  setterId          String       @map("setter_id")
+  baselineValue     Float?       @map("baseline_value") // captured at activation (IMPROVE_BY)
+  currentValue      Float        @default(0) @map("current_value")
+  progressPct       Float        @default(0) @map("progress_pct")
+  qualified         Boolean      @default(false) // met participation threshold
+  achieved          Boolean      @default(false)
+  achievedAt        DateTime?    @map("achieved_at")
+  rewardStatus      RewardStatus @default(NONE) @map("reward_status")
+  rewardAmountCents Int?         @map("reward_amount_cents")
+  approvedById      String?      @map("approved_by_id")
+  sentAt            DateTime?    @map("sent_at")
+  providerRef       String?      @map("provider_ref")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  goal   Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  setter User @relation(fields: [setterId], references: [id])
+
+  @@unique([goalId, setterId])
+  @@index([setterId])
+  @@map("goal_participant")
 }

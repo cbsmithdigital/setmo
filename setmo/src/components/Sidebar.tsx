@@ -14,6 +14,7 @@ const NAV_SETTER: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "home" },
   { href: "/practice", label: "Practice", icon: "mic" },
   { href: "/progress", label: "Progress", icon: "chart" },
+  { href: "/goals", label: "Goals & rewards", icon: "flame" },
   { href: "/trainings", label: "Trainings", icon: "book" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
   { href: "/library", label: "Saved", icon: "doc" },
@@ -23,6 +24,7 @@ const NAV_SETTER: NavItem[] = [
 const NAV_OFFICE: NavItem[] = [
   { href: "/office", label: "Overview", icon: "home" },
   { href: "/office/team", label: "Team", icon: "team" },
+  { href: "/office/goals", label: "Goals & rewards", icon: "flame" },
   { href: "/office/catalog", label: "Service catalog", icon: "target" },
   { href: "/office/billing", label: "Usage & billing", icon: "card" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
@@ -33,6 +35,7 @@ const NAV_OFFICE: NavItem[] = [
 const NAV_GROUP: NavItem[] = [
   { href: "/group", label: "Portfolio", icon: "building" },
   { href: "/group/performance", label: "Performance", icon: "chart" },
+  { href: "/group/goals", label: "Goals & rewards", icon: "flame" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
 ];
 
