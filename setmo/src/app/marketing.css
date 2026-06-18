@@ -862,6 +862,19 @@
   gap: 22px;
   align-items: stretch;
 }
+.mkt .price-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.15fr;
+  gap: 32px;
+  align-items: start;
+}
+.mkt .price-grid .tfeats {
+  margin: 0;
+}
+.mkt .price-grid .pcol-sep {
+  border-left: 1px solid var(--m-line);
+  padding-left: 32px;
+}
 .mkt .tier {
   background: var(--paper);
   border: 1px solid var(--m-line);
@@ -1762,6 +1775,13 @@
   .mkt .tgrid,
   .mkt .tiers {
     grid-template-columns: 1fr;
+  }
+  .mkt .price-grid {
+    grid-template-columns: 1fr;
+  }
+  .mkt .price-grid .pcol-sep {
+    border-left: none;
+    padding-left: 0;
   }
   .mkt .commit {
     grid-template-columns: 1fr;

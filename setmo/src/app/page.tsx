@@ -387,45 +387,48 @@ export default async function LandingPage() {
             <p>$44.95 per location, month-to-month — unlimited users, every feature included, plus pay-as-you-go minutes that roll over. A serious edge for a single office, and it scales to a whole group at no extra tier.</p>
           </div>
 
-          <div className="founders-banner reveal">
-            <div className="fb-ico"><Star /></div>
-            <div><b>Flat, simple, month-to-month.</b><p>One price per practice. Unlimited setters, managers and users. Every feature included. Cancel anytime.</p></div>
-            <span className="fb-close">No contract</span>
-          </div>
-
-          <div className="tiers" style={{ gridTemplateColumns: "1fr", maxWidth: 760, margin: "0 auto" }}>
+          <div className="tiers" style={{ gridTemplateColumns: "1fr", margin: 0 }}>
             <div className="tier good reveal">
-              <span className="ttag">Practice Access</span>
-              <div className="tprice">$44.95<small> / location / mo</small></div>
-              <div className="tcad">Month-to-month · unlimited users · cancel anytime</div>
-
-              <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--ink-soft)", margin: "20px 0 10px", display: "flex", alignItems: "center", gap: 7 }}>
-                <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--purple)" }} /> Included for every office
-              </div>
-              <ul className="tfeats">
-                <li><Ck />Setter practice + full 8-point scoring, coaching &amp; replacement phrases</li>
-                <li><Ck />Office-manager dashboard + <b style={{ fontWeight: 700 }}>Setty Office Coach</b></li>
-                <li><Ck />Goals &amp; rewards, leaderboards, progress &amp; recommendations</li>
-                <li><Ck />Unlimited setters, managers &amp; users — no per-seat fees</li>
-              </ul>
-
-              <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--ink-soft)", margin: "20px 0 10px", display: "flex", alignItems: "center", gap: 7 }}>
-                <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--m-mint)" }} /> Run 2+ locations? You also get — free
-              </div>
-              <ul className="tfeats">
-                <li><Ck />Multi-location command center — every office side by side</li>
-                <li><Ck /><b style={{ fontWeight: 700 }}>Setty Advisor</b> — portfolio decision support across the group</li>
-                <li><Ck />Automatic outlier &amp; top-performer detection</li>
-                <li><Ck />One-click playbook rollout across locations</li>
-              </ul>
-
-              <div style={{ borderTop: "1px solid var(--m-line)", margin: "8px 0 18px", paddingTop: 20 }}>
-                <PricingSlider />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "8px 16px" }}>
+                <div>
+                  <span className="ttag" style={{ marginBottom: 10 }}>Practice Access</span>
+                  <div className="tprice" style={{ margin: 0 }}>$44.95<small> / location / mo</small></div>
+                </div>
+                <div className="tcad" style={{ margin: 0 }}>Month-to-month · unlimited users · cancel anytime</div>
               </div>
 
-              <Link className="btn btn-primary" href={AUDIT_HREF}>Start with a free assessment</Link>
-              <div className="tfoot">
-                The assessment is free and never uses your minutes. Coaches, consultants &amp; vendors — <a href={DEMO_MAILTO} style={{ color: "var(--purple-deep)", fontWeight: 600 }}>contact us for distribution</a>.
+              <div className="price-grid" style={{ marginTop: 22 }}>
+                <div>
+                  <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--ink-soft)", margin: "0 0 12px", display: "flex", alignItems: "center", gap: 7 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--purple)" }} /> Included for every office
+                  </div>
+                  <ul className="tfeats">
+                    <li><Ck />Setter practice + full 8-point scoring, coaching &amp; replacement phrases</li>
+                    <li><Ck />Office-manager dashboard + <b style={{ fontWeight: 700 }}>Setty Office Coach</b></li>
+                    <li><Ck />Goals &amp; rewards, leaderboards, progress &amp; recommendations</li>
+                    <li><Ck />Unlimited setters, managers &amp; users — no per-seat fees</li>
+                  </ul>
+                </div>
+
+                <div className="pcol-sep">
+                  <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--ink-soft)", margin: "0 0 12px", display: "flex", alignItems: "center", gap: 7 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--m-mint)" }} /> Run 2+ locations? You also get — free
+                  </div>
+                  <ul className="tfeats">
+                    <li><Ck />Multi-location command center — every office side by side</li>
+                    <li><Ck /><b style={{ fontWeight: 700 }}>Setty Advisor</b> — portfolio decision support across the group</li>
+                    <li><Ck />Automatic outlier &amp; top-performer detection</li>
+                    <li><Ck />One-click playbook rollout across locations</li>
+                  </ul>
+                </div>
+
+                <div className="pcol-sep">
+                  <PricingSlider />
+                  <Link className="btn btn-primary" href={AUDIT_HREF} style={{ width: "100%", marginTop: 14 }}>Start with a free assessment</Link>
+                  <div className="tfoot" style={{ marginTop: 12 }}>
+                    Free assessment, never uses your minutes. Partners — <a href={DEMO_MAILTO} style={{ color: "var(--purple-deep)", fontWeight: 600 }}>contact us for distribution</a>.
+                  </div>
+                </div>
               </div>
             </div>
           </div>
