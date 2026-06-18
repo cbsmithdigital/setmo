@@ -18,7 +18,7 @@ export default async function PracticePage() {
           <p>Pick what you want to drill. You won&apos;t see the lead&apos;s persona until the call begins.</p>
         </div>
         <div className="tb-right">
-          <AllowanceMeter poolUsed={allowance.poolUsed} poolTotal={allowance.poolTotal} />
+          <AllowanceMeter remainingMin={allowance.remainingMin} purchasedMin={allowance.purchasedMin} usedMin={allowance.usedMin} />
         </div>
       </div>
       <ServicePicker services={services} />

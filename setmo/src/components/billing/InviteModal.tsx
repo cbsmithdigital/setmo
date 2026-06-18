@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
 import { ModalShell } from "@/components/Modal";
 
-export function InviteModal({ seatsFree, onClose }: { seatsFree: number; onClose: () => void }) {
+export function InviteModal({ onClose }: { seatsFree?: number; onClose: () => void }) {
   const router = useRouter();
   const [emails, setEmails] = useState<string[]>(["", ""]);
   const [done, setDone] = useState(false);
@@ -81,7 +81,7 @@ export function InviteModal({ seatsFree, onClose }: { seatsFree: number; onClose
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: "1px solid var(--line)", marginBottom: 18 }}>
               <span className="muted" style={{ fontSize: 13.5 }}>
-                {valid.length} invite{valid.length === 1 ? "" : "s"} · {seatsFree} seat{seatsFree === 1 ? "" : "s"} free
+                {valid.length} invite{valid.length === 1 ? "" : "s"} · users are free &amp; unlimited
               </span>
             </div>
             <button className="btn btn-primary btn-block btn-lg" disabled={!valid.length || loading} onClick={send}>

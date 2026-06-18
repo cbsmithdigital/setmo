@@ -2,214 +2,131 @@
 
 import { useState } from "react";
 import { Icon } from "@/components/ui/Icon";
-import { BundleModal } from "@/components/billing/BundleModal";
 import { InviteModal } from "@/components/billing/InviteModal";
-import { SubscribeModal } from "@/components/billing/SubscribeModal";
+import { MinutePurchase } from "@/components/billing/MinutePurchase";
 
-type Cadence = "QUARTERLY" | "ANNUAL";
 type BillingData = {
-  allowance: { poolUsed: number; poolTotal: number };
+  balance: { purchasedMin: number; usedMin: number; remainingMin: number };
+  accessMonthly: number;
   subscribed: boolean;
-  tier: "TEAM" | "PRACTICE" | "GROUP" | null;
-  tierName: string | null;
-  isFounder: boolean;
-  foundersOpen: boolean;
-  seats: number;
-  filled: number;
-  cadence: Cadence;
-  quarterlyTotal: number;
-  annualTotal: number;
+  accessStatus: string | null;
   nextInvoiceDate: string | null;
-  bundles: { hours: number; priceUsd: number; popular?: boolean }[];
   invoices: { date: string; desc: string; amount: string; status: string; url: string | null }[];
 };
 
 export function BillingClient({
   data,
   practiceName,
-  bundleStatus,
-  subStatus,
+  accessStatus,
+  minutesStatus,
+  seatsFree,
+  recommendPeople,
 }: {
   data: BillingData;
   practiceName: string;
-  bundleStatus?: string;
-  subStatus?: string;
+  accessStatus?: string;
+  minutesStatus?: string;
+  seatsFree: number;
+  recommendPeople: number;
 }) {
-  const [modal, setModal] = useState<null | "bundle" | "invite" | "subscribe">(null);
-  const [cadence, setCadence] = useState<Cadence>(data.cadence);
+  const [invite, setInvite] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const { poolUsed, poolTotal } = data.allowance;
-  const poolPct = poolTotal > 0 ? Math.round((poolUsed / poolTotal) * 100) : 0;
-  const remain = Math.max(0, poolTotal - poolUsed);
-  const low = poolPct > 80;
-  const total = cadence === "ANNUAL" ? data.annualTotal : data.quarterlyTotal;
-  const seatsFree = Math.max(0, data.seats - data.filled);
+  const { purchasedMin, usedMin, remainingMin } = data.balance;
+  const pct = purchasedMin > 0 ? Math.min(100, (usedMin / purchasedMin) * 100) : 0;
+  const low = purchasedMin > 0 && remainingMin <= purchasedMin * 0.2;
+
+  async function manageAccess() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/office/subscription/checkout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      const j = await res.json().catch(() => ({}));
+      if (j.url) window.location.href = j.url;
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <>
       <div className="topbar">
         <div className="tb-greet">
           <h1>Usage &amp; billing</h1>
-          <p>Seats, your practice pool, bundles, and invoices for {practiceName}.</p>
+          <p>Practice access, your minute balance, and invoices for {practiceName}.</p>
         </div>
         <div className="tb-right">
-          <button className="btn btn-primary" onClick={() => setModal("invite")}>
-            <Icon name="team" size={17} /> Invite setters
+          <button className="btn btn-primary" onClick={() => setInvite(true)}>
+            <Icon name="team" size={17} /> Invite users
           </button>
         </div>
       </div>
 
       <div className="content">
-        {bundleStatus === "success" && (
-          <div className="banner mint" style={{ marginBottom: 18 }}>
-            Payment received — your bundle will be added to the pool within a few seconds.
-          </div>
-        )}
-        {bundleStatus === "cancel" && (
-          <div className="banner error" style={{ marginBottom: 18 }}>
-            Checkout cancelled — no charge was made.
-          </div>
-        )}
-        {subStatus === "success" && (
-          <div className="banner mint" style={{ marginBottom: 18 }}>
-            Subscription confirmed — your seats and pool will update within a few seconds.
-          </div>
-        )}
-        {subStatus === "cancel" && (
-          <div className="banner error" style={{ marginBottom: 18 }}>
-            Checkout cancelled — no plan changes were made.
-          </div>
-        )}
+        {accessStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Practice Access is active — thanks! Manage it anytime here.</div>}
+        {accessStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Checkout cancelled — no charge was made.</div>}
+        {minutesStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Payment received — your minutes will be added within a few seconds.</div>}
+        {minutesStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Checkout cancelled — no charge was made.</div>}
 
-        {/* pool + plan */}
         <div className="grid g-2" style={{ marginBottom: 18 }}>
+          {/* access */}
           <div className="card card-pad rise">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <h3 style={{ fontSize: 18 }}>Practice pool</h3>
-              <span className={"chip " + (low ? "amber" : "mint")} style={{ padding: "3px 10px" }}>
-                {low ? "Running low" : "Healthy"}
-              </span>
-            </div>
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginBottom: 8 }}>
-              <span className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 48, lineHeight: 1 }}>
-                {remain.toFixed(1)}
-              </span>
-              <span className="muted" style={{ fontSize: 15, fontWeight: 600, paddingBottom: 8 }}>
-                of {poolTotal.toFixed(0)} hrs left
-              </span>
-            </div>
-            <div style={{ height: 10, borderRadius: 99, background: "#181828", overflow: "hidden", margin: "6px 0 8px" }}>
-              <div style={{ height: "100%", width: poolPct + "%", background: low ? "linear-gradient(90deg,#f59e0b,#ef4444)" : "var(--grad-mint)", borderRadius: 99 }} />
-            </div>
-            <p className="muted" style={{ fontSize: 12.5, marginBottom: 16 }}>
-              {data.seats} seats × 5 hrs = {data.seats * 5} hrs included, plus purchased bundles. No surprise overage —
-              sessions pause when the pool runs out.
-            </p>
-            <button className="btn btn-primary" onClick={() => setModal("bundle")}>
-              <Icon name="card" size={16} /> Buy a conversation bundle
-            </button>
-          </div>
-
-          <div className="card card-pad rise" style={{ animationDelay: ".06s" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <h3 style={{ fontSize: 18 }}>{data.tierName ? `${data.tierName} plan` : "Plan"}</h3>
-              {data.isFounder && <span className="chip amber" style={{ padding: "3px 10px" }}>Founders</span>}
+              <h3 style={{ fontSize: 18 }}>Practice Access</h3>
+              <span className={"chip " + (data.subscribed ? "mint" : "amber")} style={{ padding: "3px 10px" }}>{data.subscribed ? "Active" : "Inactive"}</span>
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", gap: 6, marginBottom: 4 }}>
-              <span style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 40 }} className="grad-text">
-                ${total.toLocaleString()}
-              </span>
-              <span className="muted" style={{ fontSize: 14, paddingBottom: 6 }}>
-                / {cadence === "ANNUAL" ? "year" : "quarter"}
-              </span>
+              <span style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 40 }} className="grad-text">${data.accessMonthly.toFixed(2)}</span>
+              <span className="muted" style={{ fontSize: 14, paddingBottom: 6 }}>/ month</span>
             </div>
             <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
-              {data.tier === "PRACTICE"
-                ? `Location base + ${Math.max(0, data.seats - 2)} extra setter${Math.max(0, data.seats - 2) === 1 ? "" : "s"} (1 mgr + 2 incl.)`
-                : `${data.seats} setter seat${data.seats === 1 ? "" : "s"}`}
-              {cadence === "ANNUAL" ? " · ~10% annual savings" : ""}
+              Per location, month-to-month. Unlimited users, all features included. No contract.
             </p>
-            <div style={{ display: "flex", gap: 6, background: "var(--s1)", border: "1px solid var(--line)", borderRadius: 99, padding: 5, marginBottom: 16, width: "fit-content" }}>
-              {(["QUARTERLY", "ANNUAL"] as const).map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setCadence(c)}
-                  className={"btn " + (cadence === c ? "btn-primary" : "")}
-                  style={{ padding: "7px 18px", fontSize: 13.5, color: cadence === c ? "#fff" : "var(--muted)", textTransform: "capitalize" }}
-                >
-                  {c.toLowerCase()}
-                </button>
-              ))}
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, padding: "10px 0", borderTop: "1px solid var(--line-soft)" }}>
-              <span className="muted">Seats filled</span>
-              <b>{data.filled} / {data.seats}</b>
-            </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, padding: "10px 0", borderTop: "1px solid var(--line-soft)" }}>
               <span className="muted">Next invoice</span>
               <b>{data.nextInvoiceDate ?? "—"}</b>
             </div>
-            <button className="btn btn-ghost" style={{ width: "100%", marginTop: 14 }} onClick={() => setModal("subscribe")}>
-              <Icon name="card" size={16} /> {data.subscribed ? "Manage plan & seats" : "Subscribe"}
+            <button className="btn btn-ghost" style={{ width: "100%", marginTop: 14 }} onClick={manageAccess} disabled={busy}>
+              <Icon name="card" size={16} /> {data.subscribed ? "Manage access" : "Activate Practice Access"}
             </button>
+          </div>
+
+          {/* minute balance */}
+          <div className="card card-pad rise" style={{ animationDelay: ".06s" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <h3 style={{ fontSize: 18 }}>Minute balance</h3>
+              <span className={"chip " + (low ? "amber" : "mint")} style={{ padding: "3px 10px" }}>{low ? "Running low" : "Healthy"}</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginBottom: 8 }}>
+              <span className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 48, lineHeight: 1 }}>{remainingMin.toLocaleString()}</span>
+              <span className="muted" style={{ fontSize: 15, fontWeight: 600, paddingBottom: 8 }}>min left</span>
+            </div>
+            <div style={{ height: 10, borderRadius: 99, background: "#181828", overflow: "hidden", margin: "6px 0 8px" }}>
+              <div style={{ height: "100%", width: pct + "%", background: low ? "linear-gradient(90deg,#f59e0b,#ef4444)" : "var(--grad-mint)", borderRadius: 99 }} />
+            </div>
+            <p className="muted" style={{ fontSize: 12.5 }}>
+              {usedMin.toLocaleString()} of {purchasedMin.toLocaleString()} purchased minutes used. Minutes roll over — assessments are always free and never deducted.
+            </p>
           </div>
         </div>
 
-        {/* bundles */}
-        <div className="eyebrow" style={{ marginBottom: 12 }}>Top up with a conversation bundle</div>
-        <div className="grid g-3 rise" style={{ marginBottom: 24, animationDelay: ".1s" }}>
-          {data.bundles.map((bd) => (
-            <button
-              key={bd.hours}
-              onClick={() => setModal("bundle")}
-              className="card card-pad"
-              style={{
-                textAlign: "left",
-                borderColor: bd.popular ? "var(--purple)" : "var(--line)",
-                boxShadow: bd.popular ? "0 0 0 1px var(--purple)" : "var(--shadow-card)",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 30 }}>
-                  +{bd.hours}
-                  <span style={{ fontSize: 16 }}>hrs</span>
-                </span>
-                {bd.popular && (
-                  <span className="chip purple" style={{ padding: "3px 10px" }}>
-                    Popular
-                  </span>
-                )}
-              </div>
-              <div className="muted" style={{ fontSize: 13.5, marginBottom: 14 }}>
-                ≈ {bd.hours} more hours of practice across your team.
-              </div>
-              <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 22 }} className="mint-text">
-                ${bd.priceUsd}
-              </div>
-            </button>
-          ))}
+        {/* buy minutes (slider) */}
+        <div style={{ marginBottom: 24 }}>
+          <MinutePurchase defaultPeople={recommendPeople} />
         </div>
 
         {/* invoices */}
         <div className="eyebrow" style={{ marginBottom: 12 }}>Invoices</div>
-        <div className="card rise" style={{ overflowX: "auto", animationDelay: ".15s" }}>
+        <div className="card rise" style={{ overflowX: "auto" }}>
           {data.invoices.length === 0 ? (
-            <div className="card-pad muted" style={{ fontSize: 13.5 }}>
-              No invoices yet. Seat charges and bundle receipts will appear here once billing is live.
-            </div>
+            <div className="card-pad muted" style={{ fontSize: 13.5 }}>No invoices yet. Access charges and minute receipts will appear here once billing is live.</div>
           ) : (
             <div style={{ minWidth: 520 }}>
               {data.invoices.map((inv, i) => (
-                <div
-                  key={i}
-                  style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr 90px", gap: 16, alignItems: "center", padding: "14px 22px", borderTop: i ? "1px solid var(--line-soft)" : "none" }}
-                >
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr 90px", gap: 16, alignItems: "center", padding: "14px 22px", borderTop: i ? "1px solid var(--line-soft)" : "none" }}>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{inv.date}</div>
                   <div className="muted" style={{ fontSize: 13.5 }}>{inv.desc}</div>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{inv.amount}</div>
-                  <div>
-                    <span className="chip mint" style={{ padding: "3px 11px", fontSize: 12 }}>{inv.status}</span>
-                  </div>
+                  <div><span className="chip mint" style={{ padding: "3px 11px", fontSize: 12 }}>{inv.status}</span></div>
                 </div>
               ))}
             </div>
@@ -217,17 +134,7 @@ export function BillingClient({
         </div>
       </div>
 
-      {modal === "bundle" && <BundleModal bundles={data.bundles} onClose={() => setModal(null)} />}
-      {modal === "invite" && <InviteModal seatsFree={seatsFree} onClose={() => setModal(null)} />}
-      {modal === "subscribe" && (
-        <SubscribeModal
-          currentTier={data.tier}
-          currentSeats={data.seats}
-          currentCadence={data.cadence}
-          foundersOpen={data.foundersOpen}
-          onClose={() => setModal(null)}
-        />
-      )}
+      {invite && <InviteModal seatsFree={seatsFree} onClose={() => setInvite(false)} />}
     </>
   );
 }

@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/db";
-import { drawDownUsage } from "@/lib/usage";
 import { recomputeRecommendations } from "@/lib/coaching";
 import { updateSetterMemory } from "@/lib/memory";
 import { recomputeLeaderboards } from "@/lib/leaderboard";
@@ -41,7 +40,6 @@ export async function ingestPostCall(
       where: { id: session.id },
       data: { status: "COMPLETED", completedAt: new Date(), durationSeconds: duration },
     });
-    await drawDownUsage(session.officeId, duration);
     return { ok: true, sessionId: session.id, kind: "coach" };
   }
 
@@ -161,7 +159,6 @@ export async function scoreSession(
   // recommendations, or hit a leaderboard (the prospect isn't a customer).
   if (session.isAudit) return { ok: true, source: source + "-audit" };
 
-  await drawDownUsage(session.officeId, duration);
   await recomputeRecommendations(session.setterId);
   await updateSetterMemory(session.setterId);
   await recomputeLeaderboards(session.officeId);

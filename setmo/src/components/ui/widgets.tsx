@@ -105,34 +105,36 @@ export function Ring({
   );
 }
 
-// --- allowance meter ---
+// --- minute-balance meter ---
 export function AllowanceMeter({
-  poolUsed,
-  poolTotal,
-  label = "Team practice pool",
+  remainingMin,
+  purchasedMin,
+  usedMin,
+  label = "Practice minutes",
 }: {
-  poolUsed: number;
-  poolTotal: number;
+  remainingMin: number;
+  purchasedMin: number;
+  usedMin: number;
   label?: string;
 }) {
-  const pct = poolTotal > 0 ? Math.min(100, (poolUsed / poolTotal) * 100) : 0;
-  const remain = Math.max(0, poolTotal - poolUsed).toFixed(1);
-  const low = pct > 80;
+  const pct = purchasedMin > 0 ? Math.min(100, (usedMin / purchasedMin) * 100) : 0;
+  const remain = Math.max(0, remainingMin);
+  const low = purchasedMin > 0 && remain <= purchasedMin * 0.2;
   return (
     <div className={"allow" + (low ? " low" : "")}>
       <div className="row">
         <span>{label}</span>
-        <b>{remain} hrs left</b>
+        <b>{remain.toLocaleString()} min left</b>
       </div>
       <div className="bar">
         <i style={{ width: pct + "%" }} />
       </div>
       <div className="row" style={{ margin: "7px 0 0" }}>
         <span>
-          {poolUsed.toFixed(1)} of {poolTotal.toFixed(1)} hrs used
+          {usedMin.toLocaleString()} of {purchasedMin.toLocaleString()} min used
         </span>
         <span style={{ color: low ? "var(--amber)" : "var(--mint)" }}>
-          {low ? "Running low" : "Healthy"}
+          {purchasedMin === 0 ? "Buy minutes" : low ? "Running low" : "Healthy"}
         </span>
       </div>
     </div>

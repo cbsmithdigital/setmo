@@ -1,10 +1,8 @@
 import { requireRole } from "@/lib/auth";
 import { resolveAnalyticsRange } from "@/lib/queries";
-import { getOfficeTeam, getOfficeOverview, getOfficeSkillMatrix } from "@/lib/office";
-import { BUNDLES } from "@/lib/stripe";
+import { getOfficeTeam, getOfficeSkillMatrix } from "@/lib/office";
 import { TeamTable } from "@/components/office/TeamTable";
 import { InviteButton } from "@/components/office/InviteButton";
-import { BuyBundleButton } from "@/components/office/BuyBundleButton";
 import { ProgressControls } from "@/components/progress/ProgressControls";
 import { SkillMatrix } from "@/components/office/SkillMatrix";
 import { Icon } from "@/components/ui/Icon";
@@ -25,12 +23,10 @@ export default async function OfficeTeamPage({
   const user = await requireRole("OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN");
   const sp = await searchParams;
   const { key, range, label } = resolveAnalyticsRange(sp);
-  const [team, overview, matrix] = await Promise.all([
+  const [team, matrix] = await Promise.all([
     getOfficeTeam(user.officeId!, range),
-    getOfficeOverview(user.officeId!, range),
     getOfficeSkillMatrix(user.officeId!, range),
   ]);
-  const seatsFree = Math.max(0, overview.seats - overview.activeSetters);
 
   return (
     <>
@@ -41,8 +37,7 @@ export default async function OfficeTeamPage({
         </div>
         <div className="tb-right" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <ProgressControls active={key} from={sp.from} to={sp.to} basePath="/office/team" presets={PRESETS} />
-          <BuyBundleButton bundles={BUNDLES} />
-          <InviteButton seatsFree={seatsFree} />
+          <InviteButton />
         </div>
       </div>
       <div className="content">

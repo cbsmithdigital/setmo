@@ -149,27 +149,18 @@ async function main() {
     });
   }
 
-  // ---------- subscription ----------
+  // ---------- access subscription (flat $44.95/mo per location) ----------
   await prisma.subscription.upsert({
     where: { officeId: OFFICE_ID },
-    update: { seats: 12, planTier: "PRACTICE", isFounder: true, cadence: "QUARTERLY", status: "ACTIVE" },
-    create: { officeId: OFFICE_ID, seats: 12, planTier: "PRACTICE", isFounder: true, cadence: "QUARTERLY", status: "ACTIVE" },
+    update: { status: "ACTIVE" },
+    create: { officeId: OFFICE_ID, status: "ACTIVE" },
   });
 
-  // ---------- allowance period (current month; 36h pool, 22.4h used) ----------
+  // ---------- minute balance (rolling; purchased − used) ----------
   const now = new Date();
-  const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  await prisma.allowancePeriod.deleteMany({ where: { officeId: OFFICE_ID } });
-  await prisma.allowancePeriod.create({
-    data: {
-      officeId: OFFICE_ID,
-      periodStart,
-      periodEnd,
-      includedSeconds: BigInt(12 * 5 * 3600), // 12 seats × 5h
-      bundleSeconds: BigInt(0),
-      consumedSeconds: BigInt(Math.round(22.4 * 3600)),
-    },
+  await prisma.conversationBundle.deleteMany({ where: { officeId: OFFICE_ID } });
+  await prisma.conversationBundle.create({
+    data: { officeId: OFFICE_ID, hours: 20, minutesPurchased: 1200, minutesRemaining: 1200 },
   });
 
   // ---------- trainings catalog ----------

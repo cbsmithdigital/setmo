@@ -54,7 +54,7 @@ export default async function DashboardPage() {
           <p>Ready to run a rep? Every session sharpens the real thing.</p>
         </div>
         <div className="tb-right">
-          <AllowanceMeter poolUsed={d.allowance.poolUsed} poolTotal={d.allowance.poolTotal} />
+          <AllowanceMeter remainingMin={d.allowance.remainingMin} purchasedMin={d.allowance.purchasedMin} usedMin={d.allowance.usedMin} />
         </div>
       </div>
 

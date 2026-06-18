@@ -18,7 +18,7 @@ export default async function TrainingsPage() {
           <p>Fresh coaching, picked from how you actually scored.</p>
         </div>
         <div className="tb-right">
-          <AllowanceMeter poolUsed={allowance.poolUsed} poolTotal={allowance.poolTotal} />
+          <AllowanceMeter remainingMin={allowance.remainingMin} purchasedMin={allowance.purchasedMin} usedMin={allowance.usedMin} />
         </div>
       </div>
       <TrainingsClient

@@ -1,11 +1,11 @@
 import type Stripe from "stripe";
 import { prisma } from "@/lib/db";
 import { constructWebhookEvent } from "@/lib/stripe";
-import { currentPeriod } from "@/lib/usage";
+import { addMinutes } from "@/lib/usage";
 import { error, json } from "@/lib/api";
 
 // POST /api/webhooks/stripe — signature-verified billing sync.
-// Never grants time before payment is confirmed.
+// Never grants minutes before payment is confirmed.
 export async function POST(req: Request) {
   const raw = await req.text();
   const signature = req.headers.get("stripe-signature");
@@ -20,16 +20,15 @@ export async function POST(req: Request) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object;
-      if (session.metadata?.kind === "bundle" && session.payment_status === "paid") {
-        await applyBundle(session);
-      } else if (session.metadata?.kind === "audit" && session.payment_status === "paid") {
-        await activatePaidAudit(session);
+      if (session.metadata?.kind === "minutes" && session.payment_status === "paid") {
+        await applyMinutes(session);
       }
       break;
     }
     case "customer.subscription.created":
-    case "customer.subscription.updated": {
-      await syncSubscription(event.data.object);
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted": {
+      await syncAccess(event.data.object);
       break;
     }
     default:
@@ -39,100 +38,35 @@ export async function POST(req: Request) {
   return json({ received: true });
 }
 
-async function applyBundle(session: Stripe.Checkout.Session) {
+// One-time minute purchase → append to the location's rolling balance.
+async function applyMinutes(session: Stripe.Checkout.Session) {
   const officeId = session.metadata?.officeId;
-  const hours = Number(session.metadata?.hours ?? 0);
-  if (!officeId || !hours) return;
+  const minutes = Number(session.metadata?.minutes ?? 0);
+  if (!officeId || !minutes) return;
 
-  const paymentRef =
-    typeof session.payment_intent === "string" ? session.payment_intent : session.id;
-
-  // Idempotent: skip if this payment already created a bundle.
-  const existing = await prisma.conversationBundle.findFirst({
-    where: { stripePaymentIntent: paymentRef },
-  });
-  if (existing) return;
-
-  const minutes = hours * 60;
-  await prisma.conversationBundle.create({
-    data: {
-      officeId,
-      hours,
-      minutesPurchased: minutes,
-      minutesRemaining: minutes,
-      stripePaymentIntent: paymentRef,
-    },
-  });
-
-  // Top up the current pool immediately.
-  const period = await currentPeriod(officeId);
-  if (period) {
-    await prisma.allowancePeriod.update({
-      where: { id: period.id },
-      data: { bundleSeconds: { increment: BigInt(hours * 3600) } },
-    });
-  }
-}
-
-async function activatePaidAudit(session: Stripe.Checkout.Session) {
-  const auditId = session.metadata?.auditId;
-  if (!auditId) return;
   const paymentRef = typeof session.payment_intent === "string" ? session.payment_intent : session.id;
+  const existing = await prisma.conversationBundle.findFirst({ where: { stripePaymentIntent: paymentRef } });
+  if (existing) return; // idempotent
 
-  const audit = await prisma.setterAudit.findUnique({ where: { id: auditId } });
-  if (!audit || audit.stripePaymentIntent) return; // idempotent
-
-  await prisma.setterAudit.update({
-    where: { id: auditId },
-    data: {
-      approved: true,
-      isFree: false,
-      stripePaymentIntent: paymentRef,
-      // Only open it up if it isn't already finished.
-      status: audit.status === "SCORED" ? "SCORED" : "ACTIVE",
-    },
-  });
+  await addMinutes(officeId, minutes, paymentRef);
 }
 
-async function syncSubscription(sub: Stripe.Subscription) {
+// Flat Practice Access subscription → status + period only (no tiers/seats).
+async function syncAccess(sub: Stripe.Subscription) {
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
   const officeId =
     sub.metadata?.officeId ??
-    (customerId
-      ? (await prisma.office.findFirst({ where: { stripeCustomerId: customerId } }))?.id
-      : undefined);
+    (customerId ? (await prisma.office.findFirst({ where: { stripeCustomerId: customerId } }))?.id : undefined);
   if (!officeId) return;
 
   const item = sub.items.data[0];
-  const interval = item?.price?.recurring?.interval;
-  const intervalCount = item?.price?.recurring?.interval_count ?? 1;
-  const cadence = interval === "year" ? "ANNUAL" : interval === "month" && intervalCount === 3 ? "QUARTERLY" : "QUARTERLY";
   const status = sub.status === "active" ? "ACTIVE" : sub.status === "past_due" ? "PAST_DUE" : "CANCELED";
   const periodEnd = item?.current_period_end ? new Date(item.current_period_end * 1000) : null;
 
-  const planTier = (sub.metadata?.planTier as "TEAM" | "PRACTICE" | "GROUP") ?? "TEAM";
-  const isFounder = sub.metadata?.isFounder === "true";
-  // setter seats drive the pooled allowance; prefer the metadata we set at checkout
-  const seats = Number(sub.metadata?.setterSeats ?? item?.quantity ?? 1);
-
   await prisma.subscription.upsert({
     where: { officeId },
-    update: { stripeCustomerId: customerId, stripeSubscriptionId: sub.id, seats, planTier, isFounder, cadence, status, currentPeriodEnd: periodEnd },
-    create: { officeId, stripeCustomerId: customerId, stripeSubscriptionId: sub.id, seats, planTier, isFounder, cadence, status, currentPeriodEnd: periodEnd },
+    update: { stripeCustomerId: customerId, stripeSubscriptionId: sub.id, status, currentPeriodEnd: periodEnd },
+    create: { officeId, stripeCustomerId: customerId, stripeSubscriptionId: sub.id, status, currentPeriodEnd: periodEnd },
   });
-
-  await prisma.office.update({
-    where: { id: officeId },
-    data: { seatCount: seats, ...(customerId ? { stripeCustomerId: customerId } : {}) },
-  });
-
-  // Keep the pooled allowance in sync: setter seats × 5h.
-  const { currentPeriod } = await import("@/lib/usage");
-  const period = await currentPeriod(officeId);
-  if (period) {
-    await prisma.allowancePeriod.update({
-      where: { id: period.id },
-      data: { includedSeconds: BigInt(seats * 5 * 3600) },
-    });
-  }
+  if (customerId) await prisma.office.update({ where: { id: officeId }, data: { stripeCustomerId: customerId } });
 }

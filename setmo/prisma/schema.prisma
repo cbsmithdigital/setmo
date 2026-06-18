@@ -167,7 +167,6 @@ model Office {
   users        User[]
   services     OfficeService[]
   sessions     Session[]
-  periods      AllowancePeriod[]
   bundles      ConversationBundle[]
   subscription Subscription?
   outcomes     OfficeOutcome[]
@@ -388,6 +387,7 @@ model SetterAudit {
   estimatedRecovery Json?        @map("estimated_recovery")
   stripePaymentIntent String?    @map("stripe_payment_intent")
   baselineAt   DateTime?         @map("baseline_at")
+  lastInviteAt DateTime?         @map("last_invite_at") // bimonthly prospect re-engagement
   createdAt    DateTime          @default(now()) @map("created_at")
 
   office   Office    @relation(fields: [officeId], references: [id])
@@ -512,20 +512,6 @@ model Subscription {
   @@map("subscription")
 }
 
-model AllowancePeriod {
-  id              String   @id @default(uuid())
-  officeId        String   @map("office_id")
-  periodStart     DateTime @map("period_start")
-  periodEnd       DateTime @map("period_end")
-  includedSeconds BigInt   @default(0) @map("included_seconds") // seats × 5h × 3600
-  bundleSeconds   BigInt   @default(0) @map("bundle_seconds")
-  consumedSeconds BigInt   @default(0) @map("consumed_seconds") // incremented server-side
-
-  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
-
-  @@index([officeId])
-  @@map("allowance_period")
-}
 
 model ConversationBundle {
   id                  String    @id @default(uuid())

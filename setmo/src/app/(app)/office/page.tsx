@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { getOfficeOverview, currentPeriod, getOutcome } from "@/lib/office";
-import { BUNDLES } from "@/lib/stripe";
 import { StatTile } from "@/components/ui/StatTile";
 import { Sparkline, Delta } from "@/components/ui/widgets";
-import { BuyBundleButton } from "@/components/office/BuyBundleButton";
+import { Icon } from "@/components/ui/Icon";
 import { InviteButton } from "@/components/office/InviteButton";
 import { OutcomesCard } from "@/components/office/OutcomesCard";
 import { OutcomesInsight } from "@/components/office/OutcomesInsight";
@@ -26,10 +25,9 @@ export default async function OfficeOverviewPage() {
     getOfficeOutcomeFunnel(user.officeId!, period.label),
     getInsight("OFFICE", user.officeId!),
   ]);
-  const seatsFree = Math.max(0, o.seats - o.activeSetters);
-  const poolPct = o.allowance.poolTotal > 0 ? Math.round((o.allowance.poolUsed / o.allowance.poolTotal) * 100) : 0;
-  const remain = Math.max(0, o.allowance.poolTotal - o.allowance.poolUsed);
-  const low = poolPct > 80;
+  const { purchasedMin, usedMin, remainingMin } = o.allowance;
+  const poolPct = purchasedMin > 0 ? Math.round((usedMin / purchasedMin) * 100) : 0;
+  const low = purchasedMin > 0 && remainingMin <= purchasedMin * 0.2;
 
   return (
     <>
@@ -38,12 +36,12 @@ export default async function OfficeOverviewPage() {
           <h1>{o.practiceName}</h1>
           <p>
             {o.city ? `${o.city} · ` : ""}
-            {o.activeSetters} of {o.seats} seats active
+            {o.activeSetters} active setter{o.activeSetters === 1 ? "" : "s"}
           </p>
         </div>
         <div className="tb-right" style={{ display: "flex", gap: 10 }}>
-          <BuyBundleButton bundles={BUNDLES} />
-          <InviteButton seatsFree={seatsFree} />
+          <Link className="btn btn-ghost" href="/office/billing"><Icon name="card" size={16} /> Buy minutes</Link>
+          <InviteButton />
         </div>
       </div>
 
@@ -119,23 +117,23 @@ export default async function OfficeOverviewPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div className="card card-pad rise" style={{ animationDelay: ".1s" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                <h3 style={{ fontSize: 17 }}>Practice pool</h3>
+                <h3 style={{ fontSize: 17 }}>Minute balance</h3>
                 <span className={"chip " + (low ? "amber" : "mint")} style={{ padding: "3px 10px" }}>
-                  {low ? "Running low" : "Healthy"}
+                  {purchasedMin === 0 ? "Buy minutes" : low ? "Running low" : "Healthy"}
                 </span>
               </div>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginBottom: 6 }}>
                 <span className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 42, lineHeight: 1 }}>
-                  {remain.toFixed(1)}
+                  {remainingMin.toLocaleString()}
                 </span>
                 <span className="muted" style={{ fontSize: 15, fontWeight: 600, paddingBottom: 6 }}>
-                  hrs left of {o.allowance.poolTotal.toFixed(0)}
+                  min left{purchasedMin > 0 ? ` of ${purchasedMin.toLocaleString()}` : ""}
                 </span>
               </div>
               <div style={{ height: 9, borderRadius: 99, background: "#181828", overflow: "hidden", margin: "8px 0 14px" }}>
                 <div style={{ height: "100%", width: poolPct + "%", background: low ? "linear-gradient(90deg,#f59e0b,#ef4444)" : "var(--grad-mint)", borderRadius: 99 }} />
               </div>
-              <BuyBundleButton bundles={BUNDLES} label="Buy a conversation bundle" block />
+              <Link className="btn btn-primary" href="/office/billing" style={{ width: "100%", justifyContent: "center" }}><Icon name="card" size={16} /> Buy minutes</Link>
             </div>
 
             <div className="card card-pad rise" style={{ animationDelay: ".15s" }}>

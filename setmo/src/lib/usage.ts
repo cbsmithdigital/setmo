@@ -1,40 +1,33 @@
 import { prisma } from "@/lib/db";
 
-// Minimum remaining time required to start a new session (no auto-overage).
+// Minimum remaining time required to start a new (non-assessment) session.
 const MIN_START_SECONDS = 60;
 
-export async function currentPeriod(officeId: string) {
-  return prisma.allowancePeriod.findFirst({
-    where: { officeId },
-    orderBy: { periodStart: "desc" },
+// Pay-as-you-go minute balance per location: purchased minutes (roll over, never
+// reset) minus minutes consumed by real calls. Assessment (isAudit) calls are
+// free — SetMo covers them — so they never count against the balance.
+export async function getMinuteBalance(officeId: string): Promise<{ purchasedMin: number; usedMin: number; remainingMin: number; remainingSeconds: number }> {
+  const [purchases, used] = await Promise.all([
+    prisma.conversationBundle.aggregate({ where: { officeId }, _sum: { minutesPurchased: true } }),
+    prisma.session.aggregate({ where: { officeId, isAudit: false, durationSeconds: { not: null } }, _sum: { durationSeconds: true } }),
+  ]);
+  const purchasedMin = purchases._sum.minutesPurchased ?? 0;
+  const usedMin = Math.round((used._sum.durationSeconds ?? 0) / 60);
+  const remainingMin = purchasedMin - usedMin;
+  return { purchasedMin, usedMin, remainingMin, remainingSeconds: Math.max(0, remainingMin * 60) };
+}
+
+/** Append purchased minutes to a location's rolling balance (one row per purchase). */
+export async function addMinutes(officeId: string, minutes: number, stripePaymentIntent?: string | null) {
+  return prisma.conversationBundle.create({
+    data: { officeId, minutesPurchased: minutes, minutesRemaining: minutes, hours: Math.round(minutes / 60), stripePaymentIntent: stripePaymentIntent ?? null },
   });
 }
 
-export function periodRemainingSeconds(p: {
-  includedSeconds: bigint;
-  bundleSeconds: bigint;
-  consumedSeconds: bigint;
-}) {
-  return Number(p.includedSeconds) + Number(p.bundleSeconds) - Number(p.consumedSeconds);
-}
-
-/** Pre-session gate: is there enough pool to start? */
-export async function canStartSession(officeId: string): Promise<{
-  ok: boolean;
-  remainingSeconds: number;
-}> {
-  const p = await currentPeriod(officeId);
-  if (!p) return { ok: false, remainingSeconds: 0 };
-  const remaining = periodRemainingSeconds(p);
-  return { ok: remaining > MIN_START_SECONDS, remainingSeconds: Math.max(0, remaining) };
-}
-
-/** Draw down the pool by a session's duration (called server-side at score capture). */
-export async function drawDownUsage(officeId: string, seconds: number): Promise<void> {
-  const p = await currentPeriod(officeId);
-  if (!p) return;
-  await prisma.allowancePeriod.update({
-    where: { id: p.id },
-    data: { consumedSeconds: { increment: BigInt(Math.max(0, Math.round(seconds))) } },
-  });
+/** Pre-session gate. Assessment calls are always allowed (free); practice/coach
+ *  calls require a positive balance. */
+export async function canStartSession(officeId: string, opts: { isAudit?: boolean } = {}): Promise<{ ok: boolean; remainingSeconds: number }> {
+  if (opts.isAudit) return { ok: true, remainingSeconds: Number.POSITIVE_INFINITY };
+  const b = await getMinuteBalance(officeId);
+  return { ok: b.remainingSeconds > MIN_START_SECONDS, remainingSeconds: b.remainingSeconds };
 }

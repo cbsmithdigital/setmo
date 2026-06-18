@@ -1,23 +1,15 @@
 import { prisma } from "@/lib/db";
+import { getMinuteBalance } from "@/lib/usage";
 import { skillName, skillTier, rubricFor, type SkillTierKey } from "@/lib/skills";
 import { SERVICE_META, SERVICE_ORDER } from "@/lib/service-meta";
 import { fullName, initialsOf } from "@/lib/format";
 import type { ServiceKey } from "@/generated/prisma/client";
 
 // ---------- allowance pool ----------
+// Minute balance for a location (purchased − used, rolling). Field names kept
+// minute-first; see getMinuteBalance in usage.ts for the source of truth.
 export async function getAllowance(officeId: string) {
-  const period = await prisma.allowancePeriod.findFirst({
-    where: { officeId },
-    orderBy: { periodStart: "desc" },
-  });
-  if (!period) return { poolUsed: 0, poolTotal: 0, remainingSeconds: 0 };
-  const total = Number(period.includedSeconds) + Number(period.bundleSeconds);
-  const consumed = Number(period.consumedSeconds);
-  return {
-    poolUsed: consumed / 3600,
-    poolTotal: total / 3600,
-    remainingSeconds: Math.max(0, total - consumed),
-  };
+  return getMinuteBalance(officeId);
 }
 
 // ---------- service picker ----------
@@ -451,43 +443,23 @@ export async function getOfficeCatalog(officeId: string) {
 
 // ---------- office billing ----------
 export async function getOfficeBilling(officeId: string) {
-  const { getStripe, isStripeConfigured, BUNDLES } = await import("@/lib/stripe");
-  const { planTotal, foundersOpen, TIERS } = await import("@/lib/pricing");
-  type PlanTier = import("@/lib/pricing").PlanTier;
-  type Cadence = import("@/lib/pricing").Cadence;
+  const { getStripe, isStripeConfigured, ACCESS_MONTHLY_USD } = await import("@/lib/stripe");
 
-  const [allowance, subscription, activeSetters, office] = await Promise.all([
-    getAllowance(officeId),
+  const [balance, subscription, office] = await Promise.all([
+    getMinuteBalance(officeId),
     prisma.subscription.findUnique({ where: { officeId } }),
-    prisma.user.count({ where: { officeId, role: "SETTER", status: "ACTIVE" } }),
     prisma.office.findUnique({ where: { id: officeId } }),
   ]);
 
-  const seats = subscription?.seats ?? office?.seatCount ?? 1;
-  const tier = (subscription?.planTier ?? null) as PlanTier | null;
-  const isFounder = subscription?.isFounder ?? false;
-  const cadence = (subscription?.cadence === "ANNUAL" ? "ANNUAL" : "QUARTERLY") as Cadence;
-  // Current-plan config for displaying the charged total.
-  const cfg = {
-    tier: (tier ?? "TEAM") as PlanTier,
-    founder: isFounder,
-    seats,
-    extraSetters: Math.max(0, seats - TIERS.PRACTICE.includedSetters),
-  };
-
-  // Pull recent invoices from Stripe when wired up; otherwise empty.
+  // Recent invoices from Stripe (access charges + minute purchases) when wired up.
   let invoices: { date: string; desc: string; amount: string; status: string; url: string | null }[] = [];
   const customerId = subscription?.stripeCustomerId ?? office?.stripeCustomerId;
   if (isStripeConfigured() && customerId) {
     try {
-      const list = await getStripe().invoices.list({ customer: customerId, limit: 6 });
+      const list = await getStripe().invoices.list({ customer: customerId, limit: 8 });
       invoices = list.data.map((inv) => ({
-        date: new Date((inv.created ?? 0) * 1000).toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        }),
-        desc: inv.lines.data[0]?.description ?? `${seats} seats · ${cadence.toLowerCase()}`,
+        date: new Date((inv.created ?? 0) * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        desc: inv.lines.data[0]?.description ?? "SetMo",
         amount: `$${((inv.amount_paid ?? inv.amount_due ?? 0) / 100).toFixed(2)}`,
         status: inv.status === "paid" ? "Paid" : (inv.status ?? "—"),
         url: inv.hosted_invoice_url ?? null,
@@ -498,21 +470,13 @@ export async function getOfficeBilling(officeId: string) {
   }
 
   return {
-    allowance,
+    balance,
+    accessMonthly: ACCESS_MONTHLY_USD,
     subscribed: subscription?.status === "ACTIVE",
-    tier,
-    tierName: tier ? TIERS[tier].name : null,
-    isFounder,
-    foundersOpen: foundersOpen(),
-    seats,
-    filled: activeSetters,
-    cadence,
-    quarterlyTotal: planTotal({ ...cfg, cadence: "QUARTERLY" }),
-    annualTotal: planTotal({ ...cfg, cadence: "ANNUAL" }),
+    accessStatus: subscription?.status ?? null,
     nextInvoiceDate: subscription?.currentPeriodEnd
       ? subscription.currentPeriodEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
       : null,
-    bundles: BUNDLES,
     invoices,
   };
 }
