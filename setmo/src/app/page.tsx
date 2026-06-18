@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
+import { PricingSlider } from "@/components/marketing/PricingSlider";
 import "./marketing.css";
 
 export const dynamic = "force-dynamic";
@@ -392,54 +393,36 @@ export default async function LandingPage() {
             <span className="fb-close">No contract</span>
           </div>
 
-          <div className="tiers">
+          <div className="tiers" style={{ gridTemplateColumns: "1fr", maxWidth: 720, margin: "0 auto" }}>
             <div className="tier good reveal">
-              <span className="ttag">Access</span>
-              <div className="tname">Practice Access</div>
-              <div className="tdesc">Everything SetMo does, for your whole practice.</div>
+              <span className="ttag">Practice Access</span>
+              <div className="tname">Everything, for your whole practice</div>
               <div className="tprice">$44.95<small> / location / mo</small></div>
-              <div className="tcad">Month-to-month · unlimited users</div>
+              <div className="tcad">Month-to-month · unlimited users · all features included</div>
               <ul className="tfeats">
                 <li><Ck />Setter practice + full 8-point scoring, coaching &amp; replacement phrases</li>
                 <li><Ck />Office-manager dashboard + <b style={{ fontWeight: 700 }}>Setty Office Coach</b></li>
                 <li><Ck />Goals &amp; rewards, leaderboards, progress &amp; recommendations</li>
                 <li><Ck />Unlimited setters, managers &amp; users — no per-seat fees</li>
               </ul>
+              <div style={{ margin: "4px 0 18px" }}>
+                <PricingSlider />
+              </div>
               <Link className="btn btn-primary" href={AUDIT_HREF}>Start with a free assessment</Link>
-              <div className="tfoot">Then add minutes as you go.</div>
+              <div className="tfoot">The assessment is free and never uses your minutes.</div>
             </div>
+          </div>
 
-            <div className="tier better reveal">
-              <span className="ttag">Usage</span>
-              <div className="tname">Minutes</div>
-              <div className="tdesc">Pay only for the practice you actually run.</div>
-              <div className="tprice">from $0.56<small> / min</small></div>
-              <div className="tcad">Buy any amount — the more you buy, the lower the rate</div>
-              <ul className="tfeats">
-                <li><Ck />Every practice &amp; coaching call draws from your balance</li>
-                <li><Ck />Minutes <b style={{ fontWeight: 700 }}>roll over</b> — they never expire</li>
-                <li><Ck />$0.72/min to start, down to $0.56/min at volume</li>
-                <li><Ck />We recommend a starting balance from your team size</li>
-              </ul>
-              <Link className="btn btn-ghost" href={AUDIT_HREF}>Try it free</Link>
-              <div className="tfoot">Assessment minutes are always on us.</div>
-            </div>
-
-            <div className="tier best reveal">
-              <span className="ttag">Groups &amp; DSOs</span>
-              <div className="tname">Multi-location</div>
-              <div className="tdesc">Same flat model — plus group tools, free at 2+.</div>
-              <div className="tprice">$44.95<small> / location / mo</small></div>
-              <div className="tcad">Group command center + Setty Advisor included at 2+ locations</div>
-              <ul className="tfeats">
-                <li><Ck />Each location pays access &amp; buys its own minutes</li>
-                <li><Ck />Multi-location command center across offices and brands</li>
-                <li><Ck /><b style={{ fontWeight: 700 }}>Setty Advisor</b> — portfolio decision support, included free</li>
-                <li><Ck />Playbook rollout across every location</li>
-              </ul>
-              <a className="btn btn-primary" href={DEMO_MAILTO}>Talk to us</a>
-              <div className="tfoot">Coaches, consultants &amp; vendors: contact us for distribution.</div>
-            </div>
+          {/* groups & DSOs — a benefits callout, not a separate plan */}
+          <div className="reveal" style={{ maxWidth: 720, margin: "30px auto 0", textAlign: "center" }}>
+            <span className="eyebrow">Groups &amp; DSOs</span>
+            <h3 style={{ fontSize: 23, margin: "10px 0 10px", color: "var(--ink)" }}>Running 2+ locations? The group tools are on us.</h3>
+            <p style={{ color: "var(--m-muted)", maxWidth: "46em", margin: "0 auto 14px", fontSize: 15.5 }}>
+              Same flat $44.95 per location, each with its own minute balance — no special tier, no custom pricing. The moment you run two or more, your group admin unlocks, free, the multi-location command center and <b style={{ color: "var(--ink-soft)", fontWeight: 700 }}>Setty Advisor</b>: every office side by side, automatic outlier and top-performer detection, and one-click playbook rollout across the group.
+            </p>
+            <p style={{ color: "var(--m-muted)", fontSize: 14 }}>
+              Coaches, consultants &amp; vendors — <a href={DEMO_MAILTO} style={{ color: "var(--purple-deep)", fontWeight: 600 }}>contact us for distribution</a>.
+            </p>
           </div>
         </div>
       </section>
