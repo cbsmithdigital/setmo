@@ -174,7 +174,20 @@ async function main() {
     });
   }
 
-  console.log(`\n✅ Meridian demo refreshed: ${totalSessions} sessions across ${PLAN.length} locations + ${OUTCOMES.length} reported outcomes (${pk}).`);
+  // Flat Practice Access + a rolling minute balance per location (new pricing
+  // model), so the billing + balance UI reads healthily across the group.
+  const allOffices = await prisma.office.findMany({ where: { name: { in: PLAN.map((p) => p.office) } }, select: { id: true } });
+  for (const o of allOffices) {
+    await prisma.subscription.upsert({
+      where: { officeId: o.id },
+      update: { status: "ACTIVE" },
+      create: { officeId: o.id, status: "ACTIVE" },
+    });
+    await prisma.conversationBundle.deleteMany({ where: { officeId: o.id } });
+    await prisma.conversationBundle.create({ data: { officeId: o.id, hours: 33, minutesPurchased: 2000, minutesRemaining: 2000 } });
+  }
+
+  console.log(`\n✅ Meridian demo refreshed: ${totalSessions} sessions across ${PLAN.length} locations + ${OUTCOMES.length} reported outcomes (${pk}) + flat access & 2,000-min balances.`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

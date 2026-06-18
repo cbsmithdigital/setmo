@@ -88,9 +88,9 @@ export default async function LandingPage() {
             </div>
             <div className="hero-note">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--mint-deep)" strokeWidth="2.5"><path d="M20 6L9 17l-5-5" /></svg>
-              <span><b>Your first Setter Audit is free.</b> No real leads at risk, ever.</span>
+              <span><b>Your Setter Assessment is free.</b> No real leads at risk, ever.</span>
             </div>
-            <div className="founders"><span className="dotf" /> Founding cohort open · limited seats</div>
+            <div className="founders"><span className="dotf" /> $44.95/mo per practice · unlimited users · month-to-month</div>
           </div>
           <div className="device-stage">
             <div className="streak-chip"><span className="ico">🔥</span><span>7-day streak<br /><span style={{ color: "var(--mint-deep)", fontWeight: 700 }}>+12% this week</span></span></div>
@@ -142,7 +142,7 @@ export default async function LandingPage() {
         <div className="wrap stats-grid">
           <div className="stat reveal"><div className="deco" style={{ background: "var(--purple)" }} /><div className="big grad-text">0</div><p>real leads burned while your team learns. Every rep is against an AI patient.</p></div>
           <div className="stat reveal"><div className="deco" style={{ background: "var(--purple)" }} /><div className="big grad-text">8</div><p>skills scored on every single call — from rapport to closing the appointment.</p></div>
-          <div className="stat reveal"><div className="deco" style={{ background: "var(--m-mint)" }} /><div className="big mint-text">5 hrs</div><p>of guided practice included per seat, every month. Drill until it&apos;s second nature.</p></div>
+          <div className="stat reveal"><div className="deco" style={{ background: "var(--m-mint)" }} /><div className="big mint-text">$44.95</div><p>per practice, per month. Unlimited users, all features — then pay-as-you-go minutes that roll over.</p></div>
         </div>
       </section>
 
@@ -329,7 +329,7 @@ export default async function LandingPage() {
                 <li><Ck />A report showing exactly where booked consults are slipping, call by call.</li>
                 <li><Ck />The gap translated into expected growth — recovered consults per month, and what that&apos;s worth in cases.</li>
               </ul>
-              <p style={{ fontSize: 15, color: "var(--ink-soft)", margin: "22px 0 6px" }}><b>Your first audit is free</b> — one per office. Additional audits are $50 each.</p>
+              <p style={{ fontSize: 15, color: "var(--ink-soft)", margin: "22px 0 6px" }}><b>The Setter Assessment is free</b> — for everyone, no card required.</p>
               <p style={{ fontSize: 14.5, color: "var(--m-muted)", maxWidth: "34em" }}>The report is yours to keep, whether you buy or not. But if the leak is as big as it usually is, SetMo is how you close it.</p>
               <div style={{ marginTop: 24 }}>
                 <Link className="btn btn-primary" href={AUDIT_HREF}>Get your free Setter Audit <Arrow /></Link>
@@ -383,79 +383,62 @@ export default async function LandingPage() {
           <div className="sec-head center reveal">
             <span className="eyebrow">Pricing</span>
             <h2>One booked consult pays for the year. The rest is <span className="mint-text">upside</span>.</h2>
-            <p>Priced against the cases you&apos;ll close, not against other software. One extra booked high-ticket consult is worth far more than a year of seats — the math isn&apos;t close. Plans run by the quarter or the year; pay annually and save ~10%.</p>
+            <p>Flat access per practice, plus pay-as-you-go minutes that roll over. Unlimited users, all features included, month-to-month — no seats to count, no contract.</p>
           </div>
 
           <div className="founders-banner reveal">
             <div className="fb-ico"><Star /></div>
-            <div><b>Founding Cohort — locked pricing for early practices and groups.</b><p>Limited seats, closing August 1, 2026. Founding pricing stays locked for the life of your plan.</p></div>
-            <span className="fb-close">Closing Aug 1</span>
+            <div><b>Flat, simple, month-to-month.</b><p>One price per practice. Unlimited setters, managers and users. Every feature included. Cancel anytime.</p></div>
+            <span className="fb-close">No contract</span>
           </div>
 
           <div className="tiers">
             <div className="tier good reveal">
-              <span className="ttag">Good · Team</span>
-              <div className="tname">Team</div>
-              <div className="tdesc">Train and score your setters.</div>
-              <div className="tprice">$199<small> / seat / mo</small></div>
-              <div className="tfound"><Star /> Founders: $129 / seat</div>
-              <div className="tcad">Quarterly or annual — annual saves ~10%</div>
+              <span className="ttag">Access</span>
+              <div className="tname">Practice Access</div>
+              <div className="tdesc">Everything SetMo does, for your whole practice.</div>
+              <div className="tprice">$44.95<small> / location / mo</small></div>
+              <div className="tcad">Month-to-month · unlimited users</div>
               <ul className="tfeats">
-                <li><Ck />Setter practice against the AI patient, fully adaptive</li>
-                <li><Ck />Full 8-point scoring, coaching &amp; replacement phrases</li>
-                <li><Ck />Progress tracking, recommendations &amp; leaderboards</li>
-                <li><Ck />5 hours of active practice per seat, pooled across your team</li>
-                <li><Ck />Top up anytime with prepaid conversation bundles</li>
+                <li><Ck />Setter practice + full 8-point scoring, coaching &amp; replacement phrases</li>
+                <li><Ck />Office-manager dashboard + <b style={{ fontWeight: 700 }}>Setty Office Coach</b></li>
+                <li><Ck />Goals &amp; rewards, leaderboards, progress &amp; recommendations</li>
+                <li><Ck />Unlimited setters, managers &amp; users — no per-seat fees</li>
               </ul>
-              <Link className="btn btn-primary" href={AUDIT_HREF}>Start for free</Link>
-              <div className="tfoot">10+ seats or more than one location? See Practice and Group.</div>
+              <Link className="btn btn-primary" href={AUDIT_HREF}>Start with a free assessment</Link>
+              <div className="tfoot">Then add minutes as you go.</div>
             </div>
 
             <div className="tier better reveal">
-              <span className="ttag">Better · Practice</span>
-              <div className="tname">Practice</div>
-              <div className="tdesc">Adds a manager dashboard + Setty Office Coach.</div>
-              <div className="tprice">$499<small> / location / mo</small></div>
-              <div className="tfound"><Star /> Founders: $349</div>
-              <div className="tcad">Includes 1 office-manager seat + 2 setter seats. Extra setters $149/mo each (Founders $99).</div>
+              <span className="ttag">Usage</span>
+              <div className="tname">Minutes</div>
+              <div className="tdesc">Pay only for the practice you actually run.</div>
+              <div className="tprice">from $0.56<small> / min</small></div>
+              <div className="tcad">Buy any amount — the more you buy, the lower the rate</div>
               <ul className="tfeats">
-                <li><Ck /><span className="inc">Everything in Team, plus:</span></li>
-                <li><Ck />Office-manager dashboard across your whole front desk</li>
-                <li><Ck /><b style={{ fontWeight: 700 }}>Setty Office Coach</b> — reads the scores, flags who to coach, builds the training</li>
-                <li><Ck />Recommended trainings and decision support, on call</li>
+                <li><Ck />Every practice &amp; coaching call draws from your balance</li>
+                <li><Ck />Minutes <b style={{ fontWeight: 700 }}>roll over</b> — they never expire</li>
+                <li><Ck />$0.72/min to start, down to $0.56/min at volume</li>
+                <li><Ck />We recommend a starting balance from your team size</li>
               </ul>
-              <a className="btn btn-ghost" href={DEMO_MAILTO}>Choose Practice</a>
-              <div className="tfoot">Most practices start here.</div>
+              <Link className="btn btn-ghost" href={AUDIT_HREF}>Try it free</Link>
+              <div className="tfoot">Assessment minutes are always on us.</div>
             </div>
 
             <div className="tier best reveal">
-              <span className="ttag">Best · Group / DSO</span>
-              <div className="tname">Group / DSO</div>
-              <div className="tdesc">Command center + Setty Advisor across every office.</div>
-              <div className="tprice">Custom</div>
-              <div className="tfound"><Star /> Founders: locked discount + roadmap input</div>
-              <div className="tcad">For groups running more than one location.</div>
+              <span className="ttag">Groups &amp; DSOs</span>
+              <div className="tname">Multi-location</div>
+              <div className="tdesc">Same flat model — plus group tools, free at 2+.</div>
+              <div className="tprice">$44.95<small> / location / mo</small></div>
+              <div className="tcad">Group command center + Setty Advisor included at 2+ locations</div>
               <ul className="tfeats">
-                <li><Ck /><span className="inc">Everything in Practice, plus:</span></li>
+                <li><Ck />Each location pays access &amp; buys its own minutes</li>
                 <li><Ck />Multi-location command center across offices and brands</li>
-                <li><Ck />Outlier and top-performer detection, fairness-weighted</li>
-                <li><Ck /><b style={{ fontWeight: 700 }}>Setty Advisor</b> — decision support trained on your group&apos;s data</li>
+                <li><Ck /><b style={{ fontWeight: 700 }}>Setty Advisor</b> — portfolio decision support, included free</li>
                 <li><Ck />Playbook rollout across every location</li>
               </ul>
               <a className="btn btn-primary" href={DEMO_MAILTO}>Talk to us</a>
-              <div className="tfoot">Owners &amp; ops leaders running multiple offices.</div>
-            </div>
-          </div>
-
-          <div className="commit">
-            <div className="commit-card win reveal">
-              <div className="pillrow"><span>85% usage in month one</span><span>Best-practices trainings in 3 weeks</span></div>
-              <h4>Commit to a quarter. Earn your first month back.</h4>
-              <p>SetMo runs on quarterly or annual plans — that&apos;s how the habit, and the results, actually form. Activate fast and your first month is on us: hit 85% of your included usage in month one and finish the best-practices trainings within your first three weeks, and we credit that month back. Conditions apply. Pay annually to save ~10%.</p>
-            </div>
-            <div className="commit-card gua reveal">
-              <h4>Still backed by a guarantee.</h4>
-              <p>If SetMo isn&apos;t sharpening your team&apos;s calls within 90 days, we&apos;ll make it right.</p>
+              <div className="tfoot">Coaches, consultants &amp; vendors: contact us for distribution.</div>
             </div>
           </div>
         </div>
@@ -473,13 +456,13 @@ export default async function LandingPage() {
               ["Is this a real phone call?", "No — it's an in-browser voice conversation with an AI patient. Your setter is logged in and practicing safely; no real leads or phone lines are involved.", true],
               ["How is a setter scored?", "The AI grades each call across eight skills on a 1–5 scale — rapport, listening, discovery, pain-point exploration, objection handling, confidence, value building, and closing — with reasoning and specific feedback for each.", false],
               ["How does the free Setter Audit work?", "Every office gets one free audit. Your setter runs a live browser session against five simulated-but-setable leads — nothing to upload. We score all five on the same 8-point rubric and send back a report showing where booked consults are leaking and what recovering them is worth. Additional audits are $50 each.", false],
-              ["What's the difference between Team, Practice, and Group?", "Team trains and scores your setters. Practice adds an office-manager dashboard and Setty Office Coach, which turns those scores into who-to-coach decisions and ready-made trainings (and includes the manager seat plus two setters). Group adds a multi-location command center and Setty Advisor for owners and ops leaders running more than one office.", false],
+              ["What does it cost?", "$44.95 per practice per month, month-to-month, with unlimited users and every feature included. On top of that you buy practice minutes as you go — they roll over and never expire, and the per-minute rate drops the more you buy. Groups get the multi-location command center and Setty Advisor free once they run 2+ locations.", false],
               ["Who is Setty?", "Setty is SetMo's AI coach. For your office manager, Setty Office Coach reads every setter's scores, points out who's slipping and why, drafts the next training, and talks through the calls and decisions you're not sure about. For groups, Setty Advisor does the same across every location for your ops leaders. The data turns into action instead of another report.", false],
-              ["How does SetMo work across multiple locations?", "The Group command center puts every office side by side — set rates, skill scores, and trends — surfaces your outliers automatically, and shows what your best offices do differently. Setty Advisor, trained on your data, recommends what to roll out where, so you can take a top location's playbook group-wide.", false],
-              ["Do I have to commit?", "SetMo runs on quarterly or annual plans — long enough for the habit and the results to take hold. To make month one count, we credit your first month back if you hit 85% of your usage and finish the best-practices trainings in your first three weeks (conditions apply). Annual plans save ~10%.", false],
-              ["What counts against my hours?", "Only actual conversation time. Each seat includes 5 hours per month, pooled across your team. When the pool runs low you'll get a warning, and you can top up with a prepaid bundle — never a surprise overage.", false],
+              ["How does SetMo work across multiple locations?", "Each location runs on the same flat access fee and its own minute balance. Once you have 2+ locations you unlock — free — the Group command center that puts every office side by side (set rates, skill scores, trends), surfaces outliers automatically, and shows what your best offices do differently. Setty Advisor, trained on your data, recommends what to roll out where.", false],
+              ["Do I have to commit?", "No. SetMo is month-to-month — cancel anytime. There's no contract and no per-seat math; you pay the flat access fee per practice and buy minutes only as you need them.", false],
+              ["What counts against my minutes?", "Only actual conversation time on practice and coaching calls. Minutes come out of your purchased balance, roll over month to month, and never expire. When you're running low you'll get a warning — never a surprise overage. The free Setter Assessment is always on us and never deducts from your balance.", false],
               ["Which call types are supported?", "SetMo launches with the implant / full-arch / denture agent — the most complex, highest-value call. Cosmetic, ortho, wisdom teeth, and general are on the roadmap and slot right in.", false],
-              ["What's the Founders Cohort?", "A limited group of early practices and groups who lock in founding pricing and help shape the roadmap. Seats are capped and the offer closes August 1, 2026; founding pricing stays locked for the life of your plan.", false],
+              ["Is the assessment really free?", "Yes. Anyone can run a 5-call Setter Assessment and get the full report at no charge — and for paying practices it never costs minutes. Prospects can take a fresh one every couple of months to track progress.", false],
               ["Do you store patient data?", "No. Every persona is fictional and AI-generated. SetMo is a training tool — it handles employee performance and practice data only, with no patient health information involved.", false],
             ].map(([q, a, open]) => (
               <details className="qa" key={q as string} open={open as boolean}>

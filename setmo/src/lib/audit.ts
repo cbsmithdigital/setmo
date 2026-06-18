@@ -27,13 +27,19 @@ export function isFreeEmailDomain(domain: string): boolean {
   return FREE_EMAIL_DOMAINS.has(domain.toLowerCase());
 }
 
-/** True if another audit on this domain already got past intake (one-free-per-practice). */
-export async function domainUsedBefore(domain: string, exceptId?: string): Promise<boolean> {
+// Prospects (not on a paid account) get one free assessment per practice every
+// 2 months. A retake inside the window routes to manual approval.
+export const ASSESSMENT_COOLDOWN_DAYS = 60;
+
+/** True if this domain already ran an assessment within the cooldown window. */
+export async function domainUsedRecently(domain: string, exceptId?: string): Promise<boolean> {
+  const since = new Date(Date.now() - ASSESSMENT_COOLDOWN_DAYS * 86400_000);
   const prior = await prisma.setterAudit.findFirst({
     where: {
       emailDomain: domain.toLowerCase(),
       id: exceptId ? { not: exceptId } : undefined,
       status: { in: ["ACTIVE", "SCORED"] },
+      createdAt: { gte: since },
     },
     select: { id: true },
   });

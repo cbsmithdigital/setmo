@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { json, error } from "@/lib/api";
 import { isEmailConfigured, sendDigestEmail } from "@/lib/email";
 import { buildOfficeDigest, buildGroupDigest, buildSetterDigest, type DigestEmail } from "@/lib/digest";
+import { sweepAssessmentInvites } from "@/lib/assessment-invites";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -55,5 +56,10 @@ export async function GET(req: Request) {
   if (want("group")) for (const id of pick(orgIds)) await run(summary.groups, await buildGroupDigest(id).catch(() => null));
   if (want("setter")) for (const id of pick(setterIds)) await run(summary.setters, await buildSetterDigest(id).catch(() => null));
 
-  return json({ ok: true, dryRun, summary, ...(dryRun ? { samples } : {}) });
+  // Bimonthly prospect re-engagement piggybacks on this weekly run (gated per
+  // prospect to once / 2 months), avoiding a separate cron entry.
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? url.origin;
+  const invites = only ? { due: 0, sent: 0, domains: [] } : await sweepAssessmentInvites(origin, dryRun).catch(() => ({ due: 0, sent: 0, domains: [] as string[] }));
+
+  return json({ ok: true, dryRun, summary, invites: { due: invites.due, sent: invites.sent }, ...(dryRun ? { samples } : {}) });
 }

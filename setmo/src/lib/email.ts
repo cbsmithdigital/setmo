@@ -109,6 +109,27 @@ export async function sendAuditApprovalRequest(opts: { practiceName: string; ema
   return true;
 }
 
+/** Bimonthly re-engagement: invite a prospect to run another free assessment. */
+export async function sendAssessmentInvite(opts: { to: string; practiceName: string; link: string }): Promise<boolean> {
+  const resend = getResend();
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!resend || !from) return false;
+  await resend.emails.send({
+    from,
+    to: opts.to,
+    subject: `${opts.practiceName}: your next free Setter Assessment is ready`,
+    html: `
+      <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
+        <h2 style="color:#7c3aed">See how your setters are doing now</h2>
+        <p>It's been a couple of months since ${opts.practiceName}'s last SetMo Setter Assessment. Run 5 quick calls and we'll score your team again — free — so you can see what's improved and where the booked-consult leaks still are.</p>
+        <p style="margin:28px 0"><a href="${opts.link}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">Start your free assessment</a></p>
+        <p style="color:#64708a;font-size:13px">If the button doesn't work, paste this link:<br>${opts.link}</p>
+      </div>
+    `,
+  });
+  return true;
+}
+
 /** Share the audit access link with a setter the prospect wants to run the calls. */
 export async function sendAuditSetterInvite(opts: { to: string; link: string; practiceName: string }): Promise<boolean> {
   const resend = getResend();
