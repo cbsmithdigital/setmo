@@ -383,8 +383,8 @@ export default async function LandingPage() {
         <div className="wrap">
           <div className="sec-head center reveal">
             <span className="eyebrow">Pricing</span>
-            <h2>One booked consult pays for the year. The rest is <span className="mint-text">upside</span>.</h2>
-            <p>Flat access per practice, plus pay-as-you-go minutes that roll over. Unlimited users, all features included, month-to-month — no seats to count, no contract.</p>
+            <h2>Everything SetMo does, for <span className="mint-text">one flat price</span>.</h2>
+            <p>$44.95 per location, month-to-month — unlimited users, every feature included, plus pay-as-you-go minutes that roll over. A serious edge for a single office, and it scales to a whole group at no extra tier.</p>
           </div>
 
           <div className="founders-banner reveal">
@@ -393,36 +393,41 @@ export default async function LandingPage() {
             <span className="fb-close">No contract</span>
           </div>
 
-          <div className="tiers" style={{ gridTemplateColumns: "1fr", maxWidth: 720, margin: "0 auto" }}>
+          <div className="tiers" style={{ gridTemplateColumns: "1fr", maxWidth: 760, margin: "0 auto" }}>
             <div className="tier good reveal">
               <span className="ttag">Practice Access</span>
-              <div className="tname">Everything, for your whole practice</div>
               <div className="tprice">$44.95<small> / location / mo</small></div>
-              <div className="tcad">Month-to-month · unlimited users · all features included</div>
+              <div className="tcad">Month-to-month · unlimited users · cancel anytime</div>
+
+              <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--ink-soft)", margin: "20px 0 10px", display: "flex", alignItems: "center", gap: 7 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--purple)" }} /> Included for every office
+              </div>
               <ul className="tfeats">
                 <li><Ck />Setter practice + full 8-point scoring, coaching &amp; replacement phrases</li>
                 <li><Ck />Office-manager dashboard + <b style={{ fontWeight: 700 }}>Setty Office Coach</b></li>
                 <li><Ck />Goals &amp; rewards, leaderboards, progress &amp; recommendations</li>
                 <li><Ck />Unlimited setters, managers &amp; users — no per-seat fees</li>
               </ul>
-              <div style={{ margin: "4px 0 18px" }}>
+
+              <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--ink-soft)", margin: "20px 0 10px", display: "flex", alignItems: "center", gap: 7 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--m-mint)" }} /> Run 2+ locations? You also get — free
+              </div>
+              <ul className="tfeats">
+                <li><Ck />Multi-location command center — every office side by side</li>
+                <li><Ck /><b style={{ fontWeight: 700 }}>Setty Advisor</b> — portfolio decision support across the group</li>
+                <li><Ck />Automatic outlier &amp; top-performer detection</li>
+                <li><Ck />One-click playbook rollout across locations</li>
+              </ul>
+
+              <div style={{ borderTop: "1px solid var(--m-line)", margin: "8px 0 18px", paddingTop: 20 }}>
                 <PricingSlider />
               </div>
-              <Link className="btn btn-primary" href={AUDIT_HREF}>Start with a free assessment</Link>
-              <div className="tfoot">The assessment is free and never uses your minutes.</div>
-            </div>
-          </div>
 
-          {/* groups & DSOs — a benefits callout, not a separate plan */}
-          <div className="reveal" style={{ maxWidth: 720, margin: "30px auto 0", textAlign: "center" }}>
-            <span className="eyebrow">Groups &amp; DSOs</span>
-            <h3 style={{ fontSize: 23, margin: "10px 0 10px", color: "var(--ink)" }}>Running 2+ locations? The group tools are on us.</h3>
-            <p style={{ color: "var(--m-muted)", maxWidth: "46em", margin: "0 auto 14px", fontSize: 15.5 }}>
-              Same flat $44.95 per location, each with its own minute balance — no special tier, no custom pricing. The moment you run two or more, your group admin unlocks, free, the multi-location command center and <b style={{ color: "var(--ink-soft)", fontWeight: 700 }}>Setty Advisor</b>: every office side by side, automatic outlier and top-performer detection, and one-click playbook rollout across the group.
-            </p>
-            <p style={{ color: "var(--m-muted)", fontSize: 14 }}>
-              Coaches, consultants &amp; vendors — <a href={DEMO_MAILTO} style={{ color: "var(--purple-deep)", fontWeight: 600 }}>contact us for distribution</a>.
-            </p>
+              <Link className="btn btn-primary" href={AUDIT_HREF}>Start with a free assessment</Link>
+              <div className="tfoot">
+                The assessment is free and never uses your minutes. Coaches, consultants &amp; vendors — <a href={DEMO_MAILTO} style={{ color: "var(--purple-deep)", fontWeight: 600 }}>contact us for distribution</a>.
+              </div>
+            </div>
           </div>
         </div>
       </section>

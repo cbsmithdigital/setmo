@@ -11,7 +11,7 @@
 export const ACCESS_MONTHLY_USD = 44.95;
 
 export const MIN_MINUTES = 240; // 1 person on the phones
-export const MAX_MINUTES = 2500; // beyond this → contact for bulk
+export const MAX_MINUTES = 1200; // beyond this → contact for bulk
 export const MINUTE_STEP = 10;
 export const BASE_PER_MIN = 0.72; // the entry rate; discounts are measured against this
 
