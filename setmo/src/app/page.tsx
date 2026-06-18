@@ -425,14 +425,9 @@ export default async function LandingPage() {
               </div>
 
               <div className="price-slider-row">
-                <div className="psr-slider">
-                  <PricingSlider />
-                </div>
-                <div className="psr-cta">
-                  <Link className="btn btn-primary" href={AUDIT_HREF} style={{ width: "100%" }}>Start with a free assessment</Link>
-                  <div className="tfoot" style={{ marginTop: 12 }}>
-                    Free assessment, never uses your minutes. Partners — <a href={DEMO_MAILTO} style={{ color: "var(--purple-deep)", fontWeight: 600 }}>contact us for distribution</a>.
-                  </div>
+                <PricingSlider />
+                <div style={{ textAlign: "center", marginTop: 20 }}>
+                  <Link className="btn btn-primary" href={AUDIT_HREF}>Start with a free assessment</Link>
                 </div>
               </div>
             </div>

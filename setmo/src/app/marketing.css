@@ -875,31 +875,11 @@
   border-left: 1px solid var(--m-line);
   padding-left: 32px;
 }
-/* slider spans the full width beneath the two columns */
+/* slider spans the full width beneath the two columns; CTA centered below it */
 .mkt .price-slider-row {
-  display: flex;
-  gap: 28px;
-  align-items: center;
   border-top: 1px solid var(--m-line);
   margin-top: 24px;
   padding-top: 22px;
-}
-.mkt .price-slider-row > .psr-slider {
-  flex: 1;
-  min-width: 280px;
-}
-.mkt .price-slider-row > .psr-cta {
-  width: 260px;
-  flex: none;
-}
-@media (max-width: 720px) {
-  .mkt .price-slider-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .mkt .price-slider-row > .psr-cta {
-    width: 100%;
-  }
 }
 .mkt .tier {
   background: var(--paper);
