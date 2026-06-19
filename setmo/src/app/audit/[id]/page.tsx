@@ -3,6 +3,7 @@ import Link from "next/link";
 import { loadAuditByCookie } from "@/lib/audit-auth";
 import { auditCallCounts, buildAuditReport, AUDIT_CALLS, AUDIT_CALL_MAX_SECONDS } from "@/lib/audit";
 import { AuditRunner } from "@/components/audit/AuditRunner";
+import { AuditClaim } from "@/components/audit/AuditClaim";
 import "../../marketing.css";
 
 export const dynamic = "force-dynamic";
@@ -146,8 +147,10 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
               <span><b>{n.skill}:</b> {n.training}</span>
             </div>
           ))}
-          <a className="btn btn-primary btn-block" href="mailto:hello@growdental.ai?subject=SetMo%20for%20our%20practice" style={{ marginTop: 18 }}>Close the gap with SetMo</a>
-          <p className="audit-note" style={{ textAlign: "center" }}>This report is your baseline, saved {r.baselineAt ? new Date(r.baselineAt).toLocaleDateString() : "today"}. The report is yours to keep.</p>
+          <AuditClaim auditId={id} />
+          <p className="audit-note" style={{ textAlign: "center" }}>
+            This report is your baseline, saved {r.baselineAt ? new Date(r.baselineAt).toLocaleDateString() : "today"}. The report is yours to keep — or <a href="mailto:hello@growdental.ai?subject=SetMo%20for%20our%20group" style={{ color: "var(--purple-deep)", fontWeight: 600 }}>talk to us about a group</a>.
+          </p>
         </div>
       </Shell>
     );

@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 // The "free audit / start free" CTAs go to the Setter Audit front door.
 const AUDIT_HREF = "/audit";
+const SIGNUP_HREF = "/signup";
 const DEMO_MAILTO = "mailto:hello@growdental.ai?subject=SetMo%20for%20our%20group";
 
 function Ck() {
@@ -62,7 +63,7 @@ export default async function LandingPage() {
             ) : (
               <>
                 <Link className="signin" href="/login">Sign in</Link>
-                <Link className="btn btn-primary" href={AUDIT_HREF}>Start free <Arrow /></Link>
+                <Link className="btn btn-primary" href={SIGNUP_HREF}>Get SetMo Now <Arrow /></Link>
               </>
             )}
           </div>
@@ -81,10 +82,10 @@ export default async function LandingPage() {
             <h1>Set more <span className="grad-text">appointments.</span></h1>
             <p className="lead">SetMo lets your front desk practice high-value lead calls against a realistic AI patient — objectively scored and personally coached. Then it gives managers and groups the data to coach the whole team. Build the skill without burning a single real lead.</p>
             <div className="hero-cta">
-              <Link className="btn btn-primary" href={AUDIT_HREF}>Start for free <Arrow /></Link>
-              <a className="btn btn-ghost" href="#audit">
+              <Link className="btn btn-primary" href={SIGNUP_HREF}>Get SetMo Now <Arrow /></Link>
+              <a className="btn btn-ghost" href={AUDIT_HREF}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M9 17V9M15 17v-4M12 17v-6" /><rect x="3" y="3" width="18" height="18" rx="3" /></svg>
-                Get your free Setter Audit
+                Get Your Free Audit
               </a>
             </div>
             <div className="hero-note">
@@ -333,7 +334,7 @@ export default async function LandingPage() {
               <p style={{ fontSize: 15, color: "var(--ink-soft)", margin: "22px 0 6px" }}><b>The Setter Assessment is free</b> — for everyone, no card required.</p>
               <p style={{ fontSize: 14.5, color: "var(--m-muted)", maxWidth: "34em" }}>The report is yours to keep, whether you buy or not. But if the leak is as big as it usually is, SetMo is how you close it.</p>
               <div style={{ marginTop: 24 }}>
-                <Link className="btn btn-primary" href={AUDIT_HREF}>Get your free Setter Audit <Arrow /></Link>
+                <Link className="btn btn-primary" href={AUDIT_HREF}>Get Your Free Audit <Arrow /></Link>
                 <p style={{ fontSize: 13, color: "var(--m-muted)", marginTop: 12 }}>No software to install. No real leads touched. Your calls, your numbers.</p>
               </div>
             </div>
@@ -426,8 +427,9 @@ export default async function LandingPage() {
 
               <div className="price-slider-row">
                 <PricingSlider />
-                <div style={{ textAlign: "center", marginTop: 20 }}>
-                  <Link className="btn btn-primary" href={AUDIT_HREF}>Start with a free assessment</Link>
+                <div style={{ textAlign: "center", marginTop: 20, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+                  <Link className="btn btn-primary" href={SIGNUP_HREF}>Get SetMo Now</Link>
+                  <Link className="btn btn-ghost" href={AUDIT_HREF}>Get Your Free Audit</Link>
                 </div>
               </div>
             </div>
@@ -472,8 +474,8 @@ export default async function LandingPage() {
             <h2>Set more, starting today.</h2>
             <p>Give your front desk the reps they can&apos;t get on live leads — and watch your set rate climb.</p>
             <div className="hero-cta" style={{ justifyContent: "center" }}>
-              <Link className="btn btn-primary" href={AUDIT_HREF}>Start for free <Arrow /></Link>
-              <a className="btn ghost-w" href="#groups">Talk to us about your group</a>
+              <Link className="btn btn-primary" href={SIGNUP_HREF}>Get SetMo Now <Arrow /></Link>
+              <Link className="btn ghost-w" href={AUDIT_HREF}>Get Your Free Audit</Link>
             </div>
           </div>
         </div>
