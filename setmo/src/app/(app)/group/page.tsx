@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { getGroupOverview } from "@/lib/group";
+import { getOnboarding } from "@/lib/office";
+import { OnboardingChecklist } from "@/components/office/OnboardingChecklist";
 import { StatTile } from "@/components/ui/StatTile";
 import { Icon } from "@/components/ui/Icon";
 
@@ -21,6 +23,7 @@ export default async function GroupPage() {
     );
   }
   const g = await getGroupOverview(user.organizationId);
+  const onboarding = user.officeId ? await getOnboarding(user.officeId) : null;
 
   return (
     <>
@@ -37,6 +40,7 @@ export default async function GroupPage() {
       </div>
 
       <div className="content">
+        {onboarding && <OnboardingChecklist data={onboarding} />}
         <div className="grid g-4 rise" style={{ marginBottom: 18 }}>
           <StatTile lab="Group average" val={g.orgAvg.toFixed(1)} grad="var(--grad-mint)" sub="across active practices" />
           <StatTile lab="Practices" val={String(g.officeCount)} sub="in this group" />

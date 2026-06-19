@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { getOfficeOverview, currentPeriod, getOutcome } from "@/lib/office";
+import { getOfficeOverview, currentPeriod, getOutcome, getOnboarding } from "@/lib/office";
+import { OnboardingChecklist } from "@/components/office/OnboardingChecklist";
 import { StatTile } from "@/components/ui/StatTile";
 import { Sparkline, Delta } from "@/components/ui/widgets";
 import { Icon } from "@/components/ui/Icon";
@@ -20,10 +21,11 @@ export default async function OfficeOverviewPage() {
   const user = await requireRole("OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN");
   const o = await getOfficeOverview(user.officeId!);
   const period = currentPeriod();
-  const [outcome, funnel, insight] = await Promise.all([
+  const [outcome, funnel, insight, onboarding] = await Promise.all([
     getOutcome(user.officeId!, period.label),
     getOfficeOutcomeFunnel(user.officeId!, period.label),
     getInsight("OFFICE", user.officeId!),
+    getOnboarding(user.officeId!),
   ]);
   const { purchasedMin, usedMin, remainingMin } = o.allowance;
   const poolPct = purchasedMin > 0 ? Math.round((usedMin / purchasedMin) * 100) : 0;
@@ -46,6 +48,7 @@ export default async function OfficeOverviewPage() {
       </div>
 
       <div className="content">
+        <OnboardingChecklist data={onboarding} />
         <SettyInsight scope="OFFICE" subjectId={user.officeId!} insight={insight} />
 
         <div className="grid g-4 rise" style={{ marginBottom: 18 }}>

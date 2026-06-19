@@ -240,6 +240,24 @@ export async function getOutcome(officeId: string, periodLabel: string) {
   return prisma.officeOutcome.findUnique({ where: { officeId_periodLabel: { officeId, periodLabel } } });
 }
 
+// First-run activation checklist for a new account. Each step auto-completes from
+// real state; the card hides once everything's done.
+export async function getOnboarding(officeId: string) {
+  const [sub, allowance, setterCount, sessionCount] = await Promise.all([
+    prisma.subscription.findUnique({ where: { officeId }, select: { status: true } }),
+    getAllowance(officeId),
+    prisma.user.count({ where: { officeId, role: "SETTER" } }),
+    prisma.session.count({ where: { officeId } }),
+  ]);
+  const steps = [
+    { key: "access", label: "Activate Practice Access", desc: "$44.95/mo — month-to-month, cancel anytime", href: "/office/billing", cta: "Activate", done: sub?.status === "ACTIVE" },
+    { key: "minutes", label: "Add practice minutes", desc: "Buy a balance — every call draws from it", href: "/office/billing", cta: "Buy minutes", done: allowance.purchasedMin > 0 },
+    { key: "team", label: "Invite your team", desc: "Add setters & managers — free and unlimited", href: "/office/team", cta: "Invite", done: setterCount >= 1 },
+    { key: "call", label: "Run your first practice call", desc: "See a call scored on the 8-skill rubric", href: "/practice", cta: "Start", done: sessionCount >= 1 },
+  ];
+  return { steps, doneCount: steps.filter((s) => s.done).length, allDone: steps.every((s) => s.done) };
+}
+
 export async function getOfficeSetterDetail(officeId: string, setterId: string, range?: AnalyticsRange) {
   const setter = await prisma.user.findFirst({
     where: { id: setterId, officeId, role: "SETTER" },
