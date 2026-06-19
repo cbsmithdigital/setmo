@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
-import { getSetterHome } from "@/lib/queries";
+import { getSetterHome, getSetterOnboarding } from "@/lib/queries";
+import { OnboardingChecklist } from "@/components/office/OnboardingChecklist";
 import { Icon } from "@/components/ui/Icon";
 import { Ring, AllowanceMeter, Delta } from "@/components/ui/widgets";
 import { greeting, mmss, whenLabel } from "@/lib/format";
@@ -42,7 +43,7 @@ function StatTile({
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const [d, insight, goals] = await Promise.all([getSetterHome(user), getInsight("SETTER", user.id), listGoalsForSetter(user.id)]);
+  const [d, insight, goals, onboarding] = await Promise.all([getSetterHome(user), getInsight("SETTER", user.id), listGoalsForSetter(user.id), getSetterOnboarding(user.id)]);
 
   return (
     <>
@@ -59,6 +60,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="content">
+        <OnboardingChecklist data={onboarding} title="Get started" subtitle="Three quick steps to get your first reps in. This disappears once you’re rolling." />
         <SettyInsight scope="SETTER" subjectId={user.id} insight={insight} />
         <SetterGoals goals={goals} compact />
 

@@ -226,6 +226,22 @@ export async function getSetterAnalytics(
   };
 }
 
+// First-run checklist for an invited setter — the core loop (rep → score →
+// coaching), not account setup. Auto-completes from real activity; hides when done.
+export async function getSetterOnboarding(setterId: string) {
+  const [practiceCount, scoredCount, coachCount] = await Promise.all([
+    prisma.session.count({ where: { setterId, kind: "PRACTICE" } }),
+    prisma.session.count({ where: { setterId, status: "SCORED", evaluation: { isNot: null } } }),
+    prisma.session.count({ where: { setterId, kind: "COACH" } }),
+  ]);
+  const steps = [
+    { key: "rep", label: "Run your first practice call", desc: "Talk to a realistic AI patient — no real leads at risk", href: "/practice", cta: "Start", done: practiceCount >= 1 },
+    { key: "score", label: "See your first score", desc: "Get graded on all 8 skills, with coaching notes", href: "/progress", cta: "View", done: scoredCount >= 1 },
+    { key: "setty", label: "Get coached by Setty", desc: "Ask Setty to break down a call and what to fix next", href: "/coach", cta: "Coach me", done: coachCount >= 1 },
+  ];
+  return { steps, doneCount: steps.filter((s) => s.done).length, allDone: steps.every((s) => s.done) };
+}
+
 export async function getSetterHome(user: {
   id: string;
   officeId: string | null;
