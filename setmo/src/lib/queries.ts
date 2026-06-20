@@ -351,7 +351,7 @@ export async function getSetterProgress(userId: string, officeId: string, range?
   const prior: AnalyticsRange = { from: new Date(current.from.getTime() - len), to: current.from };
 
   const [a, allowance] = await Promise.all([
-    getSetterAnalytics(userId, current, prior),
+    getSetterAnalytics(userId, current, prior, { allSkills: true }),
     getAllowance(officeId),
   ]);
 
