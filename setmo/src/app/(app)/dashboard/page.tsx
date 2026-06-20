@@ -54,7 +54,10 @@ export default async function DashboardPage() {
           </h1>
           <p>Ready to run a rep? Every session sharpens the real thing.</p>
         </div>
-        <div className="tb-right">
+        <div className="tb-right" style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <Link className="btn btn-primary" href="/practice">
+            <Icon name="mic" /> Start practice
+          </Link>
           <AllowanceMeter remainingMin={d.allowance.remainingMin} purchasedMin={d.allowance.purchasedMin} usedMin={d.allowance.usedMin} />
         </div>
       </div>
@@ -62,33 +65,10 @@ export default async function DashboardPage() {
       <div className="content">
         <OnboardingChecklist data={onboarding} title="Get started" subtitle="Three quick steps to get your first reps in. This disappears once you’re rolling." />
         <SettyInsight scope="SETTER" subjectId={user.id} insight={insight} />
-        <SetterGoals goals={goals} compact />
 
-        {/* hero CTA + ring */}
+        {/* goals + ring */}
         <div className="grid g-2 rise" style={{ gridTemplateColumns: "1.5fr 1fr", marginBottom: 18 }}>
-          <div
-            className="card card-pad card-glow"
-            style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", minHeight: 210, overflow: "hidden" }}
-          >
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 11 }}>
-              <div className="chip purple">
-                <Icon name="bolt" size={14} /> Ready when you are
-              </div>
-              <h2 style={{ fontSize: 30, maxWidth: "15em" }}>Run a rep against a fresh lead.</h2>
-              <p className="muted" style={{ fontSize: 15.5, maxWidth: "32em" }}>
-                Implant / full-arch · adaptive difficulty tuned to your last sessions. You won&apos;t
-                know who&apos;s calling until you pick up.
-              </p>
-            </div>
-            <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
-              <Link className="btn btn-primary btn-lg" href="/practice">
-                <Icon name="mic" /> Start practice
-              </Link>
-              <Link className="btn btn-ghost btn-lg" href="/progress">
-                View progress
-              </Link>
-            </div>
-          </div>
+          <SetterGoals goals={goals} compact />
           <div
             className="card card-pad"
             style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}

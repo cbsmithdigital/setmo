@@ -44,11 +44,10 @@ function Row({ g }: { g: SetterGoal }) {
 
 export function SetterGoals({ goals, compact }: { goals: SetterGoal[]; compact?: boolean }) {
   const active = goals.filter((g) => g.status === "ACTIVE");
-  const shown = compact ? active.slice(0, 2) : goals;
-  if (active.length === 0 && compact) return null;
+  const shown = compact ? active.slice(0, 3) : goals;
 
   return (
-    <div className="card card-pad rise" style={compact ? { marginBottom: 18 } : undefined}>
+    <div className="card card-pad rise">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h3 style={{ fontSize: 17, display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name="flame" size={16} /> {compact ? "Your goals" : "Goals & rewards"}
