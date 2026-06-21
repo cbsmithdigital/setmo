@@ -2,9 +2,13 @@ import type Stripe from "stripe";
 import { prisma } from "@/lib/db";
 import { constructWebhookEvent } from "@/lib/stripe";
 import { addMinutes } from "@/lib/usage";
+import { accrueCommission, markOfficeCommissionsEarned, clawbackOfficeCommissions } from "@/lib/partners";
 import { error, json } from "@/lib/api";
 
-// POST /api/webhooks/stripe — signature-verified billing sync.
+// Account is "earned" for partner commission once it has cleared its 2nd payment.
+const EARN_AFTER_PAYMENTS = 2;
+
+// POST /api/webhooks/stripe — signature-verified billing sync + partner accrual.
 // Never grants minutes before payment is confirmed.
 export async function POST(req: Request) {
   const raw = await req.text();
@@ -25,6 +29,10 @@ export async function POST(req: Request) {
       }
       break;
     }
+    case "invoice.paid": {
+      await onInvoicePaid(event.data.object);
+      break;
+    }
     case "customer.subscription.created":
     case "customer.subscription.updated":
     case "customer.subscription.deleted": {
@@ -38,7 +46,7 @@ export async function POST(req: Request) {
   return json({ received: true });
 }
 
-// One-time minute purchase → append to the location's rolling balance.
+// One-time minute purchase → append to balance + accrue partner commission.
 async function applyMinutes(session: Stripe.Checkout.Session) {
   const officeId = session.metadata?.officeId;
   const minutes = Number(session.metadata?.minutes ?? 0);
@@ -49,6 +57,33 @@ async function applyMinutes(session: Stripe.Checkout.Session) {
   if (existing) return; // idempotent
 
   await addMinutes(officeId, minutes, paymentRef);
+
+  const sub = await prisma.subscription.findUnique({ where: { officeId }, select: { paidInvoices: true } });
+  await accrueCommission({
+    officeId,
+    kind: "MINUTES",
+    baseCents: session.amount_total ?? 0,
+    stripeRef: `${paymentRef}:min`,
+    earned: (sub?.paidInvoices ?? 0) >= EARN_AFTER_PAYMENTS,
+  });
+}
+
+// Recurring access payment → count it, flip the 2nd-payment gate, accrue commission.
+async function onInvoicePaid(invoice: Stripe.Invoice) {
+  const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+  if (!customerId) return;
+  // The access subscription row is created by customer.subscription.created (with
+  // officeId from metadata) before the first invoice.paid, so match by customer.
+  const sub = await prisma.subscription.findFirst({ where: { stripeCustomerId: customerId }, select: { officeId: true, paidInvoices: true } });
+  if (!sub) return;
+
+  const count = sub.paidInvoices + 1;
+  await prisma.subscription.update({ where: { officeId: sub.officeId }, data: { paidInvoices: count } });
+
+  const earned = count >= EARN_AFTER_PAYMENTS;
+  await accrueCommission({ officeId: sub.officeId, kind: "ACCESS", baseCents: invoice.amount_paid ?? 0, stripeRef: invoice.id ?? `inv:${sub.officeId}:${count}`, earned });
+  // Crossing the 2nd payment earns everything that was pending for this account.
+  if (count === EARN_AFTER_PAYMENTS) await markOfficeCommissionsEarned(sub.officeId);
 }
 
 // Flat Practice Access subscription → status + period only (no tiers/seats).
@@ -69,4 +104,7 @@ async function syncAccess(sub: Stripe.Subscription) {
     create: { officeId, stripeCustomerId: customerId, stripeSubscriptionId: sub.id, status, currentPeriodEnd: periodEnd },
   });
   if (customerId) await prisma.office.update({ where: { id: officeId }, data: { stripeCustomerId: customerId } });
+
+  // Lapsed/cancelled before earning → claw back still-pending commissions.
+  if (status === "CANCELED") await clawbackOfficeCommissions(officeId);
 }

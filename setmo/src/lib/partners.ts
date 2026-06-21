@@ -135,3 +135,38 @@ export async function partnerIdForCode(code: string): Promise<string | null> {
   const row = await prisma.partnerCode.findUnique({ where: { code: code.trim().toLowerCase() }, select: { partnerId: true, partner: { select: { status: true } } } });
   return row && row.partner.status === "APPROVED" ? row.partnerId : null;
 }
+
+// ---- commission accrual (fed by the Stripe webhook) ----
+const periodKeyNow = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
+
+/** Record a commissionable charge for an office's referring partner (if any).
+ *  Idempotent on stripeRef. `earned` reflects whether the account has cleared
+ *  its 2nd payment yet (else PENDING until it does). */
+export async function accrueCommission(opts: { officeId: string; kind: "ACCESS" | "MINUTES"; baseCents: number; stripeRef: string; earned: boolean }) {
+  if (!opts.baseCents || opts.baseCents <= 0) return;
+  const office = await prisma.office.findUnique({ where: { id: opts.officeId }, select: { referredByPartnerId: true } });
+  if (!office?.referredByPartnerId) return;
+  const partner = await prisma.partner.findUnique({ where: { id: office.referredByPartnerId }, select: { id: true, status: true, track: true, customRatePct: true, payoutMethod: true } });
+  if (!partner || partner.status !== "APPROVED") return;
+  if (await prisma.partnerCommission.findFirst({ where: { stripeRef: opts.stripeRef } })) return; // idempotent
+
+  const active = await activeAccountCount(partner.id);
+  const ratePct = effectiveRatePct({ track: partner.track as Track, customRatePct: partner.customRatePct, payoutMethod: partner.payoutMethod as Payout }, active);
+  const commissionCents = Math.round((opts.baseCents * ratePct) / 100);
+  await prisma.partnerCommission.create({
+    data: { partnerId: partner.id, officeId: opts.officeId, kind: opts.kind, baseAmountCents: opts.baseCents, ratePct, commissionCents, status: opts.earned ? "EARNED" : "PENDING", payoutMethod: partner.payoutMethod, periodKey: periodKeyNow(), stripeRef: opts.stripeRef },
+  });
+}
+
+/** 2nd payment cleared → all of this office's pending commissions become earned. */
+export async function markOfficeCommissionsEarned(officeId: string) {
+  await prisma.partnerCommission.updateMany({ where: { officeId, status: "PENDING" }, data: { status: "EARNED" } });
+}
+
+/** Refund/cancel before earning → claw back this office's still-pending commissions. */
+export async function clawbackOfficeCommissions(officeId: string) {
+  await prisma.partnerCommission.updateMany({ where: { officeId, status: "PENDING" }, data: { status: "CLAWED_BACK" } });
+}

@@ -28,6 +28,7 @@ export function AuditIntake() {
           workEmail,
           caseValueUsd: num(caseValue),
           monthlyLeads: num(monthlyLeads),
+          ref: new URLSearchParams(window.location.search).get("ref"),
         }),
       });
       const data = await res.json();

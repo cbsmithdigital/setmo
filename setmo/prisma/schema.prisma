@@ -579,6 +579,7 @@ model Subscription {
   pricePerSeat         Decimal            @default(59.99) @map("price_per_seat") @db.Decimal(6, 2) // legacy
   status               SubscriptionStatus @default(ACTIVE)
   currentPeriodEnd     DateTime?          @map("current_period_end")
+  paidInvoices         Int                @default(0) @map("paid_invoices") // access payments captured (2nd → partner commission earns)
 
   office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
 

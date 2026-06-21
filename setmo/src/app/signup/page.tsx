@@ -23,10 +23,11 @@ export default function SignupPage() {
     setError(null);
     setLoading(true);
     try {
+      const ref = new URLSearchParams(window.location.search).get("ref");
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind, contactName, practiceName, orgName: kind === "group" ? orgName : undefined, email, password }),
+        body: JSON.stringify({ kind, contactName, practiceName, orgName: kind === "group" ? orgName : undefined, email, password, ref }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) { setError(j.error ?? "Could not create your account."); setLoading(false); return; }

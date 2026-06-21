@@ -10,6 +10,7 @@ const Body = z.object({
   orgName: z.string().max(160).optional().nullable(),
   email: z.string().email(),
   password: z.string().min(8).max(200),
+  ref: z.string().max(60).optional().nullable(),
 });
 
 // POST /api/auth/signup — self-serve account creation. Free signup; the practice
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
     contactName: b.contactName,
     email: b.email,
     password: b.password,
+    referralCode: b.ref ?? undefined,
   });
   if (!res.ok) return error(res.error, res.code);
   return json({ ok: true });
