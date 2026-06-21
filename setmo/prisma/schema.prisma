@@ -47,6 +47,28 @@ enum PartnerStatus {
   DISABLED
 }
 
+enum PartnerTrack {
+  REFERRAL
+  DISTRIBUTION
+}
+
+enum PartnerPayoutMethod {
+  CASH
+  CREDIT
+}
+
+enum CommissionKind {
+  ACCESS
+  MINUTES
+}
+
+enum CommissionStatus {
+  PENDING // account hasn't cleared its 2nd payment yet
+  EARNED // earned, awaiting payout
+  PAID
+  CLAWED_BACK
+}
+
 enum ServiceKey {
   IMPLANT
   DENTURE
@@ -162,6 +184,8 @@ model Office {
   seatCount        Int      @default(1) @map("seat_count")
   stripeCustomerId String?  @map("stripe_customer_id")
   isProspect       Boolean  @default(false) @map("is_prospect") // created by a pre-sale Setter Audit, not yet a customer
+  referredByPartnerId String? @map("referred_by_partner_id") // first-touch partner attribution
+  referralCode     String?  @map("referral_code")
   createdAt        DateTime @default(now()) @map("created_at")
 
   organization Organization?       @relation(fields: [organizationId], references: [id])
@@ -260,18 +284,66 @@ model Membership {
 // ---------- channel partners (v1 schema; self-serve portal is later) ----------
 
 model Partner {
-  id              String        @id @default(uuid())
-  name            String
-  type            PartnerType
-  status          PartnerStatus @default(PENDING)
-  commissionEnabled Boolean     @default(false) @map("commission_enabled")
-  commissionTerms Json?         @map("commission_terms")
-  createdAt       DateTime      @default(now()) @map("created_at")
+  id            String              @id @default(uuid())
+  name          String // org name (solo = org of one)
+  orgType       String?             @map("org_type") // firm / manufacturer / coach (free text)
+  contactName   String?             @map("contact_name")
+  email         String?
+  audience      String? // who they reach (application context)
+  track         PartnerTrack        @default(REFERRAL)
+  status        PartnerStatus       @default(PENDING)
+  payoutMethod  PartnerPayoutMethod @default(CASH)
+  customRatePct Int?                @map("custom_rate_pct") // strategic override (cash %); null = standard table
+  stripeConnectId String?           @map("stripe_connect_id") // payout rail (Stripe Connect)
+  approvedAt    DateTime?           @map("approved_at")
+  approvedById  String?             @map("approved_by_id")
+  notes         String?
+  createdAt     DateTime            @default(now()) @map("created_at")
 
   users           User[]
   managedAccounts ManagedAccount[]
+  codes           PartnerCode[]
+  commissions     PartnerCommission[]
 
   @@map("partner")
+}
+
+// Attribution codes/links. Org-level now; per-rep codes (memberUserId) with the portal.
+model PartnerCode {
+  id           String   @id @default(uuid())
+  code         String   @unique
+  partnerId    String   @map("partner_id")
+  memberUserId String?  @map("member_user_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId])
+  @@map("partner_code")
+}
+
+// One row per commissionable charge (access fee or minute purchase). Earned once
+// the account clears its 2nd payment; clawed back on early refund/cancel.
+model PartnerCommission {
+  id             String              @id @default(uuid())
+  partnerId      String              @map("partner_id")
+  officeId       String              @map("office_id")
+  kind           CommissionKind
+  baseAmountCents Int                @map("base_amount_cents") // the customer charge
+  ratePct        Int                 @map("rate_pct")
+  commissionCents Int                @map("commission_cents")
+  status         CommissionStatus    @default(PENDING)
+  payoutMethod   PartnerPayoutMethod @default(CASH)
+  periodKey      String              @map("period_key") // "2026-06"
+  stripeRef      String?             @map("stripe_ref") // invoice/payment id (idempotency)
+  payoutId       String?             @map("payout_id")
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId, status])
+  @@index([officeId])
+  @@map("partner_commission")
 }
 
 model ManagedAccount {

@@ -42,6 +42,7 @@ const NAV_GROUP: NavItem[] = [
 const NAV_PLATFORM: NavItem[] = [
   { href: "/platform", label: "Overview", icon: "chart" },
   { href: "/platform/accounts", label: "Accounts", icon: "building" },
+  { href: "/platform/partners", label: "Partners", icon: "team" },
   { href: "/platform/projections", label: "Projections", icon: "bolt" },
   { href: "/platform/audit", label: "Audit log", icon: "shield" },
 ];
