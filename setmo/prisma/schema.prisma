@@ -298,6 +298,7 @@ model Partner {
   payoutMethod  PartnerPayoutMethod @default(CASH)
   customRatePct Int?                @map("custom_rate_pct") // strategic override (cash %); null = standard table
   stripeConnectId String?           @map("stripe_connect_id") // payout rail (Stripe Connect)
+  connectOnboarded Boolean           @default(false) @map("connect_onboarded") // payouts_enabled on the connected account
   approvedAt    DateTime?           @map("approved_at")
   approvedById  String?             @map("approved_by_id")
   notes         String?
@@ -307,8 +308,29 @@ model Partner {
   managedAccounts ManagedAccount[]
   codes           PartnerCode[]
   commissions     PartnerCommission[]
+  payouts         PartnerPayout[]
 
   @@map("partner")
+}
+
+// One row per partner payout run (cash via Stripe Connect, or credit applied to
+// the partner's practice). Stripe Connect Express handles W-9 + 1099-NEC.
+model PartnerPayout {
+  id               String              @id @default(uuid())
+  partnerId        String              @map("partner_id")
+  amountCents      Int                 @map("amount_cents")
+  method           PartnerPayoutMethod
+  status           String // PAID | SKIPPED | FAILED
+  commissionCount  Int                 @default(0) @map("commission_count")
+  stripeTransferId String?             @map("stripe_transfer_id")
+  periodKey        String              @map("period_key") // run date YYYY-MM-DD
+  note             String?
+  createdAt        DateTime            @default(now()) @map("created_at")
+
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId])
+  @@map("partner_payout")
 }
 
 // Attribution codes/links. Org-level now; per-rep codes (memberUserId) with the portal.

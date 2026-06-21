@@ -134,7 +134,7 @@ export async function getPartnerDashboard(partnerId: string, memberUserId: strin
       })();
 
   return {
-    partner: { name: partner.name, track: partner.track, status: partner.status, payoutMethod: partner.payoutMethod, hasPractice },
+    partner: { name: partner.name, track: partner.track, status: partner.status, payoutMethod: partner.payoutMethod, hasPractice, connectOnboarded: partner.connectOnboarded },
     isAdmin: !memberUserId,
     isDistribution,
     code: myCode,

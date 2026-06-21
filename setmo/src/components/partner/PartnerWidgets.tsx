@@ -45,6 +45,23 @@ export function PayoutToggle({ method, hasPractice }: { method: "CASH" | "CREDIT
   );
 }
 
+export function ConnectButton({ onboarded }: { onboarded: boolean }) {
+  const [busy, setBusy] = useState(false);
+  async function go() {
+    setBusy(true);
+    const res = await fetch("/api/partner/connect", { method: "POST" });
+    const j = await res.json().catch(() => ({}));
+    if (j.url) { window.location.href = j.url; return; }
+    setBusy(false);
+  }
+  if (onboarded) return <span className="chip mint" style={{ padding: "4px 12px" }}>Payouts active ✓</span>;
+  return (
+    <button className="btn btn-primary" onClick={go} disabled={busy} style={{ padding: "9px 16px" }}>
+      {busy ? "Opening…" : "Set up cash payouts"}
+    </button>
+  );
+}
+
 export function InviteMember() {
   const router = useRouter();
   const [email, setEmail] = useState("");

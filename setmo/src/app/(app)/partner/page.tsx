@@ -1,16 +1,19 @@
 import { requireRole } from "@/lib/auth";
 import { getViewerPartner, getPartnerDashboard } from "@/lib/partner-portal";
+import { refreshConnectStatus, getPartnerPayouts } from "@/lib/payouts";
 import { StatTile } from "@/components/ui/StatTile";
-import { CopyLink, PayoutToggle } from "@/components/partner/PartnerWidgets";
+import { CopyLink, PayoutToggle, ConnectButton } from "@/components/partner/PartnerWidgets";
 
 const usd = (c: number) => `$${(c / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const STATUS: Record<string, { label: string; cls: string }> = { active: { label: "Active", cls: "mint" }, prospect: { label: "Assessing", cls: "" }, lapsed: { label: "Lapsed", cls: "amber" } };
 
-export default async function PartnerDashboardPage() {
+export default async function PartnerDashboardPage({ searchParams }: { searchParams: Promise<{ connect?: string }> }) {
   const user = await requireRole("PARTNER_ADMIN", "PARTNER_MEMBER");
   const ctx = await getViewerPartner(user);
   if (!ctx) return <div className="content"><div className="card card-pad muted">No partner account is linked to your login.</div></div>;
-  const d = await getPartnerDashboard(ctx.partnerId, ctx.memberUserId);
+  const { connect } = await searchParams;
+  if (ctx.isAdmin && (connect === "done" || connect === "refresh")) await refreshConnectStatus(ctx.partnerId);
+  const [d, payouts] = await Promise.all([getPartnerDashboard(ctx.partnerId, ctx.memberUserId), ctx.isAdmin ? getPartnerPayouts(ctx.partnerId) : Promise.resolve([])]);
   if (!d) return <div className="content"><div className="card card-pad muted">Partner not found.</div></div>;
 
   return (
@@ -65,7 +68,25 @@ export default async function PartnerDashboardPage() {
               <h3 style={{ fontSize: 18, marginBottom: 4 }}>Payout method</h3>
               <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>Cash is the default. Credit earns +5% and applies to your linked SetMo practice.</p>
               <PayoutToggle method={d.partner.payoutMethod} hasPractice={d.partner.hasPractice} />
-              <p className="muted" style={{ fontSize: 12, marginTop: 16 }}>Commissions are paid automatically on the 1st and 15th once an account clears its 2nd payment. Cash payouts require a W-9 (we&apos;ll request it before your first payout).</p>
+              {d.partner.payoutMethod === "CASH" && (
+                <div style={{ marginTop: 16 }}>
+                  <ConnectButton onboarded={d.partner.connectOnboarded} />
+                  <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>Stripe handles your W-9 and 1099 during setup.</p>
+                </div>
+              )}
+              <p className="muted" style={{ fontSize: 12, marginTop: 16 }}>Paid automatically on the 1st and 15th once an account clears its 2nd payment.</p>
+
+              {payouts.length > 0 && (
+                <div style={{ marginTop: 16, borderTop: "1px solid var(--line-soft)", paddingTop: 12 }}>
+                  <div className="muted" style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>Recent payouts</div>
+                  {payouts.map((p) => (
+                    <div key={p.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0" }}>
+                      <span className="muted">{new Date(p.createdAt).toLocaleDateString()} · {p.method.toLowerCase()}{p.status !== "PAID" ? ` · ${p.status.toLowerCase()}` : ""}</span>
+                      <b>{usd(p.amountCents)}</b>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
