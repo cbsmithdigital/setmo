@@ -1,14 +1,15 @@
 import { requireRole } from "@/lib/auth";
-import { getPlatformOverview } from "@/lib/platform";
+import { getPlatformOverview, getPlatformAlerts } from "@/lib/platform";
 import { StatTile } from "@/components/ui/StatTile";
 import { RevenueVsCost, CostByBucket } from "@/components/platform/PlatformCharts";
+import { AlertsCard } from "@/components/platform/AlertsCard";
 
 const usd = (v: number) => `$${Math.round(v).toLocaleString()}`;
 const usdc = (v: number) => `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default async function PlatformOverviewPage() {
   await requireRole("PLATFORM_ADMIN", "SUPPORT");
-  const p = await getPlatformOverview();
+  const [p, alerts] = await Promise.all([getPlatformOverview(), getPlatformAlerts()]);
   const chart = p.series.map((s) => ({ ...s, revenue: s.access + s.cashRev, cost: s.cogs + s.cac + s.paidAssessment }));
 
   return (
@@ -21,6 +22,8 @@ export default async function PlatformOverviewPage() {
       </div>
 
       <div className="content">
+        <AlertsCard alerts={alerts} />
+
         {/* revenue row */}
         <div className="grid g-4 rise" style={{ marginBottom: 18 }}>
           <StatTile lab="Access MRR" val={usdc(p.accessMRR)} grad="var(--grad-mint)" sub={`${p.activeAccess} active locations × $${44.95}`} />

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { minuteQuote, type PricingConfig } from "@/lib/pricing";
-import { getPricingConfig } from "@/lib/config";
+import { getPricingConfig, getPlatformConfig } from "@/lib/config";
 import { fullName } from "@/lib/format";
 
 // Internal financials for the platform/super-admin console. Two framings drive
@@ -125,12 +125,12 @@ export async function getPlatformOverview() {
 }
 
 // ---- per-office stats (shared by directory + detail) ----
-type OfficeStat = { id: string; name: string; city: string | null; accessActive: boolean; purchasedMin: number; consumedMin: number; balanceMin: number; burnPerDay: number; daysToEmpty: number | null; cashLifetime: number; lastActivity: Date | null };
+type OfficeStat = { id: string; name: string; city: string | null; organizationId: string | null; accountId: string; accessActive: boolean; purchasedMin: number; consumedMin: number; balanceMin: number; burnPerDay: number; daysToEmpty: number | null; cashLifetime: number; lastActivity: Date | null };
 
 async function officeStats(where: object): Promise<OfficeStat[]> {
   const offices = await prisma.office.findMany({
     where,
-    select: { id: true, name: true, city: true, subscription: { select: { status: true } } },
+    select: { id: true, name: true, city: true, organizationId: true, subscription: { select: { status: true } } },
   });
   const ids = offices.map((o) => o.id);
   if (ids.length === 0) return [];
@@ -152,6 +152,8 @@ async function officeStats(where: object): Promise<OfficeStat[]> {
       id: o.id,
       name: o.name,
       city: o.city,
+      organizationId: o.organizationId,
+      accountId: o.organizationId ?? o.id,
       accessActive: o.subscription?.status === "ACTIVE",
       purchasedMin: Math.round(purchasedMin),
       consumedMin: Math.round(consumedMin),
@@ -224,5 +226,101 @@ export async function getPlatformAccountDetail(id: string) {
     locations,
     users: users.map((u) => ({ id: u.id, name: fullName(u.firstName, u.lastName), email: u.email, role: u.role, status: u.status, location: officeName.get(u.officeId ?? "") ?? "—" })),
     transactions: recentBundles.map((b) => ({ when: b.purchasedAt, location: officeName.get(b.officeId) ?? "—", minutes: b.minutesPurchased, amount: r2(cashOf(b, cfg)) })),
+  };
+}
+
+// ---- alerts (push, don't make them dig) ----
+export async function getPlatformAlerts() {
+  const cfg = await getPlatformConfig();
+  const stats = await officeStats({ isProspect: false });
+  const idleCut = Date.now() - cfg.alertZeroUsageDays * 86400_000;
+
+  const lowBalance = stats
+    .filter((s) => s.balanceMin > 0 && s.daysToEmpty != null && s.daysToEmpty <= cfg.alertLowBalanceDays)
+    .sort((a, b) => (a.daysToEmpty ?? 0) - (b.daysToEmpty ?? 0))
+    .map((s) => ({ accountId: s.accountId, name: s.name, daysToEmpty: s.daysToEmpty, balanceMin: s.balanceMin }));
+  const idle = stats
+    .filter((s) => s.accessActive && (!s.lastActivity || s.lastActivity.getTime() < idleCut))
+    .map((s) => ({ accountId: s.accountId, name: s.name, lastActivity: s.lastActivity }));
+  const topBurners = [...stats]
+    .filter((s) => s.burnPerDay > 0)
+    .sort((a, b) => b.burnPerDay - a.burnPerDay)
+    .slice(0, 5)
+    .map((s) => ({ accountId: s.accountId, name: s.name, burnPerDay: s.burnPerDay }));
+
+  const outstandingMin = stats.reduce((a, s) => a + Math.max(0, s.balanceMin), 0);
+  const liabilityTotal = outstandingMin * MINUTE_COST_USD;
+  const liabilityOver = liabilityTotal > cfg.alertLiabilityCeiling;
+
+  return {
+    lowBalance,
+    idle,
+    topBurners,
+    liability: { total: r2(liabilityTotal), over: liabilityOver, ceiling: cfg.alertLiabilityCeiling },
+    count: lowBalance.length + idle.length + (liabilityOver ? 1 : 0),
+  };
+}
+
+// ---- projections + scenario baseline ----
+export async function getPlatformProjections() {
+  const cfg = await getPlatformConfig();
+  const [stats, orgs, audits] = await Promise.all([
+    officeStats({ isProspect: false }),
+    prisma.organization.findMany({ select: { id: true, name: true } }),
+    prisma.setterAudit.findMany({ select: { status: true, office: { select: { isProspect: true } } } }),
+  ]);
+  const orgName = new Map(orgs.map((o) => [o.id, o.name]));
+
+  const activeAccess = stats.filter((s) => s.accessActive).length;
+  const totalBurnPerDay = stats.reduce((a, s) => a + s.burnPerDay, 0);
+  const monthlyBurnMin = totalBurnPerDay * 30;
+  const outstandingMin = stats.reduce((a, s) => a + Math.max(0, s.balanceMin), 0);
+  const purchasedMin = stats.reduce((a, s) => a + s.purchasedMin, 0);
+  const cashTotal = stats.reduce((a, s) => a + s.cashLifetime, 0);
+  const blendedRate = purchasedMin > 0 ? cashTotal / purchasedMin : cfg.basePerMin;
+
+  // distinct accounts
+  const accountIds = new Set(stats.map((s) => s.accountId));
+
+  // days-to-empty per account (aggregate balance + burn)
+  const acc = new Map<string, { name: string; balanceMin: number; burnPerDay: number }>();
+  for (const s of stats) {
+    const name = orgName.get(s.accountId) ?? s.name;
+    const a = acc.get(s.accountId) ?? { name, balanceMin: 0, burnPerDay: 0 };
+    a.balanceMin += s.balanceMin;
+    a.burnPerDay += s.burnPerDay;
+    acc.set(s.accountId, a);
+  }
+  const daysToEmpty = [...acc.entries()]
+    .map(([id, a]) => ({ id, name: a.name, balanceMin: Math.round(a.balanceMin), burnPerDay: r2(a.burnPerDay), days: a.burnPerDay > 0 ? Math.round(a.balanceMin / a.burnPerDay) : null }))
+    .filter((a) => a.burnPerDay > 0)
+    .sort((a, b) => (a.days ?? 1e9) - (b.days ?? 1e9));
+
+  // liability burn-down (6 months at current consumption)
+  const liabilitySchedule: { month: number; remaining: number }[] = [];
+  let remain = outstandingMin;
+  for (let m = 1; m <= 6; m++) {
+    remain = Math.max(0, remain - monthlyBurnMin);
+    liabilitySchedule.push({ month: m, remaining: r2(remain * MINUTE_COST_USD) });
+  }
+
+  const taken = audits.length;
+  const converted = audits.filter((a) => a.office && !a.office.isProspect).length;
+
+  return {
+    baseline: {
+      accounts: accountIds.size,
+      activeLocations: activeAccess,
+      accessMonthly: cfg.accessMonthly,
+      blendedRate: r2(blendedRate),
+      minuteCost: MINUTE_COST_USD,
+      avgBurnPerLocationMonthly: activeAccess ? Math.round(monthlyBurnMin / activeAccess) : 0,
+      currentMRR: r2(activeAccess * cfg.accessMonthly),
+      monthlyMinuteRevenue: r2(monthlyBurnMin * blendedRate),
+      outstandingLiability: r2(outstandingMin * MINUTE_COST_USD),
+    },
+    daysToEmpty,
+    liabilitySchedule,
+    assessment: { taken, converted, rate: taken > 0 ? Math.round((converted / taken) * 100) : 0 },
   };
 }

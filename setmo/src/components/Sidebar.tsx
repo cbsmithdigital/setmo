@@ -42,6 +42,7 @@ const NAV_GROUP: NavItem[] = [
 const NAV_PLATFORM: NavItem[] = [
   { href: "/platform", label: "Overview", icon: "chart" },
   { href: "/platform/accounts", label: "Accounts", icon: "building" },
+  { href: "/platform/projections", label: "Projections", icon: "bolt" },
   { href: "/platform/audit", label: "Audit log", icon: "shield" },
 ];
 // Super-Admin gets config + admin management on top of the shared platform nav.
