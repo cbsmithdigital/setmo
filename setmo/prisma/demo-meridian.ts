@@ -184,7 +184,13 @@ async function main() {
       create: { officeId: o.id, status: "ACTIVE" },
     });
     await prisma.conversationBundle.deleteMany({ where: { officeId: o.id } });
-    await prisma.conversationBundle.create({ data: { officeId: o.id, hours: 33, minutesPurchased: 2000, minutesRemaining: 2000 } });
+    // 1,000 min @ $0.60 = $600 (within the self-serve cap) — twice, to show rebuys
+    await prisma.conversationBundle.createMany({
+      data: [
+        { officeId: o.id, hours: 17, minutesPurchased: 1000, minutesRemaining: 1000, amountCents: 60000 },
+        { officeId: o.id, hours: 17, minutesPurchased: 1000, minutesRemaining: 1000, amountCents: 60000 },
+      ],
+    });
   }
 
   console.log(`\n✅ Meridian demo refreshed: ${totalSessions} sessions across ${PLAN.length} locations + ${OUTCOMES.length} reported outcomes (${pk}) + flat access & 2,000-min balances.`);

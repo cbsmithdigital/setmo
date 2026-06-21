@@ -12,6 +12,7 @@ export function initialsOf(firstName?: string | null, lastName?: string | null):
 
 export const ROLE_LABEL: Record<Role, string> = {
   PLATFORM_ADMIN: "Platform Admin",
+  SUPPORT: "Success / Support",
   DISTRIBUTOR: "Distributor",
   CONSULTANT: "Consultant",
   GROUP_ADMIN: "Group Admin",

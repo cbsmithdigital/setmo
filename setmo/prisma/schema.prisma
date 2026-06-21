@@ -16,7 +16,8 @@ datasource db {
 // ---------- enums ----------
 
 enum Role {
-  PLATFORM_ADMIN
+  PLATFORM_ADMIN // internal Super Admin — everything incl. config + managing admins
+  SUPPORT // internal Success/Support — everything except config + managing admins
   DISTRIBUTOR
   CONSULTANT
   GROUP_ADMIN
@@ -519,6 +520,7 @@ model ConversationBundle {
   hours               Int
   minutesPurchased    Int       @map("minutes_purchased")
   minutesRemaining    Int       @map("minutes_remaining")
+  amountCents         Int?      @map("amount_cents") // what the customer paid (cash revenue)
   stripePaymentIntent String?   @map("stripe_payment_intent")
   purchasedAt         DateTime  @default(now()) @map("purchased_at")
   expiresAt           DateTime? @map("expires_at")

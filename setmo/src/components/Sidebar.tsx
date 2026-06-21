@@ -39,10 +39,17 @@ const NAV_GROUP: NavItem[] = [
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
 ];
 
+const NAV_PLATFORM: NavItem[] = [
+  { href: "/platform", label: "Overview", icon: "chart" },
+  { href: "/platform/accounts", label: "Accounts", icon: "building" },
+];
+
 const NAV_BY_ROLE: Record<string, NavItem[]> = {
   SETTER: NAV_SETTER,
   OFFICE_ADMIN: NAV_OFFICE,
   GROUP_ADMIN: NAV_GROUP,
+  PLATFORM_ADMIN: NAV_PLATFORM,
+  SUPPORT: NAV_PLATFORM,
 };
 
 export function Sidebar({

@@ -86,11 +86,21 @@ export function isManagerRole(role: Role): boolean {
   return role === "OFFICE_ADMIN" || role === "GROUP_ADMIN" || role === "PLATFORM_ADMIN";
 }
 
+/** Internal team roles (the platform/support console). */
+export function isPlatformRole(role: Role): boolean {
+  return role === "PLATFORM_ADMIN" || role === "SUPPORT";
+}
+/** Super Admin — config + managing admins + destructive actions. */
+export function isSuperAdmin(role: Role): boolean {
+  return role === "PLATFORM_ADMIN";
+}
+
 /** The default landing route for a role. */
 export function homeForRole(role: Role): string {
   switch (role) {
     case "PLATFORM_ADMIN":
-      return "/platform/practices";
+    case "SUPPORT":
+      return "/platform";
     case "DISTRIBUTOR":
     case "CONSULTANT":
       return "/partner";

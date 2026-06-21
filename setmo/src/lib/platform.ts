@@ -1,0 +1,209 @@
+import { prisma } from "@/lib/db";
+import { ACCESS_MONTHLY_USD, minuteQuote } from "@/lib/pricing";
+import { fullName } from "@/lib/format";
+
+// Internal financials for the platform/super-admin console. Two framings drive
+// everything (per the spec): (1) the same minute is COGS for a paying account but
+// CAC for a prospect's free assessment; (2) sold minutes roll over, so cash margin
+// (sold) and realized margin (consumed) are tracked separately.
+
+export const MINUTE_COST_USD = 0.15; // variable cost per consumed minute
+
+const cashOf = (b: { amountCents: number | null; minutesPurchased: number }) =>
+  b.amountCents != null ? b.amountCents / 100 : minuteQuote(b.minutesPurchased).total; // estimate legacy/demo via pricing
+const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+const monthLabel = (d: Date) => d.toLocaleDateString("en-US", { month: "short" });
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+type SessionLite = { officeId: string; durationSeconds: number | null; isAudit: boolean; startedAt: Date };
+
+// Bucket a session's minutes into COGS / paid-assessment / prospect-CAC.
+function bucketMinutes(sessions: SessionLite[], isProspect: (officeId: string) => boolean) {
+  let payingSec = 0, paidAssessmentSec = 0, prospectSec = 0;
+  for (const s of sessions) {
+    const sec = s.durationSeconds ?? 0;
+    if (isProspect(s.officeId)) prospectSec += sec;
+    else if (s.isAudit) paidAssessmentSec += sec;
+    else payingSec += sec;
+  }
+  return { payingMin: payingSec / 60, paidAssessmentMin: paidAssessmentSec / 60, prospectMin: prospectSec / 60 };
+}
+
+export async function getPlatformOverview() {
+  const [offices, bundles, sessions, audits] = await Promise.all([
+    prisma.office.findMany({ select: { id: true, organizationId: true, isProspect: true, subscription: { select: { status: true } } } }),
+    prisma.conversationBundle.findMany({ select: { officeId: true, minutesPurchased: true, amountCents: true, purchasedAt: true } }),
+    prisma.session.findMany({ where: { durationSeconds: { not: null } }, select: { officeId: true, durationSeconds: true, isAudit: true, startedAt: true } }),
+    prisma.setterAudit.findMany({ select: { status: true, office: { select: { isProspect: true } } } }),
+  ]);
+
+  const prospect = new Set(offices.filter((o) => o.isProspect).map((o) => o.id));
+  const isProspect = (id: string) => prospect.has(id);
+  const realOffices = offices.filter((o) => !o.isProspect);
+  const activeAccess = offices.filter((o) => o.subscription?.status === "ACTIVE").length;
+
+  // accounts = organizations with ≥1 real office + standalone real offices
+  const orgIdsWithReal = new Set(realOffices.filter((o) => o.organizationId).map((o) => o.organizationId!));
+  const standalone = realOffices.filter((o) => !o.organizationId).length;
+  const accounts = orgIdsWithReal.size + standalone;
+
+  const purchasedMin = bundles.reduce((a, b) => a + b.minutesPurchased, 0);
+  const cashRev = bundles.reduce((a, b) => a + cashOf(b), 0);
+  const buckets = bucketMinutes(sessions, isProspect);
+
+  const cogs = buckets.payingMin * MINUTE_COST_USD;
+  const cac = buckets.prospectMin * MINUTE_COST_USD;
+  const paidAssessmentCost = buckets.paidAssessmentMin * MINUTE_COST_USD;
+  const outstandingMin = Math.max(0, purchasedMin - buckets.payingMin);
+  const liability = outstandingMin * MINUTE_COST_USD;
+  const blendedRate = purchasedMin > 0 ? cashRev / purchasedMin : 0;
+  const realizedRev = buckets.payingMin * blendedRate;
+  const accessMRR = activeAccess * ACCESS_MONTHLY_USD;
+  const minuteGrossMarginPct = realizedRev > 0 ? (realizedRev - cogs) / realizedRev : 0;
+
+  // assessment funnel
+  const taken = audits.length;
+  const converted = audits.filter((a) => a.office && !a.office.isProspect).length;
+
+  // monthly series — last 6 months
+  const now = new Date();
+  const months: { key: string; label: string }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ key: monthKey(d), label: monthLabel(d) });
+  }
+  const series = months.map((m) => {
+    const mBundles = bundles.filter((b) => monthKey(b.purchasedAt) === m.key);
+    const mSessions = sessions.filter((s) => monthKey(s.startedAt) === m.key);
+    const b = bucketMinutes(mSessions, isProspect);
+    return {
+      label: m.label,
+      cashRev: r2(mBundles.reduce((a, x) => a + cashOf(x), 0)),
+      access: r2(accessMRR), // current run-rate (historical sub counts not tracked) — approximate
+      cogs: r2(b.payingMin * MINUTE_COST_USD),
+      cac: r2(b.prospectMin * MINUTE_COST_USD),
+      paidAssessment: r2(b.paidAssessmentMin * MINUTE_COST_USD),
+    };
+  });
+
+  return {
+    accounts,
+    locations: realOffices.length,
+    prospects: prospect.size,
+    activeAccess,
+    accessMRR: r2(accessMRR),
+    cashRev: r2(cashRev),
+    realizedRev: r2(realizedRev),
+    purchasedMin: Math.round(purchasedMin),
+    consumedPayingMin: Math.round(buckets.payingMin),
+    cogs: r2(cogs),
+    cac: r2(cac),
+    paidAssessmentCost: r2(paidAssessmentCost),
+    outstandingMin: Math.round(outstandingMin),
+    liability: r2(liability),
+    minuteGrossMarginPct: Math.round(minuteGrossMarginPct * 100),
+    blendedRate: r2(blendedRate),
+    assessment: { taken, converted, rate: taken > 0 ? Math.round((converted / taken) * 100) : 0 },
+    series,
+  };
+}
+
+// ---- per-office stats (shared by directory + detail) ----
+type OfficeStat = { id: string; name: string; city: string | null; accessActive: boolean; purchasedMin: number; consumedMin: number; balanceMin: number; burnPerDay: number; daysToEmpty: number | null; cashLifetime: number; lastActivity: Date | null };
+
+async function officeStats(where: object): Promise<OfficeStat[]> {
+  const offices = await prisma.office.findMany({
+    where,
+    select: { id: true, name: true, city: true, subscription: { select: { status: true } } },
+  });
+  const ids = offices.map((o) => o.id);
+  if (ids.length === 0) return [];
+  const [bundles, sessions] = await Promise.all([
+    prisma.conversationBundle.findMany({ where: { officeId: { in: ids } }, select: { officeId: true, minutesPurchased: true, amountCents: true } }),
+    prisma.session.findMany({ where: { officeId: { in: ids }, durationSeconds: { not: null }, isAudit: false }, select: { officeId: true, durationSeconds: true, startedAt: true } }),
+  ]);
+  const since30 = new Date(Date.now() - 30 * 86400_000);
+  return offices.map((o) => {
+    const ob = bundles.filter((b) => b.officeId === o.id);
+    const os = sessions.filter((s) => s.officeId === o.id);
+    const purchasedMin = ob.reduce((a, b) => a + b.minutesPurchased, 0);
+    const consumedMin = os.reduce((a, s) => a + (s.durationSeconds ?? 0), 0) / 60;
+    const last30 = os.filter((s) => s.startedAt >= since30).reduce((a, s) => a + (s.durationSeconds ?? 0), 0) / 60;
+    const burnPerDay = last30 / 30;
+    const balanceMin = purchasedMin - consumedMin;
+    return {
+      id: o.id,
+      name: o.name,
+      city: o.city,
+      accessActive: o.subscription?.status === "ACTIVE",
+      purchasedMin: Math.round(purchasedMin),
+      consumedMin: Math.round(consumedMin),
+      balanceMin: Math.round(balanceMin),
+      burnPerDay: r2(burnPerDay),
+      daysToEmpty: burnPerDay > 0 ? Math.round(balanceMin / burnPerDay) : null,
+      cashLifetime: r2(ob.reduce((a, b) => a + cashOf(b), 0)),
+      lastActivity: os.reduce<Date | null>((acc, s) => (!acc || s.startedAt > acc ? s.startedAt : acc), null),
+    };
+  });
+}
+
+export async function getPlatformAccounts() {
+  const orgs = await prisma.organization.findMany({ select: { id: true, name: true, type: true } });
+  const offices = await prisma.office.findMany({ where: { isProspect: false }, select: { id: true, organizationId: true } });
+  const stats = await officeStats({ isProspect: false });
+  const byId = new Map(stats.map((s) => [s.id, s]));
+
+  const roll = (officeIds: string[]) => {
+    const ss = officeIds.map((id) => byId.get(id)).filter(Boolean) as OfficeStat[];
+    return {
+      locations: ss.length,
+      activeAccess: ss.filter((s) => s.accessActive).length,
+      mrr: r2(ss.filter((s) => s.accessActive).length * ACCESS_MONTHLY_USD),
+      balanceMin: ss.reduce((a, s) => a + s.balanceMin, 0),
+      cashLifetime: r2(ss.reduce((a, s) => a + s.cashLifetime, 0)),
+      burnPerDay: r2(ss.reduce((a, s) => a + s.burnPerDay, 0)),
+      lastActivity: ss.reduce<Date | null>((acc, s) => (s.lastActivity && (!acc || s.lastActivity > acc) ? s.lastActivity : acc), null),
+    };
+  };
+
+  const accounts: { id: string; name: string; kind: "group" | "single"; type: string; locations: number; activeAccess: number; mrr: number; balanceMin: number; cashLifetime: number; burnPerDay: number; daysToEmpty: number | null; lastActivity: Date | null }[] = [];
+
+  for (const org of orgs) {
+    const ids = offices.filter((o) => o.organizationId === org.id).map((o) => o.id);
+    if (ids.length === 0) continue;
+    const r = roll(ids);
+    accounts.push({ id: org.id, name: org.name, kind: "group", type: ids.length > 1 ? "Group / DSO" : "Group", ...r, daysToEmpty: r.burnPerDay > 0 ? Math.round(r.balanceMin / r.burnPerDay) : null });
+  }
+  for (const o of offices.filter((x) => !x.organizationId)) {
+    const r = roll([o.id]);
+    const st = byId.get(o.id);
+    accounts.push({ id: o.id, name: st?.name ?? "Practice", kind: "single", type: "Single practice", ...r, daysToEmpty: r.burnPerDay > 0 ? Math.round(r.balanceMin / r.burnPerDay) : null });
+  }
+  return accounts.sort((a, b) => b.mrr - a.mrr || b.cashLifetime - a.cashLifetime);
+}
+
+export async function getPlatformAccountDetail(id: string) {
+  const org = await prisma.organization.findUnique({ where: { id }, select: { id: true, name: true, type: true } });
+  const officeWhere = org ? { organizationId: org.id, isProspect: false } : { id, isProspect: false };
+  const locations = await officeStats(officeWhere);
+  if (locations.length === 0 && !org) return null;
+
+  const officeIds = locations.map((l) => l.id);
+  const [users, recentBundles] = await Promise.all([
+    prisma.user.findMany({ where: { officeId: { in: officeIds } }, select: { id: true, firstName: true, lastName: true, email: true, role: true, status: true, officeId: true } }),
+    prisma.conversationBundle.findMany({ where: { officeId: { in: officeIds } }, orderBy: { purchasedAt: "desc" }, take: 12, select: { officeId: true, minutesPurchased: true, amountCents: true, purchasedAt: true } }),
+  ]);
+  const officeName = new Map(locations.map((l) => [l.id, l.name]));
+
+  return {
+    id,
+    name: org?.name ?? locations[0]?.name ?? "Account",
+    kind: org ? ("group" as const) : ("single" as const),
+    mrr: r2(locations.filter((l) => l.accessActive).length * ACCESS_MONTHLY_USD),
+    balanceMin: locations.reduce((a, l) => a + l.balanceMin, 0),
+    cashLifetime: r2(locations.reduce((a, l) => a + l.cashLifetime, 0)),
+    locations,
+    users: users.map((u) => ({ id: u.id, name: fullName(u.firstName, u.lastName), email: u.email, role: u.role, status: u.status, location: officeName.get(u.officeId ?? "") ?? "—" })),
+    transactions: recentBundles.map((b) => ({ when: b.purchasedAt, location: officeName.get(b.officeId) ?? "—", minutes: b.minutesPurchased, amount: r2(cashOf(b)) })),
+  };
+}
