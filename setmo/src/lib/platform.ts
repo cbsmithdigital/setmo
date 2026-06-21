@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
-import { ACCESS_MONTHLY_USD, minuteQuote } from "@/lib/pricing";
+import { minuteQuote, type PricingConfig } from "@/lib/pricing";
+import { getPricingConfig } from "@/lib/config";
 import { fullName } from "@/lib/format";
 
 // Internal financials for the platform/super-admin console. Two framings drive
@@ -23,8 +24,8 @@ export async function getAuditLog(limit = 100) {
   return prisma.adminAuditLog.findMany({ orderBy: { createdAt: "desc" }, take: limit });
 }
 
-const cashOf = (b: { amountCents: number | null; minutesPurchased: number }) =>
-  b.amountCents != null ? b.amountCents / 100 : minuteQuote(b.minutesPurchased).total; // estimate legacy/demo via pricing
+const cashOf = (b: { amountCents: number | null; minutesPurchased: number }, cfg: PricingConfig) =>
+  b.amountCents != null ? b.amountCents / 100 : minuteQuote(b.minutesPurchased, cfg).total; // estimate legacy/demo via pricing
 const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 const monthLabel = (d: Date) => d.toLocaleDateString("en-US", { month: "short" });
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -50,6 +51,7 @@ export async function getPlatformOverview() {
     prisma.session.findMany({ where: { durationSeconds: { not: null } }, select: { officeId: true, durationSeconds: true, isAudit: true, startedAt: true } }),
     prisma.setterAudit.findMany({ select: { status: true, office: { select: { isProspect: true } } } }),
   ]);
+  const cfg = await getPricingConfig();
 
   const prospect = new Set(offices.filter((o) => o.isProspect).map((o) => o.id));
   const isProspect = (id: string) => prospect.has(id);
@@ -62,7 +64,7 @@ export async function getPlatformOverview() {
   const accounts = orgIdsWithReal.size + standalone;
 
   const purchasedMin = bundles.reduce((a, b) => a + b.minutesPurchased, 0);
-  const cashRev = bundles.reduce((a, b) => a + cashOf(b), 0);
+  const cashRev = bundles.reduce((a, b) => a + cashOf(b, cfg), 0);
   const buckets = bucketMinutes(sessions, isProspect);
 
   const cogs = buckets.payingMin * MINUTE_COST_USD;
@@ -72,7 +74,7 @@ export async function getPlatformOverview() {
   const liability = outstandingMin * MINUTE_COST_USD;
   const blendedRate = purchasedMin > 0 ? cashRev / purchasedMin : 0;
   const realizedRev = buckets.payingMin * blendedRate;
-  const accessMRR = activeAccess * ACCESS_MONTHLY_USD;
+  const accessMRR = activeAccess * cfg.accessMonthly;
   const minuteGrossMarginPct = realizedRev > 0 ? (realizedRev - cogs) / realizedRev : 0;
 
   // assessment funnel
@@ -92,7 +94,7 @@ export async function getPlatformOverview() {
     const b = bucketMinutes(mSessions, isProspect);
     return {
       label: m.label,
-      cashRev: r2(mBundles.reduce((a, x) => a + cashOf(x), 0)),
+      cashRev: r2(mBundles.reduce((a, x) => a + cashOf(x, cfg), 0)),
       access: r2(accessMRR), // current run-rate (historical sub counts not tracked) — approximate
       cogs: r2(b.payingMin * MINUTE_COST_USD),
       cac: r2(b.prospectMin * MINUTE_COST_USD),
@@ -132,6 +134,7 @@ async function officeStats(where: object): Promise<OfficeStat[]> {
   });
   const ids = offices.map((o) => o.id);
   if (ids.length === 0) return [];
+  const cfg = await getPricingConfig();
   const [bundles, sessions] = await Promise.all([
     prisma.conversationBundle.findMany({ where: { officeId: { in: ids } }, select: { officeId: true, minutesPurchased: true, amountCents: true } }),
     prisma.session.findMany({ where: { officeId: { in: ids }, durationSeconds: { not: null }, isAudit: false }, select: { officeId: true, durationSeconds: true, startedAt: true } }),
@@ -155,7 +158,7 @@ async function officeStats(where: object): Promise<OfficeStat[]> {
       balanceMin: Math.round(balanceMin),
       burnPerDay: r2(burnPerDay),
       daysToEmpty: burnPerDay > 0 ? Math.round(balanceMin / burnPerDay) : null,
-      cashLifetime: r2(ob.reduce((a, b) => a + cashOf(b), 0)),
+      cashLifetime: r2(ob.reduce((a, b) => a + cashOf(b, cfg), 0)),
       lastActivity: os.reduce<Date | null>((acc, s) => (!acc || s.startedAt > acc ? s.startedAt : acc), null),
     };
   });
@@ -166,13 +169,14 @@ export async function getPlatformAccounts() {
   const offices = await prisma.office.findMany({ where: { isProspect: false }, select: { id: true, organizationId: true } });
   const stats = await officeStats({ isProspect: false });
   const byId = new Map(stats.map((s) => [s.id, s]));
+  const access = (await getPricingConfig()).accessMonthly;
 
   const roll = (officeIds: string[]) => {
     const ss = officeIds.map((id) => byId.get(id)).filter(Boolean) as OfficeStat[];
     return {
       locations: ss.length,
       activeAccess: ss.filter((s) => s.accessActive).length,
-      mrr: r2(ss.filter((s) => s.accessActive).length * ACCESS_MONTHLY_USD),
+      mrr: r2(ss.filter((s) => s.accessActive).length * access),
       balanceMin: ss.reduce((a, s) => a + s.balanceMin, 0),
       cashLifetime: r2(ss.reduce((a, s) => a + s.cashLifetime, 0)),
       burnPerDay: r2(ss.reduce((a, s) => a + s.burnPerDay, 0)),
@@ -208,16 +212,17 @@ export async function getPlatformAccountDetail(id: string) {
     prisma.conversationBundle.findMany({ where: { officeId: { in: officeIds } }, orderBy: { purchasedAt: "desc" }, take: 12, select: { officeId: true, minutesPurchased: true, amountCents: true, purchasedAt: true } }),
   ]);
   const officeName = new Map(locations.map((l) => [l.id, l.name]));
+  const cfg = await getPricingConfig();
 
   return {
     id,
     name: org?.name ?? locations[0]?.name ?? "Account",
     kind: org ? ("group" as const) : ("single" as const),
-    mrr: r2(locations.filter((l) => l.accessActive).length * ACCESS_MONTHLY_USD),
+    mrr: r2(locations.filter((l) => l.accessActive).length * cfg.accessMonthly),
     balanceMin: locations.reduce((a, l) => a + l.balanceMin, 0),
     cashLifetime: r2(locations.reduce((a, l) => a + l.cashLifetime, 0)),
     locations,
     users: users.map((u) => ({ id: u.id, name: fullName(u.firstName, u.lastName), email: u.email, role: u.role, status: u.status, location: officeName.get(u.officeId ?? "") ?? "—" })),
-    transactions: recentBundles.map((b) => ({ when: b.purchasedAt, location: officeName.get(b.officeId) ?? "—", minutes: b.minutesPurchased, amount: r2(cashOf(b)) })),
+    transactions: recentBundles.map((b) => ({ when: b.purchasedAt, location: officeName.get(b.officeId) ?? "—", minutes: b.minutesPurchased, amount: r2(cashOf(b, cfg)) })),
   };
 }

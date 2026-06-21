@@ -16,7 +16,8 @@ export function isStripeConfigured(): boolean {
 }
 
 // Flat-access + minutes pricing model (client-safe) re-exported for servers.
-import { ACCESS_MONTHLY_USD, minuteQuote } from "@/lib/pricing";
+import { minuteQuote } from "@/lib/pricing";
+import { getPricingConfig } from "@/lib/config";
 export {
   ACCESS_MONTHLY_USD,
   MIN_MINUTES,
@@ -40,6 +41,7 @@ export async function createAccessCheckout(opts: {
   origin: string;
 }): Promise<string> {
   const stripe = getStripe();
+  const cfg = await getPricingConfig();
   const meta = { kind: "access", officeId: opts.officeId };
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
@@ -53,7 +55,7 @@ export async function createAccessCheckout(opts: {
         quantity: 1,
         price_data: {
           currency: "usd",
-          unit_amount: Math.round(ACCESS_MONTHLY_USD * 100),
+          unit_amount: Math.round(cfg.accessMonthly * 100),
           recurring: { interval: "month" },
           product_data: { name: "SetMo — Practice Access", description: "Monthly access per location. Unlimited users, all features." },
         },
@@ -77,7 +79,7 @@ export async function createMinuteCheckout(opts: {
   origin: string;
 }): Promise<string> {
   const stripe = getStripe();
-  const quote = minuteQuote(opts.minutes);
+  const quote = minuteQuote(opts.minutes, await getPricingConfig());
   const meta = { kind: "minutes", officeId: opts.officeId, minutes: String(quote.minutes) };
   const session = await stripe.checkout.sessions.create({
     mode: "payment",

@@ -1,15 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { minuteQuote, recommendMinutes, MIN_MINUTES, MAX_MINUTES, MINUTE_STEP } from "@/lib/pricing";
+import { minuteQuote, recommendMinutes, MINUTE_STEP, DEFAULT_PRICING, type PricingConfig } from "@/lib/pricing";
 
 // Marketing price-preview slider (light theme). Illustrative only — the real
 // purchase happens in-app after signup. Mirrors the in-app pricing math.
-export function PricingSlider() {
+export function PricingSlider({ cfg = DEFAULT_PRICING }: { cfg?: PricingConfig }) {
   const [people, setPeople] = useState("3");
-  const recommended = useMemo(() => recommendMinutes(Number(people) || 1), [people]);
+  const recommended = useMemo(() => recommendMinutes(Number(people) || 1, cfg), [people, cfg]);
   const [minutes, setMinutes] = useState(recommended);
-  const quote = minuteQuote(minutes);
+  const quote = minuteQuote(minutes, cfg);
+  const MIN_MINUTES = cfg.minMinutes;
+  const MAX_MINUTES = cfg.maxMinutes;
   const recPct = ((recommended - MIN_MINUTES) / (MAX_MINUTES - MIN_MINUTES)) * 100;
 
   return (
@@ -21,7 +23,7 @@ export function PricingSlider() {
           <input
             inputMode="numeric"
             value={people}
-            onChange={(e) => { setPeople(e.target.value); setMinutes(recommendMinutes(Number(e.target.value) || 1)); }}
+            onChange={(e) => { setPeople(e.target.value); setMinutes(recommendMinutes(Number(e.target.value) || 1, cfg)); }}
             style={{ width: 54, padding: "6px 8px", borderRadius: 8, border: "1px solid var(--m-line)", background: "#fff", color: "var(--ink)", fontSize: 14, textAlign: "center" }}
           />
         </label>

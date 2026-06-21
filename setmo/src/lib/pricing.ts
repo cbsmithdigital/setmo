@@ -1,86 +1,94 @@
 // ===========================================================================
 // Flat-access + pay-as-you-go-minutes pricing — PURE model (no Stripe SDK),
-// safe to import from client components. stripe.ts re-exports for servers.
-//   Access  — $44.95 / month per location (practice). Unlimited free users.
-//   Minutes — bought in any amount via a slider; price/min tapers with volume
-//             and rolls over. Separate balance per location.
-//   Groups  — same flat model; group admin + Advisor unlock free at 2+ locations.
-// All features are included for everyone.
+// safe to import from client components. Functions accept an optional config so
+// Super-Admins can tune the numbers at runtime (see lib/config.ts); defaults
+// mirror the launch pricing. stripe.ts re-exports for servers.
 // ===========================================================================
 
-export const ACCESS_MONTHLY_USD = 44.95;
+export type PricingConfig = {
+  accessMonthly: number; // $ / location / month
+  anchors: [number, number][]; // minutes → $/min, interpolated between, floored at the last
+  minMinutes: number;
+  maxMinutes: number;
+  basePerMin: number; // entry rate discounts are measured against
+  groupThreshold: number; // locations needed to unlock group features
+};
 
-export const MIN_MINUTES = 240; // 1 person on the phones
-export const MAX_MINUTES = 1200; // beyond this → contact for bulk
+export const DEFAULT_PRICING: PricingConfig = {
+  accessMonthly: 44.95,
+  anchors: [
+    [250, 0.72],
+    [500, 0.66],
+    [1000, 0.6],
+    [1500, 0.56],
+  ],
+  minMinutes: 240,
+  maxMinutes: 1200,
+  basePerMin: 0.72,
+  groupThreshold: 2,
+};
+
+// Back-compat constants (defaults) for callers that don't thread config.
+export const ACCESS_MONTHLY_USD = DEFAULT_PRICING.accessMonthly;
+export const MIN_MINUTES = DEFAULT_PRICING.minMinutes;
+export const MAX_MINUTES = DEFAULT_PRICING.maxMinutes;
 export const MINUTE_STEP = 10;
-export const BASE_PER_MIN = 0.72; // the entry rate; discounts are measured against this
-
-// minutes → $/min anchors; interpolated between, floored at 1,500.
-const ANCHORS: [number, number][] = [
-  [250, 0.72],
-  [500, 0.66],
-  [1000, 0.6],
-  [1500, 0.56], // floor — best rate, holds out to MAX_MINUTES
-];
+export const BASE_PER_MIN = DEFAULT_PRICING.basePerMin;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
 /** Per-minute price at a given balance size (continuous, for the slider). */
-export function minutePrice(minutes: number): number {
-  const m = minutes;
-  if (m <= ANCHORS[0][0]) return ANCHORS[0][1];
-  if (m >= ANCHORS[ANCHORS.length - 1][0]) return ANCHORS[ANCHORS.length - 1][1];
-  for (let i = 0; i < ANCHORS.length - 1; i++) {
-    const [m0, p0] = ANCHORS[i];
-    const [m1, p1] = ANCHORS[i + 1];
-    if (m >= m0 && m <= m1) {
-      const t = (m - m0) / (m1 - m0);
+export function minutePrice(minutes: number, cfg: PricingConfig = DEFAULT_PRICING): number {
+  const A = cfg.anchors;
+  if (minutes <= A[0][0]) return A[0][1];
+  if (minutes >= A[A.length - 1][0]) return A[A.length - 1][1];
+  for (let i = 0; i < A.length - 1; i++) {
+    const [m0, p0] = A[i];
+    const [m1, p1] = A[i + 1];
+    if (minutes >= m0 && minutes <= m1) {
+      const t = (minutes - m0) / (m1 - m0);
       return round2(p0 + (p1 - p0) * t);
     }
   }
-  return ANCHORS[ANCHORS.length - 1][1];
+  return A[A.length - 1][1];
 }
 
 export type MinuteQuote = { minutes: number; perMin: number; total: number; discountPct: number };
 
 /** Full quote for a chosen minute amount (clamped to the self-serve range). */
-export function minuteQuote(minutes: number): MinuteQuote {
-  const m = clamp(Math.round(minutes / MINUTE_STEP) * MINUTE_STEP, MIN_MINUTES, MAX_MINUTES);
-  const perMin = minutePrice(m);
+export function minuteQuote(minutes: number, cfg: PricingConfig = DEFAULT_PRICING): MinuteQuote {
+  const m = clamp(Math.round(minutes / MINUTE_STEP) * MINUTE_STEP, cfg.minMinutes, cfg.maxMinutes);
+  const perMin = minutePrice(m, cfg);
   const total = Math.round(m * perMin);
-  const discountPct = Math.max(0, Math.round((1 - perMin / BASE_PER_MIN) * 100));
+  const discountPct = Math.max(0, Math.round((1 - perMin / cfg.basePerMin) * 100));
   return { minutes: m, perMin, total, discountPct };
 }
 
 /** True once the chosen amount needs a bulk conversation instead of self-serve. */
-export const isBulk = (minutes: number) => minutes > MAX_MINUTES;
+export const isBulk = (minutes: number, cfg: PricingConfig = DEFAULT_PRICING) => minutes > cfg.maxMinutes;
 
 /** Recommended starting balance from how many people are on the phones. */
-export function recommendMinutes(people: number): number {
+export function recommendMinutes(people: number, cfg: PricingConfig = DEFAULT_PRICING): number {
   const p = Math.max(1, Math.round(people));
+  const m3 = cfg.anchors[1]?.[0] ?? 500;
+  const m8 = cfg.anchors[2]?.[0] ?? 1000;
   let m: number;
-  if (p <= 1) m = 240;
-  else if (p <= 3) m = 240 + ((p - 1) / 2) * (500 - 240);
-  else if (p <= 8) m = 500 + ((p - 3) / 5) * (1000 - 500);
-  else m = 1000 + (p - 8) * 100;
-  return clamp(Math.round(m / MINUTE_STEP) * MINUTE_STEP, MIN_MINUTES, MAX_MINUTES);
+  if (p <= 1) m = cfg.minMinutes;
+  else if (p <= 3) m = cfg.minMinutes + ((p - 1) / 2) * (m3 - cfg.minMinutes);
+  else if (p <= 8) m = m3 + ((p - 3) / 5) * (m8 - m3);
+  else m = m8 + (p - 8) * 100;
+  return clamp(Math.round(m / MINUTE_STEP) * MINUTE_STEP, cfg.minMinutes, cfg.maxMinutes);
 }
 
-/** Group features (command center, Setty Advisor) unlock free at 2+ locations. */
-export function groupEnabled(locationCount: number): boolean {
-  return locationCount >= 2;
+/** Group features (command center, Setty Advisor) unlock free at the threshold. */
+export function groupEnabled(locationCount: number, threshold = DEFAULT_PRICING.groupThreshold): boolean {
+  return locationCount >= threshold;
 }
 
 /** Feature entitlements. Everything is included for everyone; the only gate is
  *  that group/DSO surfaces require a multi-location account. */
-export function entitlements(locationCount = 1) {
-  const group = groupEnabled(locationCount);
-  return {
-    officeCoach: true, // Setty Office Coach — included for all
-    leaderboards: true,
-    goals: true,
-    groupCommandCenter: group,
-    advisor: group,
-  };
+export function entitlements(locationCount = 1, threshold = DEFAULT_PRICING.groupThreshold) {
+  const group = groupEnabled(locationCount, threshold);
+  return { officeCoach: true, leaderboards: true, goals: true, groupCommandCenter: group, advisor: group };
 }

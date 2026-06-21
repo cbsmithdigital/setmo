@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { InviteModal } from "@/components/billing/InviteModal";
 import { MinutePurchase } from "@/components/billing/MinutePurchase";
+import { DEFAULT_PRICING, type PricingConfig } from "@/lib/pricing";
 
 type BillingData = {
   balance: { purchasedMin: number; usedMin: number; remainingMin: number };
@@ -21,6 +22,7 @@ export function BillingClient({
   minutesStatus,
   seatsFree,
   recommendPeople,
+  pricing = DEFAULT_PRICING,
 }: {
   data: BillingData;
   practiceName: string;
@@ -28,6 +30,7 @@ export function BillingClient({
   minutesStatus?: string;
   seatsFree: number;
   recommendPeople: number;
+  pricing?: PricingConfig;
 }) {
   const [invite, setInvite] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -111,7 +114,7 @@ export function BillingClient({
 
         {/* buy minutes (slider) */}
         <div style={{ marginBottom: 24 }}>
-          <MinutePurchase defaultPeople={recommendPeople} />
+          <MinutePurchase defaultPeople={recommendPeople} cfg={pricing} />
         </div>
 
         {/* invoices */}

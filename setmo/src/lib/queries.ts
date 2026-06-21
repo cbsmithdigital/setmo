@@ -459,7 +459,9 @@ export async function getOfficeCatalog(officeId: string) {
 
 // ---------- office billing ----------
 export async function getOfficeBilling(officeId: string) {
-  const { getStripe, isStripeConfigured, ACCESS_MONTHLY_USD } = await import("@/lib/stripe");
+  const { getStripe, isStripeConfigured } = await import("@/lib/stripe");
+  const { getPlatformConfig } = await import("@/lib/config");
+  const accessMonthly = (await getPlatformConfig()).accessMonthly;
 
   const [balance, subscription, office] = await Promise.all([
     getMinuteBalance(officeId),
@@ -487,7 +489,7 @@ export async function getOfficeBilling(officeId: string) {
 
   return {
     balance,
-    accessMonthly: ACCESS_MONTHLY_USD,
+    accessMonthly,
     subscribed: subscription?.status === "ACTIVE",
     accessStatus: subscription?.status ?? null,
     nextInvoiceDate: subscription?.currentPeriodEnd

@@ -2,24 +2,26 @@
 
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
-import { minuteQuote, recommendMinutes, MIN_MINUTES, MAX_MINUTES, MINUTE_STEP } from "@/lib/pricing";
+import { minuteQuote, recommendMinutes, MINUTE_STEP, DEFAULT_PRICING, type PricingConfig } from "@/lib/pricing";
 
 const SALES_EMAIL = "hello@growdental.ai";
 
 // Drag-slider minute purchase. The recommendation comes from how many people are
 // on the phones; per-minute price + discount update live as you drag.
-export function MinutePurchase({ defaultPeople = 1 }: { defaultPeople?: number }) {
+export function MinutePurchase({ defaultPeople = 1, cfg = DEFAULT_PRICING }: { defaultPeople?: number; cfg?: PricingConfig }) {
   const [people, setPeople] = useState(String(defaultPeople));
-  const recommended = useMemo(() => recommendMinutes(Number(people) || 1), [people]);
+  const recommended = useMemo(() => recommendMinutes(Number(people) || 1, cfg), [people, cfg]);
   const [minutes, setMinutes] = useState(recommended);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const quote = minuteQuote(minutes);
+  const MIN_MINUTES = cfg.minMinutes;
+  const MAX_MINUTES = cfg.maxMinutes;
+  const quote = minuteQuote(minutes, cfg);
   const pct = ((quote.minutes - MIN_MINUTES) / (MAX_MINUTES - MIN_MINUTES)) * 100;
 
   function applyRecommended() {
-    setMinutes(recommendMinutes(Number(people) || 1));
+    setMinutes(recommendMinutes(Number(people) || 1, cfg));
   }
 
   async function buy() {

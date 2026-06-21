@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { minuteQuote } from "@/lib/pricing";
+import { getPricingConfig } from "@/lib/config";
 
 // Minimum remaining time required to start a new (non-assessment) session.
 const MIN_START_SECONDS = 60;
@@ -20,7 +21,7 @@ export async function getMinuteBalance(officeId: string): Promise<{ purchasedMin
 
 /** Append purchased minutes to a location's rolling balance (one row per purchase). */
 export async function addMinutes(officeId: string, minutes: number, stripePaymentIntent?: string | null) {
-  const amountCents = Math.round(minuteQuote(minutes).total * 100); // cash revenue (matches checkout price)
+  const amountCents = Math.round(minuteQuote(minutes, await getPricingConfig()).total * 100); // cash revenue (matches checkout price)
   return prisma.conversationBundle.create({
     data: { officeId, minutesPurchased: minutes, minutesRemaining: minutes, hours: Math.round(minutes / 60), amountCents, stripePaymentIntent: stripePaymentIntent ?? null },
   });

@@ -552,6 +552,26 @@ model LeaderboardEntry {
   @@map("leaderboard_entry")
 }
 
+// Editable platform configuration (Super-Admin only). Single row, id="default".
+// getPlatformConfig() merges this over code defaults.
+model PlatformConfig {
+  id                         String   @id @default("default")
+  accessMonthlyCents         Int      @default(4495) @map("access_monthly_cents")
+  minuteAnchors              Json?    @map("minute_anchors") // [[250,0.72],[500,0.66],...]
+  minMinutes                 Int      @default(240) @map("min_minutes")
+  maxMinutes                 Int      @default(1200) @map("max_minutes")
+  basePerMinCents            Int      @default(72) @map("base_per_min_cents")
+  groupThreshold             Int      @default(2) @map("group_threshold")
+  assessmentCooldownDays     Int      @default(60) @map("assessment_cooldown_days")
+  alertLowBalanceDays        Int      @default(14) @map("alert_low_balance_days")
+  alertZeroUsageDays         Int      @default(14) @map("alert_zero_usage_days")
+  alertLiabilityCeilingCents Int      @default(1000000) @map("alert_liability_ceiling_cents")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+  updatedById                String?  @map("updated_by_id")
+
+  @@map("platform_config")
+}
+
 // Audit trail for sensitive internal-admin actions (comps, access changes,
 // impersonation, user changes). Append-only.
 model AdminAuditLog {

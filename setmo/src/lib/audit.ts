@@ -33,7 +33,9 @@ export const ASSESSMENT_COOLDOWN_DAYS = 60;
 
 /** True if this domain already ran an assessment within the cooldown window. */
 export async function domainUsedRecently(domain: string, exceptId?: string): Promise<boolean> {
-  const since = new Date(Date.now() - ASSESSMENT_COOLDOWN_DAYS * 86400_000);
+  const { getPlatformConfig } = await import("@/lib/config");
+  const days = (await getPlatformConfig()).assessmentCooldownDays;
+  const since = new Date(Date.now() - days * 86400_000);
   const prior = await prisma.setterAudit.findFirst({
     where: {
       emailDomain: domain.toLowerCase(),

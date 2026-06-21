@@ -44,12 +44,18 @@ const NAV_PLATFORM: NavItem[] = [
   { href: "/platform/accounts", label: "Accounts", icon: "building" },
   { href: "/platform/audit", label: "Audit log", icon: "shield" },
 ];
+// Super-Admin gets config + admin management on top of the shared platform nav.
+const NAV_PLATFORM_SUPER: NavItem[] = [
+  ...NAV_PLATFORM,
+  { href: "/platform/config", label: "Configuration", icon: "gear" },
+  { href: "/platform/admins", label: "Internal admins", icon: "team" },
+];
 
 const NAV_BY_ROLE: Record<string, NavItem[]> = {
   SETTER: NAV_SETTER,
   OFFICE_ADMIN: NAV_OFFICE,
   GROUP_ADMIN: NAV_GROUP,
-  PLATFORM_ADMIN: NAV_PLATFORM,
+  PLATFORM_ADMIN: NAV_PLATFORM_SUPER,
   SUPPORT: NAV_PLATFORM,
 };
 

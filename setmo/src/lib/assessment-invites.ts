@@ -1,13 +1,13 @@
 import { prisma } from "@/lib/db";
 import { sendAssessmentInvite } from "@/lib/email";
-import { ASSESSMENT_COOLDOWN_DAYS } from "@/lib/audit";
+import { getPlatformConfig } from "@/lib/config";
 
 // Bimonthly prospect re-engagement sweep. For each prospect practice whose last
 // assessment is past the 2-month cooldown (and that hasn't converted to a paid
 // account), email an invite to run another free one. One per practice domain.
 // Idempotent via lastInviteAt; safe to run more often than bimonthly.
 export async function sweepAssessmentInvites(origin: string, dryRun = false): Promise<{ due: number; sent: number; domains: string[] }> {
-  const cutoff = new Date(Date.now() - ASSESSMENT_COOLDOWN_DAYS * 86400_000);
+  const cutoff = new Date(Date.now() - (await getPlatformConfig()).assessmentCooldownDays * 86400_000);
   const rows = await prisma.setterAudit.findMany({
     where: {
       status: "SCORED",

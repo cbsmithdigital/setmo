@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
+import { getPricingConfig } from "@/lib/config";
 import { PricingSlider } from "@/components/marketing/PricingSlider";
 import "./marketing.css";
 
@@ -40,6 +41,7 @@ function Wave() {
 export default async function LandingPage() {
   const user = await getCurrentUser();
   const signedIn = Boolean(user);
+  const pricing = await getPricingConfig();
 
   return (
     <div className="mkt">
@@ -426,7 +428,7 @@ export default async function LandingPage() {
               </div>
 
               <div className="price-slider-row">
-                <PricingSlider />
+                <PricingSlider cfg={pricing} />
                 <div style={{ textAlign: "center", marginTop: 20, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
                   <Link className="btn btn-primary" href={SIGNUP_HREF}>Get SetMo Now</Link>
                   <Link className="btn btn-ghost" href={AUDIT_HREF}>Get Your Free Audit</Link>
