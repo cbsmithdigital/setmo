@@ -7,10 +7,25 @@ import type { Role } from "@/generated/prisma/client";
 export type SessionUser = Awaited<ReturnType<typeof loadCurrentUser>>;
 
 export const ACTIVE_ROLE_COOKIE = "setmo_active_role";
+export const IMPERSONATE_COOKIE = "setmo_impersonate";
+
+function loadUserRecord(id: string) {
+  return prisma.user.findUnique({
+    where: { id },
+    include: {
+      office: { include: { subscription: true, services: true } },
+      organization: true,
+      partner: true,
+      memberships: true,
+    },
+  });
+}
 
 // Resolves the Supabase-authenticated identity to our application User row,
 // including the tenant context (office + organization) used for RBAC scoping
-// and the roles the user holds (for multi-role switching).
+// and the roles the user holds (for multi-role switching). If a platform admin
+// is impersonating ("view as"), the impersonated user is returned instead, with
+// `impersonatedBy` set so the UI can show a banner.
 async function loadCurrentUser() {
   if (!isSupabaseConfigured()) return null;
 
@@ -20,33 +35,56 @@ async function loadCurrentUser() {
   } = await supabase.auth.getUser();
   if (!authUser) return null;
 
-  const user = await prisma.user.findUnique({
-    where: { id: authUser.id },
-    include: {
-      office: {
-        include: { subscription: true, services: true },
-      },
-      organization: true,
-      partner: true,
-      memberships: true,
-    },
-  });
-  if (!user) return null;
+  const realUser = await loadUserRecord(authUser.id);
+  if (!realUser) return null;
+
+  // Impersonation: only honored when the real user is internal platform staff.
+  let user = realUser;
+  let impersonatedBy: { id: string; email: string } | null = null;
+  if (isPlatformRole(realUser.role)) {
+    try {
+      const impId = (await cookies()).get(IMPERSONATE_COOKIE)?.value;
+      if (impId && impId !== realUser.id) {
+        const target = await loadUserRecord(impId);
+        if (target) {
+          user = target;
+          impersonatedBy = { id: realUser.id, email: realUser.email ?? authUser.email ?? "" };
+        }
+      }
+    } catch {
+      /* cookies() unavailable — ignore */
+    }
+  }
 
   // Roles the user can act as — their primary role plus any extra memberships.
   const roles = Array.from(new Set<Role>([user.role, ...user.memberships.map((m) => m.role)]));
 
-  // The active role comes from a cookie, validated against held roles; defaults
-  // to the primary role. SINGLE place multi-role resolution happens.
+  // Active role from a cookie (validated against held roles); while impersonating,
+  // always show the impersonated user's own default role.
   let activeRole: Role = user.role;
-  try {
-    const picked = (await cookies()).get(ACTIVE_ROLE_COOKIE)?.value as Role | undefined;
-    if (picked && roles.includes(picked)) activeRole = picked;
-  } catch {
-    /* cookies() unavailable in some contexts — fall back to primary role */
+  if (!impersonatedBy) {
+    try {
+      const picked = (await cookies()).get(ACTIVE_ROLE_COOKIE)?.value as Role | undefined;
+      if (picked && roles.includes(picked)) activeRole = picked;
+    } catch {
+      /* cookies() unavailable in some contexts — fall back to primary role */
+    }
   }
 
-  return { ...user, email: user.email ?? authUser.email ?? "", roles, activeRole };
+  return { ...user, email: user.email ?? (impersonatedBy ? user.email : authUser.email) ?? "", roles, activeRole, impersonatedBy };
+}
+
+/** The real internal-staff actor (ignores impersonation). Null if not platform. */
+export async function getPlatformActor() {
+  if (!isSupabaseConfigured()) return null;
+  const supabase = await createClient();
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) return null;
+  const u = await prisma.user.findUnique({ where: { id: authUser.id }, select: { id: true, email: true, role: true } });
+  if (!u || !isPlatformRole(u.role)) return null;
+  return u;
 }
 
 /** Returns the current user or null. Never throws on missing config. */

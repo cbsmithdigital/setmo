@@ -9,6 +9,20 @@ import { fullName } from "@/lib/format";
 
 export const MINUTE_COST_USD = 0.15; // variable cost per consumed minute
 
+// ---- audit trail ----
+export async function logAdminAction(
+  actor: { id: string; email: string | null },
+  entry: { action: string; summary: string; targetType?: string; targetId?: string; detail?: Record<string, unknown> },
+) {
+  await prisma.adminAuditLog.create({
+    data: { actorId: actor.id, actorEmail: actor.email, action: entry.action, summary: entry.summary, targetType: entry.targetType, targetId: entry.targetId, detail: (entry.detail ?? undefined) as never },
+  });
+}
+
+export async function getAuditLog(limit = 100) {
+  return prisma.adminAuditLog.findMany({ orderBy: { createdAt: "desc" }, take: limit });
+}
+
 const cashOf = (b: { amountCents: number | null; minutesPurchased: number }) =>
   b.amountCents != null ? b.amountCents / 100 : minuteQuote(b.minutesPurchased).total; // estimate legacy/demo via pricing
 const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;

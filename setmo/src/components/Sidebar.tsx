@@ -42,6 +42,7 @@ const NAV_GROUP: NavItem[] = [
 const NAV_PLATFORM: NavItem[] = [
   { href: "/platform", label: "Overview", icon: "chart" },
   { href: "/platform/accounts", label: "Accounts", icon: "building" },
+  { href: "/platform/audit", label: "Audit log", icon: "shield" },
 ];
 
 const NAV_BY_ROLE: Record<string, NavItem[]> = {

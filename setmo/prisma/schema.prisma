@@ -552,6 +552,23 @@ model LeaderboardEntry {
   @@map("leaderboard_entry")
 }
 
+// Audit trail for sensitive internal-admin actions (comps, access changes,
+// impersonation, user changes). Append-only.
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  actorId    String   @map("actor_id")
+  actorEmail String?  @map("actor_email")
+  action     String // e.g. "impersonate.start", "minutes.grant", "access.pause", "user.role"
+  targetType String?  @map("target_type") // "office" | "user" | "account"
+  targetId   String?  @map("target_id")
+  summary    String
+  detail     Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("admin_audit_log")
+}
+
 // ---------- goals & incentives ----------
 
 enum GoalCreatorScope {

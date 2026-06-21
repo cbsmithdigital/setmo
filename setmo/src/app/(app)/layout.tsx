@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/Sidebar";
 import { requireUser, getActiveRole } from "@/lib/auth";
 import { initialsOf, fullName, ROLE_LABEL } from "@/lib/format";
+import { ImpersonationBanner } from "@/components/platform/ImpersonationBanner";
 
 // Every authenticated screen depends on the request's auth cookies.
 export const dynamic = "force-dynamic";
@@ -22,7 +23,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           roleLabel={ROLE_LABEL[activeRole]}
           initials={initialsOf(user.firstName, user.lastName)}
         />
-        <main className="main">{children}</main>
+        <main className="main">
+          {user.impersonatedBy && <ImpersonationBanner email={user.email} />}
+          {children}
+        </main>
       </div>
     </>
   );

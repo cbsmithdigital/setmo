@@ -10,8 +10,9 @@ import { getAdminClient } from "@/lib/supabase/admin";
 async function main() {
   const email = (process.argv[2] || "").trim().toLowerCase();
   const role = (process.argv[3] || "PLATFORM_ADMIN").toUpperCase();
+  const password = process.argv[4]; // optional — create the auth user if missing
   if (!email || !["PLATFORM_ADMIN", "SUPPORT"].includes(role)) {
-    console.log("Usage: tsx prisma/grant-admin.ts <email> <PLATFORM_ADMIN|SUPPORT>");
+    console.log("Usage: tsx prisma/grant-admin.ts <email> <PLATFORM_ADMIN|SUPPORT> [password]");
     return;
   }
 
@@ -24,8 +25,17 @@ async function main() {
     if (u) authId = u.id;
     if (data.users.length < 200) break;
   }
+  if (!authId && password) {
+    const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+    if (error || !data?.user) {
+      console.log("Could not create auth user:", error?.message);
+      return;
+    }
+    authId = data.user.id;
+    console.log(`Created Supabase auth user for ${email}.`);
+  }
   if (!authId) {
-    console.log(`No Supabase auth user for ${email}. Have them sign up / sign in once, then re-run.`);
+    console.log(`No Supabase auth user for ${email}. Pass a password to create one, or have them sign in once first.`);
     return;
   }
 
