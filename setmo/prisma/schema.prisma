@@ -20,6 +20,8 @@ enum Role {
   SUPPORT // internal Success/Support — everything except config + managing admins
   DISTRIBUTOR
   CONSULTANT
+  PARTNER_ADMIN // partner org owner/manager (portal)
+  PARTNER_MEMBER // individual rep under a partner org (portal)
   GROUP_ADMIN
   OFFICE_ADMIN
   SETTER
@@ -261,6 +263,7 @@ enum MembershipScope {
   OFFICE
   GROUP
   PLATFORM
+  PARTNER
 }
 
 // Roles a user holds. A user may hold several (e.g. a manager who also takes

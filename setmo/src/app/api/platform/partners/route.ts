@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getPlatformActor } from "@/lib/auth";
 import { approvePartner, setPartnerStatus, updatePartnerTerms } from "@/lib/partners";
+import { ensurePartnerAdminUser } from "@/lib/partner-portal";
 import { logAdminAction } from "@/lib/platform";
 import { prisma } from "@/lib/db";
 import { error, json } from "@/lib/api";
@@ -27,7 +28,9 @@ export async function POST(req: Request) {
 
   if (action === "approve") {
     await approvePartner(partnerId, actor.id);
+    const { inviteLink } = await ensurePartnerAdminUser(partnerId);
     await logAdminAction(actor, { action: "partner.approve", summary: `Approved partner ${partner.name}`, targetType: "partner", targetId: partnerId });
+    return json({ ok: true, inviteLink });
   } else if (action === "disable") {
     await setPartnerStatus(partnerId, "DISABLED");
     await logAdminAction(actor, { action: "partner.disable", summary: `Disabled partner ${partner.name}`, targetType: "partner", targetId: partnerId });

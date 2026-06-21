@@ -15,6 +15,8 @@ export const ROLE_LABEL: Record<Role, string> = {
   SUPPORT: "Success / Support",
   DISTRIBUTOR: "Distributor",
   CONSULTANT: "Consultant",
+  PARTNER_ADMIN: "Partner Admin",
+  PARTNER_MEMBER: "Partner Rep",
   GROUP_ADMIN: "Group Admin",
   OFFICE_ADMIN: "Office Admin",
   SETTER: "Appointment Setter",

@@ -132,6 +132,10 @@ export function isPlatformRole(role: Role): boolean {
 export function isSuperAdmin(role: Role): boolean {
   return role === "PLATFORM_ADMIN";
 }
+/** Partner-portal roles. */
+export function isPartnerRole(role: Role): boolean {
+  return role === "PARTNER_ADMIN" || role === "PARTNER_MEMBER" || role === "DISTRIBUTOR" || role === "CONSULTANT";
+}
 
 /** The default landing route for a role. */
 export function homeForRole(role: Role): string {
@@ -141,6 +145,8 @@ export function homeForRole(role: Role): string {
       return "/platform";
     case "DISTRIBUTOR":
     case "CONSULTANT":
+    case "PARTNER_ADMIN":
+    case "PARTNER_MEMBER":
       return "/partner";
     case "GROUP_ADMIN":
       return "/group";

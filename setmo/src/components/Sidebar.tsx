@@ -53,12 +53,19 @@ const NAV_PLATFORM_SUPER: NavItem[] = [
   { href: "/platform/admins", label: "Internal admins", icon: "team" },
 ];
 
+const NAV_PARTNER: NavItem[] = [
+  { href: "/partner", label: "Dashboard", icon: "home" },
+  { href: "/partner/team", label: "Team & codes", icon: "team" },
+];
+
 const NAV_BY_ROLE: Record<string, NavItem[]> = {
   SETTER: NAV_SETTER,
   OFFICE_ADMIN: NAV_OFFICE,
   GROUP_ADMIN: NAV_GROUP,
   PLATFORM_ADMIN: NAV_PLATFORM_SUPER,
   SUPPORT: NAV_PLATFORM,
+  PARTNER_ADMIN: NAV_PARTNER,
+  PARTNER_MEMBER: [{ href: "/partner", label: "Dashboard", icon: "home" }],
 };
 
 export function Sidebar({

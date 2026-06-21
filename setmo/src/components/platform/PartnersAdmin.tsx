@@ -12,9 +12,15 @@ export function PartnersAdmin({ partners, isSuper, appUrl }: { partners: Partner
 
   async function call(body: object, key: string) {
     setBusy(key);
-    await fetch("/api/platform/partners", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const res = await fetch("/api/platform/partners", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const j = await res.json().catch(() => ({}));
     router.refresh();
     setBusy(null);
+    return j as { inviteLink?: string };
+  }
+  async function approve(partnerId: string) {
+    const j = await call({ action: "approve", partnerId }, partnerId);
+    if (j?.inviteLink) window.prompt("Partner approved. Email isn't configured — share this login link with the partner:", j.inviteLink);
   }
 
   const pending = partners.filter((p) => p.status === "PENDING");
@@ -32,7 +38,7 @@ export function PartnersAdmin({ partners, isSuper, appUrl }: { partners: Partner
                 <div className="muted" style={{ fontSize: 12 }}>{p.contactName} · {p.email} · {p.orgType ?? "—"}</div>
                 {p.audience && <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>{p.audience}</div>}
               </div>
-              <button className="btn btn-primary" disabled={busy === p.id} onClick={() => call({ action: "approve", partnerId: p.id }, p.id)} style={{ padding: "7px 14px", fontSize: 13 }}>Approve</button>
+              <button className="btn btn-primary" disabled={busy === p.id} onClick={() => approve(p.id)} style={{ padding: "7px 14px", fontSize: 13 }}>Approve</button>
               <button className="btn btn-ghost" disabled={busy === p.id} onClick={() => call({ action: "disable", partnerId: p.id }, p.id)} style={{ padding: "7px 12px", fontSize: 13, color: "var(--muted)" }}>Reject</button>
             </div>
           ))}
@@ -86,7 +92,7 @@ export function PartnersAdmin({ partners, isSuper, appUrl }: { partners: Partner
               {p.status === "APPROVED" ? (
                 <button className="btn btn-ghost" disabled={busy === p.id} onClick={() => call({ action: "disable", partnerId: p.id }, p.id)} style={{ padding: "5px 11px", fontSize: 12, color: "var(--amber)" }}>Disable</button>
               ) : (
-                <button className="btn btn-ghost" disabled={busy === p.id} onClick={() => call({ action: "approve", partnerId: p.id }, p.id)} style={{ padding: "5px 11px", fontSize: 12, color: "var(--mint)" }}>Re-approve</button>
+                <button className="btn btn-ghost" disabled={busy === p.id} onClick={() => approve(p.id)} style={{ padding: "5px 11px", fontSize: 12, color: "var(--mint)" }}>Re-approve</button>
               )}
             </div>
           </div>
