@@ -47,6 +47,55 @@ export async function sendInviteEmail(opts: {
 
 const ADMIN_EMAIL = process.env.SETMO_ADMIN_EMAIL || process.env.RESEND_FROM_EMAIL;
 
+// Internal inboxes that receive sales / partner alerts. Override with
+// SETMO_ALERT_EMAILS (comma-separated); defaults to the two monitored addresses.
+const ALERT_EMAILS = (process.env.SETMO_ALERT_EMAILS || "hello@growdental.ai,adam@growdental.ai")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+/** Escape user-supplied text before embedding it in alert HTML. */
+const esc = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/** Notify the team when a new partner/affiliate application is submitted. */
+export async function sendPartnerApplicationAlert(opts: {
+  name: string;
+  contactName: string;
+  email: string;
+  track: string;
+  orgType?: string | null;
+  audience?: string | null;
+  manageLink: string;
+}): Promise<boolean> {
+  const resend = getResend();
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!resend || !from || ALERT_EMAILS.length === 0) return false;
+  const trackLabel = opts.track === "DISTRIBUTION" ? "Distribution" : "Referral";
+  const row = (label: string, value: string) =>
+    `<tr><td style="padding:4px 14px 4px 0;color:#64708a;vertical-align:top">${label}</td><td style="padding:4px 0;color:#1a1a2e"><strong>${esc(value)}</strong></td></tr>`;
+  await resend.emails.send({
+    from,
+    to: ALERT_EMAILS,
+    subject: `New SetMo partner application — ${opts.name} (${trackLabel})`,
+    html: `
+      <div style="font-family:system-ui,sans-serif;max-width:540px;margin:0 auto;color:#1a1a2e">
+        <h2 style="color:#7c3aed">New partner application</h2>
+        <table style="font-size:14px;border-collapse:collapse;margin:8px 0 4px">
+          ${row("Partner", opts.name)}
+          ${row("Track", trackLabel)}
+          ${row("Contact", opts.contactName)}
+          ${row("Email", opts.email)}
+          ${opts.orgType ? row("Org type", opts.orgType) : ""}
+          ${opts.audience ? row("Audience", opts.audience) : ""}
+        </table>
+        <p style="margin:24px 0"><a href="${opts.manageLink}" style="background:#7c3aed;color:#fff;padding:11px 20px;border-radius:12px;text-decoration:none;font-weight:600">Review &amp; approve</a></p>
+      </div>
+    `,
+  });
+  return true;
+}
+
 /** Generic transactional send (weekly digests). Returns recipients actually sent to. */
 export async function sendDigestEmail(opts: { to: string[]; subject: string; html: string }): Promise<number> {
   const resend = getResend();

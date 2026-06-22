@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { minuteQuote, recommendMinutes, MINUTE_STEP, DEFAULT_PRICING, type PricingConfig } from "@/lib/pricing";
 
-const SALES_EMAIL = "hello@growdental.ai";
+const SALES_EMAIL = "hello@growdental.ai,adam@growdental.ai";
 
 // Drag-slider minute purchase. The recommendation comes from how many people are
 // on the phones; per-minute price + discount update live as you drag.

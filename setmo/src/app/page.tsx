@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 // The "free audit / start free" CTAs go to the Setter Audit front door.
 const AUDIT_HREF = "/audit";
 const SIGNUP_HREF = "/signup";
-const DEMO_MAILTO = "mailto:hello@growdental.ai?subject=SetMo%20for%20our%20group";
+const DEMO_MAILTO = "mailto:hello@growdental.ai,adam@growdental.ai?subject=SetMo%20for%20our%20group";
 
 function Ck() {
   return (

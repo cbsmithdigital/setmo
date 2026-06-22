@@ -58,7 +58,8 @@ export function PricingSlider({ cfg = DEFAULT_PRICING }: { cfg?: PricingConfig }
         <span style={{ position: "absolute", right: 0 }}>{MAX_MINUTES.toLocaleString()} min</span>
       </div>
       <p style={{ fontSize: 12, color: "var(--m-muted)", margin: "10px 0 0" }}>
-        Minutes roll over and never expire. Bigger balances earn a better rate. Need more than {MAX_MINUTES.toLocaleString()}? Contact us for bulk pricing.
+        Minutes roll over and never expire. Bigger balances earn a better rate. Need more than {MAX_MINUTES.toLocaleString()}?{" "}
+        <a href="mailto:hello@growdental.ai,adam@growdental.ai?subject=SetMo%20bulk%20minutes" style={{ color: "var(--purple-deep)", fontWeight: 600 }}>Contact us for bulk pricing</a>.
       </p>
     </div>
   );
