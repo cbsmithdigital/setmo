@@ -46,10 +46,13 @@ export async function createAccessCheckout(opts: {
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     ...(opts.stripeCustomerId
-      ? { customer: opts.stripeCustomerId }
+      ? { customer: opts.stripeCustomerId, customer_update: { address: "auto" as const } }
       : opts.customerEmail
         ? { customer_email: opts.customerEmail }
         : {}),
+    // Stripe Tax: collect a billing address and compute sales tax automatically.
+    billing_address_collection: "required",
+    automatic_tax: { enabled: true },
     line_items: [
       {
         quantity: 1,
@@ -57,6 +60,7 @@ export async function createAccessCheckout(opts: {
           currency: "usd",
           unit_amount: Math.round(cfg.accessMonthly * 100),
           recurring: { interval: "month" },
+          tax_behavior: "exclusive",
           product_data: { name: "SetMo — Practice Access", description: "Monthly access per location. Unlimited users, all features." },
         },
       },
@@ -84,16 +88,20 @@ export async function createMinuteCheckout(opts: {
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     ...(opts.stripeCustomerId
-      ? { customer: opts.stripeCustomerId }
+      ? { customer: opts.stripeCustomerId, customer_update: { address: "auto" as const } }
       : opts.customerEmail
         ? { customer_email: opts.customerEmail }
         : {}),
+    // Stripe Tax: collect a billing address and compute sales tax automatically.
+    billing_address_collection: "required",
+    automatic_tax: { enabled: true },
     line_items: [
       {
         quantity: 1,
         price_data: {
           currency: "usd",
           unit_amount: quote.total * 100,
+          tax_behavior: "exclusive",
           product_data: {
             name: `SetMo — ${quote.minutes.toLocaleString()} minutes`,
             description: `Practice/coaching minutes ($${quote.perMin.toFixed(2)}/min). Roll over, never expire.`,

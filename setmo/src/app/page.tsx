@@ -493,7 +493,7 @@ export default async function LandingPage() {
             </div>
             <div className="ft-col"><h5>Product</h5><a href="#how">How it works</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#groups">For Groups</a><Link href="/login">Open the app</Link></div>
             <div className="ft-col"><h5>Company</h5><a href="#">About Grow Dental</a><Link href="/partners/apply">Partner program</Link><a href="#">Careers</a><a href="#">Contact</a></div>
-            <div className="ft-col"><h5>Legal</h5><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Security</a></div>
+            <div className="ft-col"><h5>Legal</h5><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><a href="#">Security</a></div>
           </div>
           <div className="ft-bot">
             <span>© 2026 Grow Dental AI. All rights reserved.</span>

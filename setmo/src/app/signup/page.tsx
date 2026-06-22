@@ -15,12 +15,14 @@ export default function SignupPage() {
   const [orgName, setOrgName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [agree, setAgree] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!agree) { setError("Please agree to the Terms of Service and Privacy Policy to continue."); return; }
     setLoading(true);
     try {
       const ref = new URLSearchParams(window.location.search).get("ref");
@@ -91,7 +93,16 @@ export default function SignupPage() {
               <input id="password" className="input" type="password" autoComplete="new-password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" />
             </div>
 
-            <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={loading} style={{ marginTop: 6 }}>
+            <label style={{ display: "flex", gap: 10, alignItems: "flex-start", margin: "4px 0 14px", cursor: "pointer", fontSize: 13.5, lineHeight: 1.5, color: "var(--text-2)" }}>
+              <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--purple)", flexShrink: 0 }} />
+              <span>
+                I agree to SetMo&apos;s{" "}
+                <Link href="/terms" target="_blank" style={{ color: "var(--purple-2)", fontWeight: 600 }}>Terms of Service</Link>{" "}and{" "}
+                <Link href="/privacy" target="_blank" style={{ color: "var(--purple-2)", fontWeight: 600 }}>Privacy Policy</Link>.
+              </span>
+            </label>
+
+            <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={loading || !agree} style={{ marginTop: 6 }}>
               {loading ? "Creating your account…" : "Create account"} <Icon name="arrow" />
             </button>
           </form>
