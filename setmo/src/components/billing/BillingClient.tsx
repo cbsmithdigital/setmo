@@ -74,53 +74,51 @@ export function BillingClient({
         {minutesStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Payment received — your minutes will be added within a few seconds.</div>}
         {minutesStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Checkout cancelled — no charge was made.</div>}
 
-        <div className="grid g-2" style={{ marginBottom: 18 }}>
-          {/* access */}
-          <div className="card card-pad rise">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <h3 style={{ fontSize: 18 }}>Practice Access</h3>
-              <span className={"chip " + (data.subscribed ? "mint" : "amber")} style={{ padding: "3px 10px" }}>{data.subscribed ? "Active" : "Inactive"}</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 6, marginBottom: 4 }}>
-              <span style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 40 }} className="grad-text">${data.accessMonthly.toFixed(2)}</span>
-              <span className="muted" style={{ fontSize: 14, paddingBottom: 6 }}>/ month</span>
-            </div>
-            <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
-              Per location, month-to-month. Unlimited users, all features included. No contract.
-            </p>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, padding: "10px 0", borderTop: "1px solid var(--line-soft)" }}>
-              <span className="muted">Next invoice</span>
-              <b>{data.nextInvoiceDate ?? "—"}</b>
-            </div>
-            {data.subscribed ? (
+        {/* Once subscribed: access status + minute balance. Before that, the
+            combined activation section below carries the access + minutes info. */}
+        {data.subscribed && (
+          <div className="grid g-2" style={{ marginBottom: 18 }}>
+            {/* access */}
+            <div className="card card-pad rise">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <h3 style={{ fontSize: 18 }}>Practice Access</h3>
+                <span className="chip mint" style={{ padding: "3px 10px" }}>Active</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 6, marginBottom: 4 }}>
+                <span style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 40 }} className="grad-text">${data.accessMonthly.toFixed(2)}</span>
+                <span className="muted" style={{ fontSize: 14, paddingBottom: 6 }}>/ month</span>
+              </div>
+              <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
+                Per location, month-to-month. Unlimited users, all features included. No contract.
+              </p>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, padding: "10px 0", borderTop: "1px solid var(--line-soft)" }}>
+                <span className="muted">Next invoice</span>
+                <b>{data.nextInvoiceDate ?? "—"}</b>
+              </div>
               <button className="btn btn-ghost" style={{ width: "100%", marginTop: 14 }} onClick={manageAccess} disabled={busy}>
                 <Icon name="card" size={16} /> Manage access
               </button>
-            ) : (
-              <button className="btn btn-ghost" style={{ width: "100%", marginTop: 14 }} onClick={() => document.getElementById("activate-card")?.scrollIntoView({ behavior: "smooth" })}>
-                <Icon name="card" size={16} /> Choose minutes &amp; activate ↓
-              </button>
-            )}
-          </div>
+            </div>
 
-          {/* minute balance */}
-          <div className="card card-pad rise" style={{ animationDelay: ".06s" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <h3 style={{ fontSize: 18 }}>Minute balance</h3>
-              <span className={"chip " + (low ? "amber" : "mint")} style={{ padding: "3px 10px" }}>{low ? "Running low" : "Healthy"}</span>
+            {/* minute balance */}
+            <div className="card card-pad rise" style={{ animationDelay: ".06s" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <h3 style={{ fontSize: 18 }}>Minute balance</h3>
+                <span className={"chip " + (low ? "amber" : "mint")} style={{ padding: "3px 10px" }}>{low ? "Running low" : "Healthy"}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginBottom: 8 }}>
+                <span className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 48, lineHeight: 1 }}>{remainingMin.toLocaleString()}</span>
+                <span className="muted" style={{ fontSize: 15, fontWeight: 600, paddingBottom: 8 }}>min left</span>
+              </div>
+              <div style={{ height: 10, borderRadius: 99, background: "#181828", overflow: "hidden", margin: "6px 0 8px" }}>
+                <div style={{ height: "100%", width: pct + "%", background: low ? "linear-gradient(90deg,#f59e0b,#ef4444)" : "var(--grad-mint)", borderRadius: 99 }} />
+              </div>
+              <p className="muted" style={{ fontSize: 12.5 }}>
+                {usedMin.toLocaleString()} of {purchasedMin.toLocaleString()} purchased minutes used. Minutes roll over — assessments are always free and never deducted.
+              </p>
             </div>
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginBottom: 8 }}>
-              <span className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 48, lineHeight: 1 }}>{remainingMin.toLocaleString()}</span>
-              <span className="muted" style={{ fontSize: 15, fontWeight: 600, paddingBottom: 8 }}>min left</span>
-            </div>
-            <div style={{ height: 10, borderRadius: 99, background: "#181828", overflow: "hidden", margin: "6px 0 8px" }}>
-              <div style={{ height: "100%", width: pct + "%", background: low ? "linear-gradient(90deg,#f59e0b,#ef4444)" : "var(--grad-mint)", borderRadius: 99 }} />
-            </div>
-            <p className="muted" style={{ fontSize: 12.5 }}>
-              {usedMin.toLocaleString()} of {purchasedMin.toLocaleString()} purchased minutes used. Minutes roll over — assessments are always free and never deducted.
-            </p>
           </div>
-        </div>
+        )}
 
         {/* buy minutes (slider) — combined activation when not yet subscribed */}
         <div id="activate-card" style={{ marginBottom: 24 }}>

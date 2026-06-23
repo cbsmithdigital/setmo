@@ -29,7 +29,6 @@ export function MinutePurchase({
   const MIN_MINUTES = cfg.minMinutes;
   const MAX_MINUTES = cfg.maxMinutes;
   const quote = minuteQuote(minutes, cfg);
-  const pct = ((quote.minutes - MIN_MINUTES) / (MAX_MINUTES - MIN_MINUTES)) * 100;
   const todayTotal = quote.total + (isActivate ? accessMonthly : 0);
 
   function applyRecommended() {
@@ -55,7 +54,7 @@ export function MinutePurchase({
 
   return (
     <div className="card card-pad rise">
-      <h3 style={{ fontSize: 18, marginBottom: 4 }}>{isActivate ? "Activate SetMo" : "Buy minutes"}</h3>
+      <h3 style={{ fontSize: 18, marginBottom: 4 }}>{isActivate ? "Practice Access & minutes" : "Buy minutes"}</h3>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 16 }}>
         {isActivate
           ? `Go live today: $${accessMonthly.toFixed(2)} Practice Access plus your starter minutes, in one payment. Minutes roll over and never expire — pick how many to start with.`
@@ -99,7 +98,7 @@ export function MinutePurchase({
         style={{ width: "100%", accentColor: "var(--purple)" }}
         aria-label="Minutes to buy"
       />
-      <div style={{ position: "relative", height: 16, marginTop: 2 }}>
+      <div style={{ position: "relative", height: 16, marginTop: 2, marginBottom: 16 }}>
         <span className="muted" style={{ position: "absolute", left: 0, fontSize: 11 }}>{MIN_MINUTES}</span>
         {/* recommended marker */}
         <span
@@ -108,10 +107,6 @@ export function MinutePurchase({
           ▲ rec.
         </span>
         <span className="muted" style={{ position: "absolute", right: 0, fontSize: 11 }}>{MAX_MINUTES.toLocaleString()}</span>
-      </div>
-      {/* subtle fill cue */}
-      <div style={{ height: 4, borderRadius: 99, background: "#181828", overflow: "hidden", margin: "2px 0 14px" }}>
-        <div style={{ height: "100%", width: pct + "%", background: "var(--grad)", borderRadius: 99 }} />
       </div>
 
       {isActivate && (
