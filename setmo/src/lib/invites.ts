@@ -9,8 +9,8 @@ export type Invitee = { email: string; firstName?: string; lastName?: string };
 // SSR-safe pattern: the server verifies it directly (sets the session cookie),
 // unlike the raw Supabase action_link which uses the implicit/hash flow that a
 // server route can't read.
-function confirmLink(origin: string, hashedToken: string | undefined, next: string): string | null {
-  return hashedToken ? `${origin}/auth/confirm?token_hash=${hashedToken}&type=invite&next=${encodeURIComponent(next)}` : null;
+export function confirmLink(origin: string, hashedToken: string | undefined, type: "invite" | "recovery" | "magiclink", next: string): string | null {
+  return hashedToken ? `${origin}/auth/confirm?token_hash=${hashedToken}&type=${type}&next=${encodeURIComponent(next)}` : null;
 }
 
 // Highest-privilege selected role becomes the User's primary role (active by
@@ -94,7 +94,7 @@ export async function inviteUsers(opts: {
       });
     }
 
-    const link = confirmLink(opts.origin, data.properties?.hashed_token, "/invite");
+    const link = confirmLink(opts.origin, data.properties?.hashed_token, "invite", "/invite");
     if (link) {
       const sent = isEmailConfigured()
         ? await sendInviteEmail({ to: invitee.email, link, officeName: opts.contextName, inviterName: opts.inviterName }).catch(() => false)
@@ -112,7 +112,7 @@ export async function resendInvite(opts: { email: string; contextName: string; i
   const admin = getAdminClient();
   const redirectTo = `${opts.origin}/auth/confirm?next=/invite`;
   const { data, error: linkErr } = await admin.auth.admin.generateLink({ type: "invite", email: opts.email, options: { redirectTo } });
-  const link = confirmLink(opts.origin, data?.properties?.hashed_token, "/invite");
+  const link = confirmLink(opts.origin, data?.properties?.hashed_token, "invite", "/invite");
   if (linkErr || !link) return { ok: false };
   const sent = isEmailConfigured()
     ? await sendInviteEmail({ to: opts.email, link, officeName: opts.contextName, inviterName: opts.inviterName }).catch(() => false)

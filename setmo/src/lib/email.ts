@@ -137,6 +137,30 @@ export async function sendAuditVerifyEmail(opts: { to: string; link: string; pra
   return true;
 }
 
+/** Password reset link (server-generated recovery, sent via Resend). */
+export async function sendPasswordResetEmail(opts: { to: string; link: string }): Promise<boolean> {
+  const resend = getResend();
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!resend || !from) return false;
+  await resend.emails.send({
+    from,
+    to: opts.to,
+    subject: "Reset your SetMo password",
+    html: `
+      <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
+        <h2 style="color:#7c3aed">Reset your password</h2>
+        <p>Click below to choose a new password. If you didn't request this, you can ignore this email.</p>
+        <p style="margin:28px 0">
+          <a href="${opts.link}" style="background:#7c3aed;color:#fff;padding:12px 22px;
+          border-radius:12px;text-decoration:none;font-weight:600">Set a new password</a>
+        </p>
+        <p style="color:#64708a;font-size:13px">If the button doesn't work, paste this link:<br>${opts.link}</p>
+      </div>
+    `,
+  });
+  return true;
+}
+
 /** Notify the platform admin when an audit needs manual approval (free email / duplicate domain). */
 export async function sendAuditApprovalRequest(opts: { practiceName: string; email: string; reason: string; manageLink: string }): Promise<boolean> {
   const resend = getResend();

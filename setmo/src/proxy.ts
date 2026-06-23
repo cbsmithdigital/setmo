@@ -43,6 +43,9 @@ export async function proxy(request: NextRequest) {
     path.startsWith("/partners") || // public partner application (note: /partner is the gated dashboard)
     path.startsWith("/audit") || // pre-sale Setter Audit (token-cookie gated)
     path === "/login" ||
+    path === "/forgot-password" ||
+    path === "/activate" ||
+    path === "/reset-password" ||
     path.startsWith("/invite") ||
     path.startsWith("/auth") ||
     // Public read-only shared-recording links (token-gated).

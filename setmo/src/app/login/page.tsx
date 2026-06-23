@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/components/ui/Icon";
@@ -126,9 +127,9 @@ export default function LoginPage() {
                 <input type="checkbox" defaultChecked style={{ accentColor: "#8b5cf6" }} /> Keep me
                 signed in
               </label>
-              <span style={{ fontSize: 13.5, color: "var(--purple-2)", fontWeight: 600 }}>
+              <Link href="/forgot-password" style={{ fontSize: 13.5, color: "var(--purple-2)", fontWeight: 600 }}>
                 Forgot password?
-              </span>
+              </Link>
             </div>
             <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={loading}>
               {loading ? "Signing in…" : "Sign in"} <Icon name="arrow" />
@@ -137,7 +138,7 @@ export default function LoginPage() {
 
           <p className="muted" style={{ fontSize: 13.5, marginTop: 20, textAlign: "center" }}>
             Invited by your office?{" "}
-            <span style={{ color: "var(--purple-2)", fontWeight: 600 }}>Set up your account</span>
+            <Link href="/activate" style={{ color: "var(--purple-2)", fontWeight: 600 }}>Set up your account</Link>
           </p>
         </div>
 
