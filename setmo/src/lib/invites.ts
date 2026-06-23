@@ -5,6 +5,14 @@ import { isEmailConfigured, sendInviteEmail } from "@/lib/email";
 export type InviteRole = "SETTER" | "OFFICE_ADMIN" | "GROUP_ADMIN";
 export type Invitee = { email: string; firstName?: string; lastName?: string };
 
+// Build a link to our own /auth/confirm carrying the token_hash. This is the
+// SSR-safe pattern: the server verifies it directly (sets the session cookie),
+// unlike the raw Supabase action_link which uses the implicit/hash flow that a
+// server route can't read.
+function confirmLink(origin: string, hashedToken: string | undefined, next: string): string | null {
+  return hashedToken ? `${origin}/auth/confirm?token_hash=${hashedToken}&type=invite&next=${encodeURIComponent(next)}` : null;
+}
+
 // Highest-privilege selected role becomes the User's primary role (active by
 // default); the rest are added as memberships so the user can switch between them.
 const PRIORITY: InviteRole[] = ["GROUP_ADMIN", "OFFICE_ADMIN", "SETTER"];
@@ -86,7 +94,7 @@ export async function inviteUsers(opts: {
       });
     }
 
-    const link = data.properties?.action_link;
+    const link = confirmLink(opts.origin, data.properties?.hashed_token, "/invite");
     if (link) {
       const sent = isEmailConfigured()
         ? await sendInviteEmail({ to: invitee.email, link, officeName: opts.contextName, inviterName: opts.inviterName }).catch(() => false)
@@ -104,7 +112,7 @@ export async function resendInvite(opts: { email: string; contextName: string; i
   const admin = getAdminClient();
   const redirectTo = `${opts.origin}/auth/confirm?next=/invite`;
   const { data, error: linkErr } = await admin.auth.admin.generateLink({ type: "invite", email: opts.email, options: { redirectTo } });
-  const link = data?.properties?.action_link;
+  const link = confirmLink(opts.origin, data?.properties?.hashed_token, "/invite");
   if (linkErr || !link) return { ok: false };
   const sent = isEmailConfigured()
     ? await sendInviteEmail({ to: opts.email, link, officeName: opts.contextName, inviterName: opts.inviterName }).catch(() => false)
