@@ -2,7 +2,9 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { getGroupOverview } from "@/lib/group";
 import { getOnboarding } from "@/lib/office";
+import { prisma } from "@/lib/db";
 import { OnboardingChecklist } from "@/components/office/OnboardingChecklist";
+import { InviteButton } from "@/components/office/InviteButton";
 import { StatTile } from "@/components/ui/StatTile";
 import { Icon } from "@/components/ui/Icon";
 
@@ -24,6 +26,7 @@ export default async function GroupPage() {
   }
   const g = await getGroupOverview(user.organizationId);
   const onboarding = user.officeId ? await getOnboarding(user.officeId) : null;
+  const offices = await prisma.office.findMany({ where: { organizationId: user.organizationId }, select: { id: true, name: true }, orderBy: { name: "asc" } });
 
   return (
     <>
@@ -32,7 +35,8 @@ export default async function GroupPage() {
           <h1>{g.orgName}</h1>
           <p>{g.officeCount} practices · portfolio performance</p>
         </div>
-        <div className="tb-right">
+        <div className="tb-right" style={{ display: "flex", gap: 10 }}>
+          <InviteButton scope="group" offices={offices} className="btn btn-ghost" />
           <Link className="btn btn-primary" href="/coach">
             <Icon name="chat" /> Ask Setty Advisor
           </Link>

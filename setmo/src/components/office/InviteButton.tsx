@@ -7,9 +7,13 @@ import { InviteModal } from "@/components/billing/InviteModal";
 export function InviteButton({
   label = "Invite users",
   className = "btn btn-primary",
+  scope = "office",
+  offices = [],
 }: {
   label?: string;
   className?: string;
+  scope?: "office" | "group";
+  offices?: { id: string; name: string }[];
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -17,7 +21,7 @@ export function InviteButton({
       <button className={className} onClick={() => setOpen(true)}>
         <Icon name="team" size={17} /> {label}
       </button>
-      {open && <InviteModal onClose={() => setOpen(false)} />}
+      {open && <InviteModal scope={scope} offices={offices} onClose={() => setOpen(false)} />}
     </>
   );
 }
