@@ -60,7 +60,6 @@ export type TeamRow = {
   recSkill: string | null;
   rec: string | null;
   status: SetterStatus;
-  pending: boolean; // invited but not yet joined
 };
 
 // Per-setter aggregates for the whole office over a window (default: this month),
@@ -68,8 +67,8 @@ export type TeamRow = {
 export async function getOfficeTeam(officeId: string, range: AnalyticsRange = thisMonthRange()): Promise<TeamRow[]> {
   const [setters, sessions, recs] = await Promise.all([
     prisma.user.findMany({
-      where: { officeId, role: "SETTER" },
-      select: { id: true, firstName: true, lastName: true, status: true },
+      where: { officeId, role: "SETTER", status: "ACTIVE" },
+      select: { id: true, firstName: true, lastName: true },
     }),
     prisma.session.findMany({
       // windowed, excluding sub-minute hang-ups/interruptions
@@ -115,11 +114,36 @@ export async function getOfficeTeam(officeId: string, range: AnalyticsRange = th
       recSkill: rec ? skillName(rec.skillKey) : null,
       rec: rec?.reason ?? null,
       status: computeStatus(avg, delta, count),
-      pending: u.status === "INVITED",
     };
   });
 
-  return rows.sort((a, b) => Number(a.pending) - Number(b.pending) || b.avg - a.avg);
+  return rows.sort((a, b) => b.avg - a.avg);
+}
+
+export type MemberRow = {
+  id: string;
+  name: string;
+  email: string;
+  initials: string;
+  roles: string[]; // Role enum values; deduped across primary + memberships
+  status: "INVITED" | "ACTIVE" | "DISABLED";
+};
+
+/** Everyone attached to the office — any role, any status — for the roster. */
+export async function getOfficeMembers(officeId: string): Promise<MemberRow[]> {
+  const users = await prisma.user.findMany({
+    where: { officeId },
+    select: { id: true, email: true, firstName: true, lastName: true, role: true, status: true, memberships: { select: { role: true } } },
+    orderBy: [{ firstName: "asc" }, { email: "asc" }],
+  });
+  return users.map((u) => ({
+    id: u.id,
+    name: fullName(u.firstName, u.lastName),
+    email: u.email,
+    initials: initialsOf(u.firstName, u.lastName),
+    roles: Array.from(new Set<string>([u.role, ...u.memberships.map((m) => m.role)])),
+    status: u.status,
+  }));
 }
 
 export async function getOfficeOverview(officeId: string, range: AnalyticsRange = thisMonthRange()) {

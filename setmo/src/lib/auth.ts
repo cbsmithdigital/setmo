@@ -100,6 +100,8 @@ export async function getCurrentUser() {
 export async function requireUser() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  // Disabled accounts lose app access (can't re-enable themselves).
+  if (user.status === "DISABLED" && !user.impersonatedBy) redirect("/login?disabled=1");
   return user;
 }
 

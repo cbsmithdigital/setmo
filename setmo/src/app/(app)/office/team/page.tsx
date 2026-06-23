@@ -1,7 +1,8 @@
 import { requireRole } from "@/lib/auth";
 import { resolveAnalyticsRange } from "@/lib/queries";
-import { getOfficeTeam, getOfficeSkillMatrix } from "@/lib/office";
+import { getOfficeTeam, getOfficeSkillMatrix, getOfficeMembers } from "@/lib/office";
 import { TeamTable } from "@/components/office/TeamTable";
+import { MembersPanel } from "@/components/office/MembersPanel";
 import { InviteButton } from "@/components/office/InviteButton";
 import { ProgressControls } from "@/components/progress/ProgressControls";
 import { SkillMatrix } from "@/components/office/SkillMatrix";
@@ -23,9 +24,10 @@ export default async function OfficeTeamPage({
   const user = await requireRole("OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN");
   const sp = await searchParams;
   const { key, range, label } = resolveAnalyticsRange(sp);
-  const [team, matrix] = await Promise.all([
+  const [team, matrix, members] = await Promise.all([
     getOfficeTeam(user.officeId!, range),
     getOfficeSkillMatrix(user.officeId!, range),
+    getOfficeMembers(user.officeId!),
   ]);
 
   return (
@@ -41,6 +43,7 @@ export default async function OfficeTeamPage({
         </div>
       </div>
       <div className="content">
+        <MembersPanel members={members} currentUserId={user.id} />
         <TeamTable rows={team} />
 
         <div className="card card-pad rise" style={{ marginTop: 18 }}>
