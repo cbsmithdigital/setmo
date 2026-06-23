@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { constructWebhookEvent } from "@/lib/stripe";
 import { addMinutes } from "@/lib/usage";
 import { accrueCommission, markOfficeCommissionsEarned, clawbackOfficeCommissions } from "@/lib/partners";
+import { getPricingConfig } from "@/lib/config";
 import { error, json } from "@/lib/api";
 
 // Account is "earned" for partner commission once it has cleared its 2nd payment.
@@ -24,7 +25,9 @@ export async function POST(req: Request) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object;
-      if (session.metadata?.kind === "minutes" && session.payment_status === "paid") {
+      const kind = session.metadata?.kind;
+      // "minutes" = standalone top-up; "activation" = combined access + starter minutes.
+      if ((kind === "minutes" || kind === "activation") && session.payment_status === "paid") {
         await applyMinutes(session);
       }
       break;
@@ -62,7 +65,8 @@ async function applyMinutes(session: Stripe.Checkout.Session) {
   await accrueCommission({
     officeId,
     kind: "MINUTES",
-    baseCents: session.amount_total ?? 0,
+    // Pre-tax minutes cost (set at checkout); for activation this excludes the access line.
+    baseCents: Number(session.metadata?.amountCents ?? session.amount_total ?? 0),
     stripeRef: `${paymentRef}:min`,
     earned: (sub?.paidInvoices ?? 0) >= EARN_AFTER_PAYMENTS,
   });
@@ -81,7 +85,10 @@ async function onInvoicePaid(invoice: Stripe.Invoice) {
   await prisma.subscription.update({ where: { officeId: sub.officeId }, data: { paidInvoices: count } });
 
   const earned = count >= EARN_AFTER_PAYMENTS;
-  await accrueCommission({ officeId: sub.officeId, kind: "ACCESS", baseCents: invoice.amount_paid ?? 0, stripeRef: invoice.id ?? `inv:${sub.officeId}:${count}`, earned });
+  // Base ACCESS commission on the access list price — not invoice.amount_paid,
+  // which now includes tax and (on the first activation invoice) bundled minutes.
+  const cfg = await getPricingConfig();
+  await accrueCommission({ officeId: sub.officeId, kind: "ACCESS", baseCents: Math.round(cfg.accessMonthly * 100), stripeRef: invoice.id ?? `inv:${sub.officeId}:${count}`, earned });
   // Crossing the 2nd payment earns everything that was pending for this account.
   if (count === EARN_AFTER_PAYMENTS) await markOfficeCommissionsEarned(sub.officeId);
 }

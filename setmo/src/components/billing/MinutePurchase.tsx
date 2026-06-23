@@ -8,7 +8,18 @@ const SALES_EMAIL = "hello@growdental.ai,adam@growdental.ai";
 
 // Drag-slider minute purchase. The recommendation comes from how many people are
 // on the phones; per-minute price + discount update live as you drag.
-export function MinutePurchase({ defaultPeople = 1, cfg = DEFAULT_PRICING }: { defaultPeople?: number; cfg?: PricingConfig }) {
+export function MinutePurchase({
+  defaultPeople = 1,
+  cfg = DEFAULT_PRICING,
+  mode = "topup",
+  accessMonthly = 44.95,
+}: {
+  defaultPeople?: number;
+  cfg?: PricingConfig;
+  mode?: "topup" | "activate";
+  accessMonthly?: number;
+}) {
+  const isActivate = mode === "activate";
   const [people, setPeople] = useState(String(defaultPeople));
   const recommended = useMemo(() => recommendMinutes(Number(people) || 1, cfg), [people, cfg]);
   const [minutes, setMinutes] = useState(recommended);
@@ -19,6 +30,7 @@ export function MinutePurchase({ defaultPeople = 1, cfg = DEFAULT_PRICING }: { d
   const MAX_MINUTES = cfg.maxMinutes;
   const quote = minuteQuote(minutes, cfg);
   const pct = ((quote.minutes - MIN_MINUTES) / (MAX_MINUTES - MIN_MINUTES)) * 100;
+  const todayTotal = quote.total + (isActivate ? accessMonthly : 0);
 
   function applyRecommended() {
     setMinutes(recommendMinutes(Number(people) || 1, cfg));
@@ -28,7 +40,7 @@ export function MinutePurchase({ defaultPeople = 1, cfg = DEFAULT_PRICING }: { d
     setBusy(true);
     setErr(null);
     try {
-      const res = await fetch("/api/office/minutes/checkout", {
+      const res = await fetch(isActivate ? "/api/office/activate/checkout" : "/api/office/minutes/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ minutes: quote.minutes }),
@@ -43,9 +55,11 @@ export function MinutePurchase({ defaultPeople = 1, cfg = DEFAULT_PRICING }: { d
 
   return (
     <div className="card card-pad rise">
-      <h3 style={{ fontSize: 18, marginBottom: 4 }}>Buy minutes</h3>
+      <h3 style={{ fontSize: 18, marginBottom: 4 }}>{isActivate ? "Activate SetMo" : "Buy minutes"}</h3>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 16 }}>
-        Minutes power every practice &amp; coaching call. They roll over and never expire. Bigger balances earn a better rate.
+        {isActivate
+          ? `Go live today: $${accessMonthly.toFixed(2)} Practice Access plus your starter minutes, in one payment. Minutes roll over and never expire — pick how many to start with.`
+          : "Minutes power every practice & coaching call. They roll over and never expire. Bigger balances earn a better rate."}
       </p>
 
       {/* recommendation input */}
@@ -100,8 +114,22 @@ export function MinutePurchase({ defaultPeople = 1, cfg = DEFAULT_PRICING }: { d
         <div style={{ height: "100%", width: pct + "%", background: "var(--grad)", borderRadius: 99 }} />
       </div>
 
+      {isActivate && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13, padding: "12px 0", borderTop: "1px solid var(--line-soft)", marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span className="muted">Practice Access (first month)</span><b>${accessMonthly.toFixed(2)}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span className="muted">{quote.minutes.toLocaleString()} starter minutes</span><b>${quote.total.toLocaleString()}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14.5, marginTop: 4 }}><span style={{ fontWeight: 700 }}>Due today</span><b className="mint-text" style={{ fontFamily: "var(--font-lato)" }}>${todayTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></div>
+          <div className="muted" style={{ fontSize: 11.5 }}>Then ${accessMonthly.toFixed(2)}/month for access. Buy more minutes anytime. Plus tax where applicable.</div>
+        </div>
+      )}
+
       <button className="btn btn-primary" onClick={buy} disabled={busy} style={{ padding: "11px 22px" }}>
-        <Icon name="card" size={16} /> {busy ? "Starting checkout…" : `Buy ${quote.minutes.toLocaleString()} minutes — $${quote.total.toLocaleString()}`}
+        <Icon name="card" size={16} />{" "}
+        {busy
+          ? "Starting checkout…"
+          : isActivate
+            ? `Activate — $${todayTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} today`
+            : `Buy ${quote.minutes.toLocaleString()} minutes — $${quote.total.toLocaleString()}`}
       </button>
       {err && <p style={{ color: "var(--amber)", fontSize: 13, marginTop: 10 }}>{err}</p>}
       <p className="muted" style={{ fontSize: 12, marginTop: 14 }}>

@@ -20,6 +20,7 @@ export function BillingClient({
   practiceName,
   accessStatus,
   minutesStatus,
+  activateStatus,
   seatsFree,
   recommendPeople,
   pricing = DEFAULT_PRICING,
@@ -28,6 +29,7 @@ export function BillingClient({
   practiceName: string;
   accessStatus?: string;
   minutesStatus?: string;
+  activateStatus?: string;
   seatsFree: number;
   recommendPeople: number;
   pricing?: PricingConfig;
@@ -65,6 +67,8 @@ export function BillingClient({
       </div>
 
       <div className="content">
+        {activateStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>You&apos;re live! Practice Access is active and your starter minutes are being added — give it a few seconds.</div>}
+        {activateStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Activation cancelled — no charge was made.</div>}
         {accessStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Practice Access is active — thanks! Manage it anytime here.</div>}
         {accessStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Checkout cancelled — no charge was made.</div>}
         {minutesStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Payment received — your minutes will be added within a few seconds.</div>}
@@ -88,9 +92,15 @@ export function BillingClient({
               <span className="muted">Next invoice</span>
               <b>{data.nextInvoiceDate ?? "—"}</b>
             </div>
-            <button className="btn btn-ghost" style={{ width: "100%", marginTop: 14 }} onClick={manageAccess} disabled={busy}>
-              <Icon name="card" size={16} /> {data.subscribed ? "Manage access" : "Activate Practice Access"}
-            </button>
+            {data.subscribed ? (
+              <button className="btn btn-ghost" style={{ width: "100%", marginTop: 14 }} onClick={manageAccess} disabled={busy}>
+                <Icon name="card" size={16} /> Manage access
+              </button>
+            ) : (
+              <button className="btn btn-ghost" style={{ width: "100%", marginTop: 14 }} onClick={() => document.getElementById("activate-card")?.scrollIntoView({ behavior: "smooth" })}>
+                <Icon name="card" size={16} /> Choose minutes &amp; activate ↓
+              </button>
+            )}
           </div>
 
           {/* minute balance */}
@@ -112,9 +122,9 @@ export function BillingClient({
           </div>
         </div>
 
-        {/* buy minutes (slider) */}
-        <div style={{ marginBottom: 24 }}>
-          <MinutePurchase defaultPeople={recommendPeople} cfg={pricing} />
+        {/* buy minutes (slider) — combined activation when not yet subscribed */}
+        <div id="activate-card" style={{ marginBottom: 24 }}>
+          <MinutePurchase defaultPeople={recommendPeople} cfg={pricing} mode={data.subscribed ? "topup" : "activate"} accessMonthly={data.accessMonthly} />
         </div>
 
         {/* invoices */}

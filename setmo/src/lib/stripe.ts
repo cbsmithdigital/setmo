@@ -86,7 +86,8 @@ export async function createMinuteCheckout(opts: {
 }): Promise<string> {
   const stripe = getStripe();
   const quote = minuteQuote(opts.minutes, await getPricingConfig());
-  const meta = { kind: "minutes", officeId: opts.officeId, minutes: String(quote.minutes) };
+  // amountCents = pre-tax minutes cost, so commission accrual ignores tax.
+  const meta = { kind: "minutes", officeId: opts.officeId, minutes: String(quote.minutes), amountCents: String(quote.total * 100) };
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     ...(opts.stripeCustomerId
@@ -116,6 +117,66 @@ export async function createMinuteCheckout(opts: {
     metadata: meta,
     success_url: `${opts.origin}/office/billing?minutes=success`,
     cancel_url: `${opts.origin}/office/billing?minutes=cancel`,
+  });
+  if (!session.url) throw new Error("Stripe did not return a checkout URL");
+  return session.url;
+}
+
+/**
+ * First-time activation: one Checkout session that starts the $44.95/mo access
+ * subscription AND charges the chosen minutes once on the first invoice. Months
+ * 2+ bill access only.
+ */
+export async function createActivationCheckout(opts: {
+  officeId: string;
+  minutes: number;
+  stripeCustomerId?: string | null;
+  customerEmail?: string;
+  origin: string;
+}): Promise<string> {
+  const stripe = getStripe();
+  const cfg = await getPricingConfig();
+  const quote = minuteQuote(opts.minutes, cfg);
+  // session metadata drives minute granting; subscription metadata drives access sync.
+  const meta = { kind: "activation", officeId: opts.officeId, minutes: String(quote.minutes), amountCents: String(quote.total * 100) };
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription",
+    ...(opts.stripeCustomerId
+      ? { customer: opts.stripeCustomerId, customer_update: { address: "auto" as const } }
+      : opts.customerEmail
+        ? { customer_email: opts.customerEmail }
+        : {}),
+    billing_address_collection: "required",
+    automatic_tax: { enabled: true },
+    allow_promotion_codes: true,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: Math.round(cfg.accessMonthly * 100),
+          recurring: { interval: "month" },
+          tax_behavior: "exclusive",
+          product_data: { name: "SetMo — Practice Access", description: "Monthly access per location. Unlimited users, all features." },
+        },
+      },
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: quote.total * 100,
+          tax_behavior: "exclusive",
+          product_data: {
+            name: `SetMo — ${quote.minutes.toLocaleString()} minutes`,
+            description: `Starter minute balance ($${quote.perMin.toFixed(2)}/min). Roll over, never expire.`,
+          },
+        },
+      },
+    ],
+    subscription_data: { metadata: { kind: "access", officeId: opts.officeId } },
+    metadata: meta,
+    success_url: `${opts.origin}/office/billing?activate=success`,
+    cancel_url: `${opts.origin}/office/billing?activate=cancel`,
   });
   if (!session.url) throw new Error("Stripe did not return a checkout URL");
   return session.url;
