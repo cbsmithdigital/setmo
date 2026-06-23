@@ -53,6 +53,8 @@ export async function createAccessCheckout(opts: {
     // Stripe Tax: collect a billing address and compute sales tax automatically.
     billing_address_collection: "required",
     automatic_tax: { enabled: true },
+    // Let customers enter a promotion code (coupons managed in the Stripe dashboard).
+    allow_promotion_codes: true,
     line_items: [
       {
         quantity: 1,
@@ -95,6 +97,8 @@ export async function createMinuteCheckout(opts: {
     // Stripe Tax: collect a billing address and compute sales tax automatically.
     billing_address_collection: "required",
     automatic_tax: { enabled: true },
+    // Let customers enter a promotion code (coupons managed in the Stripe dashboard).
+    allow_promotion_codes: true,
     line_items: [
       {
         quantity: 1,
