@@ -17,7 +17,37 @@ type Row = {
   trend: number[];
   recSkill: string | null;
   status: string;
+  pending: boolean;
 };
+
+// Invited-but-not-joined member: name + a resend control instead of stats.
+function PendingRow({ row }: { row: Row }) {
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "err">("idle");
+  async function resend() {
+    setState("sending");
+    try {
+      const res = await fetch("/api/office/invites/resend", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId: row.id }) });
+      setState(res.ok ? "sent" : "err");
+    } catch {
+      setState("err");
+    }
+  }
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "15px 22px", borderTop: "1px solid var(--line-soft)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
+        <div className="lb-av" style={{ width: 38, height: 38, fontSize: 13, opacity: 0.55 }}>{row.initials || "?"}</div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: 14.5 }}>{row.name || "Invited user"}</div>
+          <div className="muted" style={{ fontSize: 12 }}>Invited · hasn&apos;t joined yet</div>
+        </div>
+      </div>
+      <span className="chip amber" style={{ padding: "3px 10px", fontSize: 11.5 }}>Invited</span>
+      <button className="btn btn-ghost" style={{ padding: "7px 14px", fontSize: 13 }} disabled={state === "sending" || state === "sent"} onClick={resend}>
+        {state === "sending" ? "Sending…" : state === "sent" ? "Sent ✓" : state === "err" ? "Try again" : "Resend invite"}
+      </button>
+    </div>
+  );
+}
 
 const FILTERS: [string, string][] = [
   ["all", "All setters"],
@@ -66,7 +96,10 @@ export function TeamTable({ rows }: { rows: Row[] }) {
 
         {filtered.length === 0 && <div className="card-pad muted" style={{ fontSize: 14 }}>No setters in this view.</div>}
 
-        {filtered.map((t, i) => (
+        {filtered.map((t, i) =>
+          t.pending ? (
+            <PendingRow key={t.id} row={t} />
+          ) : (
           <Link
             key={t.id}
             href={`/office/team/${t.id}`}

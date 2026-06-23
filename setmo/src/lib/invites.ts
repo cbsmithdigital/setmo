@@ -3,23 +3,32 @@ import { getAdminClient } from "@/lib/supabase/admin";
 import { isEmailConfigured, sendInviteEmail } from "@/lib/email";
 
 export type InviteRole = "SETTER" | "OFFICE_ADMIN" | "GROUP_ADMIN";
+export type Invitee = { email: string; firstName?: string; lastName?: string };
 
 // Highest-privilege selected role becomes the User's primary role (active by
 // default); the rest are added as memberships so the user can switch between them.
 const PRIORITY: InviteRole[] = ["GROUP_ADMIN", "OFFICE_ADMIN", "SETTER"];
+
+/** Split a free-text full name into first / last for storage. */
+export function splitName(name?: string): { firstName?: string; lastName?: string } {
+  const t = (name ?? "").trim();
+  if (!t) return {};
+  const [first, ...rest] = t.split(/\s+/);
+  return { firstName: first, lastName: rest.join(" ") || undefined };
+}
 
 function scopeFor(role: InviteRole, officeId: string | null, organizationId: string | null): { scopeType: "OFFICE" | "GROUP"; scopeId: string | null } {
   return role === "GROUP_ADMIN" ? { scopeType: "GROUP", scopeId: organizationId } : { scopeType: "OFFICE", scopeId: officeId };
 }
 
 /**
- * Mint a Supabase invite link per address, create/refresh an INVITED user with
- * the chosen role(s) — primary role on the user row plus a membership per role
- * so a person can be e.g. office admin AND setter — then email the link.
+ * Mint a Supabase invite link per invitee, create/refresh an INVITED user with
+ * the chosen role(s) and name — primary role on the user row plus a membership
+ * per role so a person can be e.g. office admin AND setter — then email the link.
  * Shared by the office and group invite routes.
  */
 export async function inviteUsers(opts: {
-  emails: string[];
+  invitees: Invitee[];
   roles: InviteRole[];
   officeId: string | null;
   organizationId: string | null;
@@ -37,24 +46,27 @@ export async function inviteUsers(opts: {
   const previewLinks: string[] = [];
   const failed: string[] = [];
 
-  for (const email of opts.emails) {
+  for (const invitee of opts.invitees) {
     const { data, error: linkErr } = await admin.auth.admin.generateLink({
       type: "invite",
-      email,
+      email: invitee.email,
       options: { redirectTo },
     });
     if (linkErr || !data?.user) {
-      failed.push(email);
+      failed.push(invitee.email);
       continue;
     }
     const userId = data.user.id;
+    // Only write a name when one was provided, so re-invites never wipe an existing name.
+    const nameData = invitee.firstName ? { firstName: invitee.firstName, lastName: invitee.lastName ?? null } : {};
 
     await prisma.user.upsert({
       where: { id: userId },
-      update: { officeId: opts.officeId, organizationId: opts.organizationId, role: primary, status: "INVITED", invitedById: opts.inviterId },
+      update: { ...nameData, officeId: opts.officeId, organizationId: opts.organizationId, role: primary, status: "INVITED", invitedById: opts.inviterId },
       create: {
         id: userId,
-        email,
+        email: invitee.email,
+        ...nameData,
         role: primary,
         status: "INVITED",
         officeId: opts.officeId,
@@ -77,7 +89,7 @@ export async function inviteUsers(opts: {
     const link = data.properties?.action_link;
     if (link) {
       const sent = isEmailConfigured()
-        ? await sendInviteEmail({ to: email, link, officeName: opts.contextName, inviterName: opts.inviterName }).catch(() => false)
+        ? await sendInviteEmail({ to: invitee.email, link, officeName: opts.contextName, inviterName: opts.inviterName }).catch(() => false)
         : false;
       if (!sent) previewLinks.push(link);
     }
@@ -85,4 +97,17 @@ export async function inviteUsers(opts: {
   }
 
   return { invited, failed, previewLinks };
+}
+
+/** Re-mint and re-send an invite link for an existing invited user. */
+export async function resendInvite(opts: { email: string; contextName: string; inviterName: string; origin: string }): Promise<{ ok: boolean; previewLink?: string }> {
+  const admin = getAdminClient();
+  const redirectTo = `${opts.origin}/auth/confirm?next=/invite`;
+  const { data, error: linkErr } = await admin.auth.admin.generateLink({ type: "invite", email: opts.email, options: { redirectTo } });
+  const link = data?.properties?.action_link;
+  if (linkErr || !link) return { ok: false };
+  const sent = isEmailConfigured()
+    ? await sendInviteEmail({ to: opts.email, link, officeName: opts.contextName, inviterName: opts.inviterName }).catch(() => false)
+    : false;
+  return { ok: true, previewLink: sent ? undefined : link };
 }

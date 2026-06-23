@@ -60,6 +60,7 @@ export type TeamRow = {
   recSkill: string | null;
   rec: string | null;
   status: SetterStatus;
+  pending: boolean; // invited but not yet joined
 };
 
 // Per-setter aggregates for the whole office over a window (default: this month),
@@ -68,7 +69,7 @@ export async function getOfficeTeam(officeId: string, range: AnalyticsRange = th
   const [setters, sessions, recs] = await Promise.all([
     prisma.user.findMany({
       where: { officeId, role: "SETTER" },
-      select: { id: true, firstName: true, lastName: true },
+      select: { id: true, firstName: true, lastName: true, status: true },
     }),
     prisma.session.findMany({
       // windowed, excluding sub-minute hang-ups/interruptions
@@ -114,10 +115,11 @@ export async function getOfficeTeam(officeId: string, range: AnalyticsRange = th
       recSkill: rec ? skillName(rec.skillKey) : null,
       rec: rec?.reason ?? null,
       status: computeStatus(avg, delta, count),
+      pending: u.status === "INVITED",
     };
   });
 
-  return rows.sort((a, b) => b.avg - a.avg);
+  return rows.sort((a, b) => Number(a.pending) - Number(b.pending) || b.avg - a.avg);
 }
 
 export async function getOfficeOverview(officeId: string, range: AnalyticsRange = thisMonthRange()) {

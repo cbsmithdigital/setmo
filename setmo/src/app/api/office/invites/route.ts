@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdminConfigured } from "@/lib/supabase/admin";
-import { inviteUsers } from "@/lib/invites";
+import { inviteUsers, splitName } from "@/lib/invites";
 import { error, json } from "@/lib/api";
 
 const Body = z.object({
-  emails: z.array(z.string().email()).min(1).max(25),
+  invitees: z.array(z.object({ email: z.string().email(), name: z.string().max(160).optional() })).min(1).max(25),
   roles: z.array(z.enum(["SETTER", "OFFICE_ADMIN", "GROUP_ADMIN"])).min(1),
 });
 
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid invite", 422);
-  const { emails, roles } = parsed.data;
+  const { invitees, roles } = parsed.data;
 
   // Granting group admin requires the office to be in a group AND the inviter to
   // hold group-admin authority (guards against office-admin privilege escalation).
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
   const result = await inviteUsers({
-    emails,
+    invitees: invitees.map((i) => ({ email: i.email, ...splitName(i.name) })),
     roles,
     officeId: user.officeId,
     organizationId: user.organizationId,

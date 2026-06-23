@@ -35,14 +35,17 @@ export function InviteModal({
         : ["SETTER", "OFFICE_ADMIN"];
   const [selected, setSelected] = useState<Role[]>(["SETTER"]);
   const [officeId, setOfficeId] = useState<string>(offices[0]?.id ?? "");
-  const [emails, setEmails] = useState<string[]>(["", ""]);
+  const [invitees, setInvitees] = useState<{ name: string; email: string }[]>([
+    { name: "", email: "" },
+    { name: "", email: "" },
+  ]);
   const [done, setDone] = useState(false);
   const [sentCount, setSentCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [previewLinks, setPreviewLinks] = useState<string[]>([]);
 
-  const valid = emails.filter((e) => /.+@.+\..+/.test(e));
+  const valid = invitees.filter((i) => /.+@.+\..+/.test(i.email));
   const needsLocation = scope === "group" && selected.some((r) => r === "SETTER" || r === "OFFICE_ADMIN");
 
   function toggle(r: Role) {
@@ -64,7 +67,7 @@ export function InviteModal({
       const res = await fetch(scope === "group" ? "/api/group/invites" : "/api/office/invites", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ emails: valid, roles: selected, ...(needsLocation ? { officeId } : {}) }),
+        body: JSON.stringify({ invitees: valid.map((i) => ({ email: i.email, name: i.name.trim() || undefined })), roles: selected, ...(needsLocation ? { officeId } : {}) }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -138,24 +141,33 @@ export function InviteModal({
               </div>
             )}
 
-            {emails.map((em, i) => (
+            <label style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 8 }}>Who are you inviting?</label>
+            {invitees.map((row, i) => (
               <div key={i} style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                 <input
                   className="input"
-                  type="email"
-                  value={em}
-                  placeholder="name@example.com"
-                  onChange={(e) => setEmails(emails.map((x, j) => (j === i ? e.target.value : x)))}
-                  style={{ flex: 1 }}
+                  type="text"
+                  value={row.name}
+                  placeholder="Full name"
+                  onChange={(e) => setInvitees(invitees.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                  style={{ flex: 1, minWidth: 0 }}
                 />
-                {emails.length > 1 && (
-                  <button onClick={() => setEmails(emails.filter((_, j) => j !== i))} className="btn btn-ghost" style={{ padding: "0 14px" }} aria-label="Remove">
+                <input
+                  className="input"
+                  type="email"
+                  value={row.email}
+                  placeholder="name@example.com"
+                  onChange={(e) => setInvitees(invitees.map((x, j) => (j === i ? { ...x, email: e.target.value } : x)))}
+                  style={{ flex: 1.3, minWidth: 0 }}
+                />
+                {invitees.length > 1 && (
+                  <button onClick={() => setInvitees(invitees.filter((_, j) => j !== i))} className="btn btn-ghost" style={{ padding: "0 12px" }} aria-label="Remove">
                     <Icon name="x" size={16} />
                   </button>
                 )}
               </div>
             ))}
-            <button onClick={() => setEmails([...emails, ""])} className="btn btn-ghost" style={{ fontSize: 13.5, padding: "9px 14px", marginBottom: 20 }}>
+            <button onClick={() => setInvitees([...invitees, { name: "", email: "" }])} className="btn btn-ghost" style={{ fontSize: 13.5, padding: "9px 14px", marginBottom: 20 }}>
               + Add another
             </button>
 

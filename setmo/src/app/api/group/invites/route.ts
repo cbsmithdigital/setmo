@@ -2,11 +2,11 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdminConfigured } from "@/lib/supabase/admin";
-import { inviteUsers } from "@/lib/invites";
+import { inviteUsers, splitName } from "@/lib/invites";
 import { error, json } from "@/lib/api";
 
 const Body = z.object({
-  emails: z.array(z.string().email()).min(1).max(25),
+  invitees: z.array(z.object({ email: z.string().email(), name: z.string().max(160).optional() })).min(1).max(25),
   roles: z.array(z.enum(["GROUP_ADMIN", "OFFICE_ADMIN", "SETTER"])).min(1),
   officeId: z.string().optional(), // required when any office-scoped role is selected
 });
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid invite", 422);
-  const { emails, roles, officeId } = parsed.data;
+  const { invitees, roles, officeId } = parsed.data;
   const needsOffice = roles.some((r) => r === "OFFICE_ADMIN" || r === "SETTER");
 
   let targetOfficeId: string | null = null;
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
 
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
   const result = await inviteUsers({
-    emails,
+    invitees: invitees.map((i) => ({ email: i.email, ...splitName(i.name) })),
     roles,
     officeId: targetOfficeId,
     organizationId: user.organizationId,
