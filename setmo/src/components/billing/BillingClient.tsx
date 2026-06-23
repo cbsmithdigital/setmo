@@ -21,6 +21,7 @@ export function BillingClient({
   accessStatus,
   minutesStatus,
   activateStatus,
+  allowGroupAdmin = false,
   seatsFree,
   recommendPeople,
   pricing = DEFAULT_PRICING,
@@ -30,6 +31,7 @@ export function BillingClient({
   accessStatus?: string;
   minutesStatus?: string;
   activateStatus?: string;
+  allowGroupAdmin?: boolean;
   seatsFree: number;
   recommendPeople: number;
   pricing?: PricingConfig;
@@ -145,7 +147,7 @@ export function BillingClient({
         </div>
       </div>
 
-      {invite && <InviteModal seatsFree={seatsFree} onClose={() => setInvite(false)} />}
+      {invite && <InviteModal seatsFree={seatsFree} allowGroupAdmin={allowGroupAdmin} onClose={() => setInvite(false)} />}
     </>
   );
 }

@@ -17,16 +17,23 @@ const ROLE_INFO: Record<Role, { label: string; desc: string }> = {
 export function InviteModal({
   scope = "office",
   offices = [],
+  allowGroupAdmin = false,
   onClose,
 }: {
   scope?: "office" | "group";
   offices?: Office[];
+  allowGroupAdmin?: boolean; // office scope: show group-admin option (office is in a group)
   seatsFree?: number;
   onClose: () => void;
 }) {
   const router = useRouter();
-  const roleOptions: Role[] = scope === "group" ? ["SETTER", "OFFICE_ADMIN", "GROUP_ADMIN"] : ["SETTER", "OFFICE_ADMIN"];
-  const [role, setRole] = useState<Role>("SETTER");
+  const roleOptions: Role[] =
+    scope === "group"
+      ? ["SETTER", "OFFICE_ADMIN", "GROUP_ADMIN"]
+      : allowGroupAdmin
+        ? ["SETTER", "OFFICE_ADMIN", "GROUP_ADMIN"]
+        : ["SETTER", "OFFICE_ADMIN"];
+  const [selected, setSelected] = useState<Role[]>(["SETTER"]);
   const [officeId, setOfficeId] = useState<string>(offices[0]?.id ?? "");
   const [emails, setEmails] = useState<string[]>(["", ""]);
   const [done, setDone] = useState(false);
@@ -36,12 +43,20 @@ export function InviteModal({
   const [previewLinks, setPreviewLinks] = useState<string[]>([]);
 
   const valid = emails.filter((e) => /.+@.+\..+/.test(e));
-  const needsLocation = scope === "group" && role !== "GROUP_ADMIN";
+  const needsLocation = scope === "group" && selected.some((r) => r === "SETTER" || r === "OFFICE_ADMIN");
+
+  function toggle(r: Role) {
+    setSelected((prev) => (prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]));
+  }
 
   async function send() {
     setErr(null);
+    if (selected.length === 0) {
+      setErr("Pick at least one role.");
+      return;
+    }
     if (needsLocation && !officeId) {
-      setErr("Choose a location for this role.");
+      setErr("Choose a location for the office roles.");
       return;
     }
     setLoading(true);
@@ -49,7 +64,7 @@ export function InviteModal({
       const res = await fetch(scope === "group" ? "/api/group/invites" : "/api/office/invites", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ emails: valid, role, ...(needsLocation ? { officeId } : {}) }),
+        body: JSON.stringify({ emails: valid, roles: selected, ...(needsLocation ? { officeId } : {}) }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -67,6 +82,8 @@ export function InviteModal({
     }
   }
 
+  const selectedLabels = roleOptions.filter((r) => selected.includes(r)).map((r) => ROLE_INFO[r].label.toLowerCase());
+
   return (
     <ModalShell onClose={onClose} width={520}>
       <div className="card-pad">
@@ -79,32 +96,39 @@ export function InviteModal({
               </button>
             </div>
             <p className="muted" style={{ fontSize: 14, marginBottom: 18 }}>
-              Choose what they can do, then add their emails. They&apos;ll get a link to set up their account. Users are free &amp; unlimited.
+              Pick one or more roles, then add their emails. Someone can be both an office admin and a setter. They&apos;ll get a link to set up their account — users are free &amp; unlimited.
             </p>
 
             {err && <div className="banner error" style={{ marginBottom: 16 }}>{err}</div>}
 
-            {/* role */}
-            <label style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 8 }}>Invite as</label>
-            <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-              {roleOptions.map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  className={"btn " + (role === r ? "btn-primary" : "btn-ghost")}
-                  onClick={() => setRole(r)}
-                  style={{ flex: "1 1 0", minWidth: 110, padding: "9px 12px", fontSize: 13.5 }}
-                >
-                  {ROLE_INFO[r].label}
-                </button>
+            {/* roles (multi-select) */}
+            <label style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 8 }}>Roles</label>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+              {roleOptions.map((r) => {
+                const on = selected.includes(r);
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    className={"btn " + (on ? "btn-primary" : "btn-ghost")}
+                    onClick={() => toggle(r)}
+                    style={{ flex: "1 1 0", minWidth: 110, padding: "9px 12px", fontSize: 13.5, gap: 6 }}
+                  >
+                    {on && <Icon name="check" size={14} sw={3} />} {ROLE_INFO[r].label}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ marginBottom: 16, display: "flex", flexDirection: "column", gap: 3 }}>
+              {roleOptions.filter((r) => selected.includes(r)).map((r) => (
+                <p key={r} className="muted" style={{ fontSize: 12.5 }}><b style={{ color: "var(--text-2)" }}>{ROLE_INFO[r].label}:</b> {ROLE_INFO[r].desc}</p>
               ))}
             </div>
-            <p className="muted" style={{ fontSize: 12.5, marginBottom: 16 }}>{ROLE_INFO[role].desc}</p>
 
-            {/* location (group only, non-group-admin role) */}
+            {/* location (group only, when an office-scoped role is selected) */}
             {needsLocation && (
               <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 8 }}>Location</label>
+                <label style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", color: "var(--muted)", display: "block", marginBottom: 8 }}>Location (for office admin / setter)</label>
                 <select className="input" value={officeId} onChange={(e) => setOfficeId(e.target.value)} style={{ width: "100%" }}>
                   {offices.length === 0 && <option value="">No locations found</option>}
                   {offices.map((o) => (
@@ -137,10 +161,10 @@ export function InviteModal({
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: "1px solid var(--line)", marginBottom: 18 }}>
               <span className="muted" style={{ fontSize: 13.5 }}>
-                {valid.length} invite{valid.length === 1 ? "" : "s"} · as {ROLE_INFO[role].label.toLowerCase()}
+                {valid.length} invite{valid.length === 1 ? "" : "s"}{selectedLabels.length ? ` · as ${selectedLabels.join(" + ")}` : ""}
               </span>
             </div>
-            <button className="btn btn-primary btn-block btn-lg" disabled={!valid.length || loading} onClick={send}>
+            <button className="btn btn-primary btn-block btn-lg" disabled={!valid.length || !selected.length || loading} onClick={send}>
               <Icon name="send" size={18} /> {loading ? "Sending…" : `Send ${valid.length || ""} invite${valid.length === 1 ? "" : "s"}`}
             </button>
           </>

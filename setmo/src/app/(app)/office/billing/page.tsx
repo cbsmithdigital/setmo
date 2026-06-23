@@ -24,6 +24,7 @@ export default async function OfficeBillingPage({
       accessStatus={access}
       minutesStatus={minutes}
       activateStatus={activate}
+      allowGroupAdmin={!!user.organizationId && user.roles.some((r) => r === "GROUP_ADMIN" || r === "PLATFORM_ADMIN")}
       seatsFree={9999}
       recommendPeople={Math.max(1, activeSetters)}
       pricing={pricing}

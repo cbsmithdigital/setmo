@@ -7,12 +7,12 @@ import { error, json } from "@/lib/api";
 
 const Body = z.object({
   emails: z.array(z.string().email()).min(1).max(25),
-  role: z.enum(["GROUP_ADMIN", "OFFICE_ADMIN", "SETTER"]),
-  officeId: z.string().optional(), // required for office-scoped roles
+  roles: z.array(z.enum(["GROUP_ADMIN", "OFFICE_ADMIN", "SETTER"])).min(1),
+  officeId: z.string().optional(), // required when any office-scoped role is selected
 });
 
-// POST /api/group/invites — a group admin invites a group admin (org-wide), or
-// an office admin / setter into a specific location in the group.
+// POST /api/group/invites — a group admin invites with one or more roles: group
+// admin (org-wide) and/or office admin / setter at a chosen location.
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
@@ -22,26 +22,27 @@ export async function POST(req: Request) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid invite", 422);
-  const { emails, role, officeId } = parsed.data;
+  const { emails, roles, officeId } = parsed.data;
+  const needsOffice = roles.some((r) => r === "OFFICE_ADMIN" || r === "SETTER");
 
   let targetOfficeId: string | null = null;
   let contextName: string;
 
-  if (role === "GROUP_ADMIN") {
-    const org = await prisma.organization.findUnique({ where: { id: user.organizationId }, select: { name: true } });
-    contextName = org?.name ?? "your group";
-  } else {
-    if (!officeId) return error("Choose a location for this role", 422);
+  if (needsOffice) {
+    if (!officeId) return error("Choose a location for the office roles", 422);
     const office = await prisma.office.findFirst({ where: { id: officeId, organizationId: user.organizationId }, select: { id: true, name: true } });
     if (!office) return error("That location isn't in your group", 422);
     targetOfficeId = office.id;
     contextName = office.name;
+  } else {
+    const org = await prisma.organization.findUnique({ where: { id: user.organizationId }, select: { name: true } });
+    contextName = org?.name ?? "your group";
   }
 
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
   const result = await inviteUsers({
     emails,
-    role,
+    roles,
     officeId: targetOfficeId,
     organizationId: user.organizationId,
     inviterId: user.id,

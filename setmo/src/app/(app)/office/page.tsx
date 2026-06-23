@@ -43,7 +43,7 @@ export default async function OfficeOverviewPage() {
         </div>
         <div className="tb-right" style={{ display: "flex", gap: 10 }}>
           <Link className="btn btn-ghost" href="/office/billing"><Icon name="card" size={16} /> Buy minutes</Link>
-          <InviteButton />
+          <InviteButton allowGroupAdmin={!!user.organizationId && user.roles.some((r) => r === "GROUP_ADMIN" || r === "PLATFORM_ADMIN")} />
         </div>
       </div>
 

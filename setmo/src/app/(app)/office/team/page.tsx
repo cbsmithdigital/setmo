@@ -37,7 +37,7 @@ export default async function OfficeTeamPage({
         </div>
         <div className="tb-right" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <ProgressControls active={key} from={sp.from} to={sp.to} basePath="/office/team" presets={PRESETS} />
-          <InviteButton />
+          <InviteButton allowGroupAdmin={!!user.organizationId && user.roles.some((r) => r === "GROUP_ADMIN" || r === "PLATFORM_ADMIN")} />
         </div>
       </div>
       <div className="content">
