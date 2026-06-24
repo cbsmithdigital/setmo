@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
 import { ModalShell } from "@/components/Modal";
@@ -33,6 +33,7 @@ function TrainingForm({ initial, skills, onClose }: { initial: Training | null; 
   const [assetMode, setAssetMode] = useState<"upload" | "link">(initial && isLink(initial.assetRef) ? "link" : "upload");
   const [link, setLink] = useState(initial && isLink(initial.assetRef) ? initial.assetRef : "");
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
@@ -127,16 +128,23 @@ function TrainingForm({ initial, skills, onClose }: { initial: Training | null; 
           <label>{type === "VIDEO" ? "Video" : "Workbook PDF"}</label>
           {linkAllowed && (
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-              <button type="button" className={"btn " + (assetMode === "upload" ? "btn-primary" : "btn-ghost")} style={{ flex: 1, padding: "8px 12px", fontSize: 13.5 }} onClick={() => setAssetMode("upload")}>Upload file</button>
-              <button type="button" className={"btn " + (assetMode === "link" ? "btn-primary" : "btn-ghost")} style={{ flex: 1, padding: "8px 12px", fontSize: 13.5 }} onClick={() => setAssetMode("link")}>Paste link</button>
+              <button type="button" className={"btn " + (assetMode === "upload" ? "btn-primary" : "btn-ghost")} style={{ flex: 1, padding: "8px 12px", fontSize: 13.5 }} onClick={() => setAssetMode("upload")}>Upload a file</button>
+              <button type="button" className={"btn " + (assetMode === "link" ? "btn-primary" : "btn-ghost")} style={{ flex: 1, padding: "8px 12px", fontSize: 13.5 }} onClick={() => setAssetMode("link")}>Use a link</button>
             </div>
           )}
           {effectiveMode === "link" ? (
             <input className="input" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://vimeo.com/… or YouTube / Loom link" />
           ) : (
             <>
-              <input className="input" type="file" accept={type === "VIDEO" ? "video/*" : "application/pdf"} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-              {initial?.assetRef && !isLink(initial.assetRef) && !file && <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>A file is already uploaded. Choose a new one to replace it.</p>}
+              <input ref={fileInputRef} type="file" accept={type === "VIDEO" ? "video/*" : "application/pdf"} onChange={(e) => setFile(e.target.files?.[0] ?? null)} style={{ display: "none" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <button type="button" className="btn btn-ghost" style={{ flex: "none" }} onClick={() => fileInputRef.current?.click()}>
+                  <Icon name="doc" size={15} /> Choose {type === "VIDEO" ? "video" : "PDF"}
+                </button>
+                <span className="muted" style={{ fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {file ? file.name : initial?.assetRef && !isLink(initial.assetRef) ? "A file is already uploaded — choose to replace" : "No file chosen"}
+                </span>
+              </div>
             </>
           )}
         </div>
