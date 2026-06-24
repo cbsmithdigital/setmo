@@ -5,8 +5,24 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 
-type Video = { id: string; title: string; mins: number; skill: string; why: string; status: string };
-type Workbook = { id: string; title: string; pages: number; done: number; desc: string; tag: string };
+type Asset = { hasAsset: boolean; external: boolean; assetUrl: string | null };
+type Video = { id: string; title: string; mins: number; skill: string; why: string; status: string } & Asset;
+type Workbook = { id: string; title: string; pages: number; done: number; desc: string; tag: string } & Asset;
+
+// Convert a Vimeo/YouTube/Loom watch URL into an embeddable player URL.
+function embedFor(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, "");
+    if (host === "youtube.com" || host === "m.youtube.com") { const id = u.searchParams.get("v"); return id ? `https://www.youtube.com/embed/${id}` : null; }
+    if (host === "youtu.be") return `https://www.youtube.com/embed/${u.pathname.slice(1)}`;
+    if (host === "vimeo.com") { const id = u.pathname.split("/").filter(Boolean)[0]; return id ? `https://player.vimeo.com/video/${id}` : null; }
+    if (host === "loom.com") { const id = u.pathname.split("/").filter(Boolean).pop(); return id ? `https://www.loom.com/embed/${id}` : null; }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 const THUMBS = [
   "linear-gradient(135deg,#7c3aed,#4c1d95)",
@@ -57,6 +73,7 @@ function VideoModal({ video, index, onClose }: { video: Video; index: number; on
   const router = useRouter();
   const [playing, setPlaying] = useState(false);
   const [marking, setMarking] = useState(false);
+  const embed = video.external && video.assetUrl ? embedFor(video.assetUrl) : null;
 
   async function markComplete() {
     setMarking(true);
@@ -72,11 +89,29 @@ function VideoModal({ video, index, onClose }: { video: Video; index: number; on
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(6,6,12,.7)", backdropFilter: "blur(6px)", display: "grid", placeItems: "center", padding: 24 }}>
       <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "min(820px,94vw)", overflow: "hidden", animation: "popin .3s var(--spring) both" }}>
-        <div style={{ position: "relative", aspectRatio: "16/9", background: thumbFor(video.id, index), display: "grid", placeItems: "center" }}>
-          <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(135deg,transparent,transparent 22px,rgba(0,0,0,.06) 22px,rgba(0,0,0,.06) 44px)" }} />
-          <button onClick={() => setPlaying((p) => !p)} style={{ position: "relative", width: 78, height: 78, borderRadius: "50%", background: "rgba(255,255,255,.16)", backdropFilter: "blur(8px)", border: "1.5px solid rgba(255,255,255,.4)", display: "grid", placeItems: "center", color: "#fff" }}>
-            <Icon name={playing ? "pause" : "play"} size={30} />
-          </button>
+        <div style={{ position: "relative", aspectRatio: "16/9", background: playing && video.hasAsset ? "#000" : thumbFor(video.id, index), display: "grid", placeItems: "center", overflow: "hidden" }}>
+          {playing && video.hasAsset ? (
+            video.external ? (
+              embed ? (
+                <iframe src={embed} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />
+              ) : (
+                <a className="btn btn-primary" href={video.assetUrl ?? "#"} target="_blank" rel="noreferrer"><Icon name="play" size={16} /> Watch video ↗</a>
+              )
+            ) : (
+              <video src={video.assetUrl ?? undefined} controls autoPlay style={{ position: "absolute", inset: 0, width: "100%", height: "100%", background: "#000" }} />
+            )
+          ) : (
+            <>
+              <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(135deg,transparent,transparent 22px,rgba(0,0,0,.06) 22px,rgba(0,0,0,.06) 44px)" }} />
+              {video.hasAsset ? (
+                <button onClick={() => setPlaying(true)} style={{ position: "relative", width: 78, height: 78, borderRadius: "50%", background: "rgba(255,255,255,.16)", backdropFilter: "blur(8px)", border: "1.5px solid rgba(255,255,255,.4)", display: "grid", placeItems: "center", color: "#fff" }}>
+                  <Icon name="play" size={30} />
+                </button>
+              ) : (
+                <span className="chip" style={{ position: "relative", background: "rgba(0,0,0,.4)", color: "#fff" }}>Lesson video coming soon</span>
+              )}
+            </>
+          )}
           <div style={{ position: "absolute", top: 14, left: 16 }} className="chip purple">{video.skill}</div>
           <button onClick={onClose} style={{ position: "absolute", top: 14, right: 16, width: 34, height: 34, borderRadius: "50%", background: "rgba(0,0,0,.35)", display: "grid", placeItems: "center", color: "#fff" }} aria-label="Close">
             <Icon name="x" size={16} sw={2.4} />
@@ -93,8 +128,8 @@ function VideoModal({ video, index, onClose }: { video: Video; index: number; on
             <b style={{ color: "var(--purple-2)" }}>Why this, now:</b> {video.why}.
           </div>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <button className="btn btn-primary" onClick={() => setPlaying(true)}>
-              <Icon name="play" size={16} /> Watch lesson
+            <button className="btn btn-primary" onClick={() => setPlaying(true)} disabled={!video.hasAsset}>
+              <Icon name="play" size={16} /> {video.hasAsset ? "Watch lesson" : "Coming soon"}
             </button>
             <Link className="btn btn-ghost" href="/coach">
               <Icon name="chat" size={16} /> Practice this with Coach
@@ -200,9 +235,15 @@ export function TrainingsClient({
                       {complete ? "Complete" : `${w.done}/${w.pages} pp`}
                     </span>
                   </div>
-                  <button className="btn btn-ghost" style={{ width: "100%" }}>
-                    <Icon name="doc" size={16} /> {w.done > 0 ? (complete ? "Review workbook" : "Continue") : "Open workbook"}
-                  </button>
+                  {w.hasAsset ? (
+                    <a className="btn btn-ghost" style={{ width: "100%" }} href={w.assetUrl ?? "#"} target="_blank" rel="noreferrer">
+                      <Icon name="doc" size={16} /> Open workbook
+                    </a>
+                  ) : (
+                    <button className="btn btn-ghost" style={{ width: "100%" }} disabled>
+                      <Icon name="doc" size={16} /> Coming soon
+                    </button>
+                  )}
                 </div>
               );
             })}

@@ -386,6 +386,13 @@ export async function getSetterTrainings(userId: string) {
 
   const recByTraining = new Map(recs.map((r) => [r.trainingId, r]));
 
+  // Resolve a training's playable asset: external link as-is, uploaded file via
+  // the auth-gated asset route, or none.
+  const asset = (id: string, ref: string | null) => {
+    const external = !!ref && /^https?:\/\//i.test(ref);
+    return { hasAsset: !!ref, external, assetUrl: ref ? (external ? ref : `/api/trainings/${id}/asset`) : null };
+  };
+
   const recommended = recs
     .filter((r) => r.training.type === "VIDEO")
     .map((r) => ({
@@ -395,6 +402,7 @@ export async function getSetterTrainings(userId: string) {
       skill: skillName(r.skillKey),
       why: r.reason,
       status: r.status === "COMPLETED" ? "done" : "new",
+      ...asset(r.training.id, r.training.assetRef),
     }));
 
   const recommendedIds = new Set(recommended.map((r) => r.id));
@@ -408,6 +416,7 @@ export async function getSetterTrainings(userId: string) {
       skill: t.targetSkillKey ? skillName(t.targetSkillKey) : "All skills",
       why: t.description ?? "Sharpen a core skill.",
       status: recByTraining.get(t.id)?.status === "COMPLETED" ? "done" : "start",
+      ...asset(t.id, t.assetRef),
     }));
 
   const workbooks = trainings
@@ -419,6 +428,7 @@ export async function getSetterTrainings(userId: string) {
       done: 0,
       desc: t.description ?? "",
       tag: t.targetSkillKey ? skillName(t.targetSkillKey) : "Core",
+      ...asset(t.id, t.assetRef),
     }));
 
   return { recommended, videos, workbooks };
