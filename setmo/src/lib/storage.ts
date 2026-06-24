@@ -45,7 +45,11 @@ const TRAININGS_BUCKET = "trainings";
 async function ensureTrainingsBucket() {
   const sb = getAdminClient();
   const { data } = await sb.storage.getBucket(TRAININGS_BUCKET);
-  if (!data) await sb.storage.createBucket(TRAININGS_BUCKET, { public: false, fileSizeLimit: "1073741824" }); // 1 GB
+  if (data) return;
+  // No fileSizeLimit override — it must not exceed the project's global max, so
+  // we inherit the project default. (Large videos use the paste-link option.)
+  const { error } = await sb.storage.createBucket(TRAININGS_BUCKET, { public: false });
+  if (error && !/exist/i.test(error.message)) throw new Error(`Bucket create failed: ${error.message}`);
 }
 
 /** Create a signed URL the browser uploads a training asset directly to (bypasses
