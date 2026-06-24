@@ -1,6 +1,7 @@
 import { json, error } from "@/lib/api";
 import { sweepGoals } from "@/lib/goals";
 import { runPartnerPayouts } from "@/lib/payouts";
+import { sweepMinuteThresholds } from "@/lib/usage";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -13,9 +14,10 @@ export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (secret && req.headers.get("authorization") !== `Bearer ${secret}`) return error("Unauthorized", 401);
   const result = await sweepGoals();
+  const minutes = await sweepMinuteThresholds().catch(() => null);
 
   const day = new Date().getUTCDate();
   const payouts = day === 1 || day === 15 ? await runPartnerPayouts(false).catch(() => null) : null;
 
-  return json({ ok: true, ...result, ...(payouts ? { payouts: { runKey: payouts.runKey, paid: payouts.rows.filter((r) => r.status === "PAID").length, paidCents: payouts.paidCents } } : {}) });
+  return json({ ok: true, ...result, ...(minutes ? { minuteChecks: minutes.checked } : {}), ...(payouts ? { payouts: { runKey: payouts.runKey, paid: payouts.rows.filter((r) => r.status === "PAID").length, paidCents: payouts.paidCents } } : {}) });
 }

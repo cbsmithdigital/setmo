@@ -188,6 +188,9 @@ model Office {
   isProspect       Boolean  @default(false) @map("is_prospect") // created by a pre-sale Setter Audit, not yet a customer
   referredByPartnerId String? @map("referred_by_partner_id") // first-touch partner attribution
   referralCode     String?  @map("referral_code")
+  autoTopUp        Boolean  @default(false) @map("auto_top_up") // auto-buy minutes when the balance dips below 25
+  minuteAlertStage Int      @default(0) @map("minute_alert_stage") // 0 healthy · 1 sent 100-min alert · 2 sent 60-min alert
+  lastAutoTopUpAt  DateTime? @map("last_auto_top_up_at")
   createdAt        DateTime @default(now()) @map("created_at")
 
   organization Organization?       @relation(fields: [organizationId], references: [id])

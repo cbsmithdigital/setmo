@@ -34,3 +34,79 @@ export async function canStartSession(officeId: string, opts: { isAudit?: boolea
   const b = await getMinuteBalance(officeId);
   return { ok: b.remainingSeconds > MIN_START_SECONDS, remainingSeconds: b.remainingSeconds };
 }
+
+// Auto top-up / low-minute alert thresholds (minutes remaining).
+const ALERT_100 = 100;
+const ALERT_60 = 60;
+const AUTO_TOPUP_AT = 25;
+
+/** Minutes in the office's most recent purchase — what auto top-up re-buys. */
+export async function lastPurchasedMinutes(officeId: string): Promise<number> {
+  const last = await prisma.conversationBundle.findFirst({ where: { officeId }, orderBy: { purchasedAt: "desc" }, select: { minutesPurchased: true } });
+  return last?.minutesPurchased ?? 0;
+}
+
+/** Active office admins (incl. group admins) who should get billing alerts. */
+async function officeAdminEmails(officeId: string): Promise<string[]> {
+  const admins = await prisma.user.findMany({
+    where: {
+      officeId,
+      status: "ACTIVE",
+      OR: [{ role: { in: ["OFFICE_ADMIN", "GROUP_ADMIN"] } }, { memberships: { some: { role: { in: ["OFFICE_ADMIN", "GROUP_ADMIN"] } } } }],
+    },
+    select: { email: true },
+  });
+  return Array.from(new Set(admins.map((a) => a.email).filter(Boolean)));
+}
+
+/**
+ * Run after a call consumes minutes (and as a daily sweep). Sends low-balance
+ * alerts to admins at 100 and 60 minutes (so they have time to turn auto top-up
+ * off), and — if auto top-up is on — auto-buys the last-purchased amount once the
+ * balance dips below 25.
+ */
+export async function evaluateMinuteThresholds(officeId: string): Promise<void> {
+  const office = await prisma.office.findUnique({
+    where: { id: officeId },
+    select: { id: true, name: true, stripeCustomerId: true, autoTopUp: true, minuteAlertStage: true, lastAutoTopUpAt: true },
+  });
+  if (!office) return;
+
+  const { remainingMin } = await getMinuteBalance(officeId);
+
+  // Pool is healthy again → reset so a future drop re-alerts.
+  if (remainingMin > ALERT_100) {
+    if (office.minuteAlertStage !== 0) await prisma.office.update({ where: { id: officeId }, data: { minuteAlertStage: 0 } });
+    return;
+  }
+
+  // Auto top-up below 25 min (guarded so we don't re-charge while it's landing).
+  if (remainingMin < AUTO_TOPUP_AT && office.autoTopUp && office.stripeCustomerId) {
+    const charging = office.lastAutoTopUpAt && Date.now() - office.lastAutoTopUpAt.getTime() < 30 * 60 * 1000;
+    const amount = charging ? 0 : await lastPurchasedMinutes(officeId);
+    if (amount > 0) {
+      await prisma.office.update({ where: { id: officeId }, data: { lastAutoTopUpAt: new Date() } }); // claim before charging
+      const { chargeMinutesAuto } = await import("@/lib/stripe");
+      await chargeMinutesAuto({ officeId, customerId: office.stripeCustomerId, minutes: amount }).catch(() => {});
+    }
+  }
+
+  // Low-balance alerts: 100 first, then 60.
+  let stage = office.minuteAlertStage;
+  const alert = async (threshold: number) => {
+    const to = await officeAdminEmails(officeId);
+    if (!to.length) return;
+    const { sendMinuteLowEmail } = await import("@/lib/email");
+    await sendMinuteLowEmail({ to, practiceName: office.name, remaining: remainingMin, autoTopUp: office.autoTopUp, topUpMinutes: await lastPurchasedMinutes(officeId), threshold }).catch(() => {});
+  };
+  if (remainingMin <= ALERT_60 && stage < 2) { await alert(ALERT_60); stage = 2; }
+  else if (remainingMin <= ALERT_100 && stage < 1) { await alert(ALERT_100); stage = 1; }
+  if (stage !== office.minuteAlertStage) await prisma.office.update({ where: { id: officeId }, data: { minuteAlertStage: stage } });
+}
+
+/** Daily safety-net sweep: evaluate thresholds for every office that has bought minutes. */
+export async function sweepMinuteThresholds(): Promise<{ checked: number }> {
+  const offices = await prisma.office.findMany({ where: { bundles: { some: {} } }, select: { id: true } });
+  for (const o of offices) await evaluateMinuteThresholds(o.id).catch(() => {});
+  return { checked: offices.length };
+}

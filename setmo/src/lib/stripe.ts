@@ -182,6 +182,55 @@ export async function createActivationCheckout(opts: {
   return session.url;
 }
 
+/**
+ * Auto top-up: charge the customer's saved card off-session for `minutes` and
+ * grant them immediately on success. Returns true if charged + granted.
+ * NOTE: off-session PaymentIntents don't run Stripe Tax (unlike Checkout); auto
+ * top-ups are charged at the minute price without added sales tax.
+ */
+export async function chargeMinutesAuto(opts: { officeId: string; customerId: string; minutes: number }): Promise<boolean> {
+  const { prisma } = await import("@/lib/db");
+  const stripe = getStripe();
+  const quote = minuteQuote(opts.minutes, await getPricingConfig());
+
+  // Find a saved card: the customer's invoice default, else any attached card.
+  const customer = (await stripe.customers.retrieve(opts.customerId)) as Stripe.Customer;
+  let pm = (customer.invoice_settings?.default_payment_method as string | null) ?? null;
+  if (!pm) {
+    const list = await stripe.paymentMethods.list({ customer: opts.customerId, type: "card", limit: 1 });
+    pm = list.data[0]?.id ?? null;
+  }
+  if (!pm) return false; // no card on file → can't auto-charge
+
+  let pi: Stripe.PaymentIntent;
+  try {
+    pi = await stripe.paymentIntents.create({
+      amount: quote.total * 100,
+      currency: "usd",
+      customer: opts.customerId,
+      payment_method: pm,
+      off_session: true,
+      confirm: true,
+      description: `SetMo — ${quote.minutes.toLocaleString()} minutes (auto top-up)`,
+      metadata: { kind: "minutes_auto", officeId: opts.officeId, minutes: String(quote.minutes), amountCents: String(quote.total * 100) },
+    });
+  } catch {
+    return false; // declined / requires authentication — admins were already warned
+  }
+  if (pi.status !== "succeeded") return false;
+
+  // Grant once (idempotent on the PaymentIntent id).
+  const existing = await prisma.conversationBundle.findFirst({ where: { stripePaymentIntent: pi.id } });
+  if (!existing) {
+    const { addMinutes } = await import("@/lib/usage");
+    await addMinutes(opts.officeId, quote.minutes, pi.id);
+    const { accrueCommission } = await import("@/lib/partners");
+    const sub = await prisma.subscription.findUnique({ where: { officeId: opts.officeId }, select: { paidInvoices: true } });
+    await accrueCommission({ officeId: opts.officeId, kind: "MINUTES", baseCents: quote.total * 100, stripeRef: `${pi.id}:min`, earned: (sub?.paidInvoices ?? 0) >= 2 }).catch(() => {});
+  }
+  return true;
+}
+
 export function constructWebhookEvent(rawBody: string, signature: string | null): Stripe.Event {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret) throw new Error("STRIPE_WEBHOOK_SECRET not configured.");

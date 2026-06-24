@@ -11,6 +11,8 @@ type BillingData = {
   accessMonthly: number;
   subscribed: boolean;
   accessStatus: string | null;
+  autoTopUp: boolean;
+  topUpMinutes: number;
   nextInvoiceDate: string | null;
   invoices: { date: string; desc: string; amount: string; status: string; url: string | null }[];
 };
@@ -38,6 +40,21 @@ export function BillingClient({
 }) {
   const [invite, setInvite] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [autoTopUp, setAutoTopUp] = useState(data.autoTopUp);
+  const [autoBusy, setAutoBusy] = useState(false);
+
+  async function toggleAutoTopUp(next: boolean) {
+    setAutoTopUp(next);
+    setAutoBusy(true);
+    try {
+      const res = await fetch("/api/office/auto-topup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled: next }) });
+      if (!res.ok) setAutoTopUp(!next); // revert on failure
+    } catch {
+      setAutoTopUp(!next);
+    } finally {
+      setAutoBusy(false);
+    }
+  }
 
   const { purchasedMin, usedMin, remainingMin } = data.balance;
   const pct = purchasedMin > 0 ? Math.min(100, (usedMin / purchasedMin) * 100) : 0;
@@ -118,6 +135,29 @@ export function BillingClient({
               <p className="muted" style={{ fontSize: 12.5 }}>
                 {usedMin.toLocaleString()} of {purchasedMin.toLocaleString()} purchased minutes used. Minutes roll over — assessments are always free and never deducted.
               </p>
+
+              {/* auto top-up */}
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line-soft)" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13.5 }}>Auto top-up</div>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    {data.topUpMinutes > 0
+                      ? <>Auto-buys <b>{data.topUpMinutes.toLocaleString()} minutes</b> (your last purchase) when the balance dips below 25.</>
+                      : <>Buy minutes once, then auto top-up can re-buy that amount automatically.</>}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoTopUp}
+                  disabled={autoBusy || data.topUpMinutes === 0}
+                  onClick={() => toggleAutoTopUp(!autoTopUp)}
+                  title={data.topUpMinutes === 0 ? "Buy minutes first to enable auto top-up" : undefined}
+                  style={{ flex: "none", width: 46, height: 26, borderRadius: 99, padding: 3, background: autoTopUp ? "var(--grad-mint)" : "#2a2a40", border: "none", cursor: data.topUpMinutes === 0 ? "not-allowed" : "pointer", opacity: data.topUpMinutes === 0 ? 0.5 : 1, transition: "background .2s" }}
+                >
+                  <span style={{ display: "block", width: 20, height: 20, borderRadius: "50%", background: "#fff", transform: autoTopUp ? "translateX(20px)" : "translateX(0)", transition: "transform .2s" }} />
+                </button>
+              </div>
             </div>
           </div>
         )}

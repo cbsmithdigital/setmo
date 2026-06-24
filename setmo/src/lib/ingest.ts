@@ -3,6 +3,7 @@ import { recomputeRecommendations } from "@/lib/coaching";
 import { updateSetterMemory } from "@/lib/memory";
 import { recomputeLeaderboards } from "@/lib/leaderboard";
 import { evaluateGoalsForSetter } from "@/lib/goals";
+import { evaluateMinuteThresholds } from "@/lib/usage";
 import { uploadRecording } from "@/lib/storage";
 import { parsePostCall, extractTranscript } from "@/lib/elevenlabs";
 import { scoreTranscript, isScorerConfigured } from "@/lib/scorer";
@@ -164,6 +165,8 @@ export async function scoreSession(
   await recomputeLeaderboards(session.officeId);
   // refresh any active goals this call could move (the setter's + their team's)
   await evaluateGoalsForSetter(session.setterId).catch(() => {});
+  // this call drew down minutes — fire low-balance alerts / auto top-up if needed
+  await evaluateMinuteThresholds(session.officeId).catch(() => {});
 
   return { ok: true, source };
 }

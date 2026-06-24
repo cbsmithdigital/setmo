@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getMinuteBalance } from "@/lib/usage";
+import { getMinuteBalance, lastPurchasedMinutes } from "@/lib/usage";
 import { skillName, skillTier, rubricFor, type SkillTierKey } from "@/lib/skills";
 import { SERVICE_META, SERVICE_ORDER } from "@/lib/service-meta";
 import { fullName, initialsOf } from "@/lib/format";
@@ -502,6 +502,8 @@ export async function getOfficeBilling(officeId: string) {
     accessMonthly,
     subscribed: subscription?.status === "ACTIVE",
     accessStatus: subscription?.status ?? null,
+    autoTopUp: office?.autoTopUp ?? false,
+    topUpMinutes: await lastPurchasedMinutes(officeId),
     nextInvoiceDate: subscription?.currentPeriodEnd
       ? subscription.currentPeriodEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
       : null,

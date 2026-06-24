@@ -137,6 +137,45 @@ export async function sendAuditVerifyEmail(opts: { to: string; link: string; pra
   return true;
 }
 
+/** Low-minute-balance alert for office admins (fires at 100 and 60 minutes). */
+export async function sendMinuteLowEmail(opts: { to: string[]; practiceName: string; remaining: number; autoTopUp: boolean; topUpMinutes: number; threshold: number }): Promise<number> {
+  const resend = getResend();
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!resend || !from || opts.to.length === 0) return 0;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://setmo.growdental.ai";
+  const billing = `${appUrl}/office/billing`;
+
+  const autoLine = opts.autoTopUp
+    ? `It's set to <strong>auto-purchase ${opts.topUpMinutes.toLocaleString()} minutes</strong> when your available minutes dip below 25, so your team won't be interrupted. If you'd rather not auto-purchase, you can turn it off in Billing before then.`
+    : `Auto top-up is currently <strong>off</strong>, so calls will pause when the pool runs out. Add minutes — or switch on auto top-up — in Billing to keep your team going.`;
+
+  let sent = 0;
+  for (const to of opts.to) {
+    try {
+      await resend.emails.send({
+        from,
+        to,
+        subject: `${opts.practiceName}: your SetMo minutes are running low (${opts.remaining.toLocaleString()} left)`,
+        html: `
+          <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
+            <h2 style="color:#7c3aed">Your minute pool is low</h2>
+            <p>It looks like your team has been using SetMo more, and your minute pool is low — about <strong>${opts.remaining.toLocaleString()} minutes</strong> remaining for ${opts.practiceName}.</p>
+            <p>${autoLine}</p>
+            <p style="margin:26px 0">
+              <a href="${billing}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">Manage minutes &amp; auto top-up</a>
+            </p>
+            <p style="color:#64708a;font-size:13px">Assessments are always free and never use your minutes.</p>
+          </div>
+        `,
+      });
+      sent++;
+    } catch {
+      /* skip a bad address, keep going */
+    }
+  }
+  return sent;
+}
+
 /** Password reset link (server-generated recovery, sent via Resend). */
 export async function sendPasswordResetEmail(opts: { to: string; link: string }): Promise<boolean> {
   const resend = getResend();
