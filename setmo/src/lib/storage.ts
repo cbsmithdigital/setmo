@@ -75,11 +75,3 @@ export async function deleteTrainingAsset(path: string): Promise<void> {
   const sb = getAdminClient();
   await sb.storage.from(TRAININGS_BUCKET).remove([path]);
 }
-
-/** Download an uploaded training asset as a Buffer (for same-origin re-reads). */
-export async function downloadTrainingAsset(path: string): Promise<Buffer | null> {
-  const sb = getAdminClient();
-  const { data, error } = await sb.storage.from(TRAININGS_BUCKET).download(path);
-  if (error || !data) return null;
-  return Buffer.from(await data.arrayBuffer());
-}

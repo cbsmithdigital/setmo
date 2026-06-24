@@ -239,39 +239,7 @@ export function TrainingsAdmin({ trainings, skills }: { trainings: Training[]; s
   const router = useRouter();
   const [form, setForm] = useState<{ initial: Training | null } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [bf, setBf] = useState<string | null>(null);
-  const [bfBusy, setBfBusy] = useState(false);
   const nameOf = (key: string) => skills.find((s) => s.key === key)?.name ?? "All skills";
-
-  async function backfillThumbs() {
-    setBfBusy(true);
-    setBf("Finding PDFs…");
-    try {
-      const res = await fetch("/api/platform/trainings/pdf-backfill");
-      const j = await res.json().catch(() => ({ pending: [] }));
-      const pending: { id: string; title: string }[] = j.pending ?? [];
-      if (!pending.length) { setBf("All PDFs already have thumbnails."); setBfBusy(false); return; }
-      let done = 0, failed = 0;
-      for (const p of pending) {
-        setBf(`Generating ${done + failed + 1} of ${pending.length}…`);
-        try {
-          const dl = await fetch(`/api/trainings/${p.id}/asset?dl=1`);
-          if (!dl.ok) { failed++; continue; }
-          const thumb = await generatePdfThumb(new File([await dl.blob()], "doc.pdf", { type: "application/pdf" }));
-          if (!thumb) { failed++; continue; }
-          const path = await uploadTrainingFile(p.id, thumb);
-          await fetch(`/api/platform/trainings/${p.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ thumbRef: path }) });
-          done++;
-        } catch { failed++; }
-      }
-      setBf(`Done — ${done} generated${failed ? `, ${failed} skipped` : ""}.`);
-      router.refresh();
-    } catch {
-      setBf("Backfill failed.");
-    } finally {
-      setBfBusy(false);
-    }
-  }
 
   async function patch(id: string, body: object) {
     setBusyId(id);
@@ -295,11 +263,7 @@ export function TrainingsAdmin({ trainings, skills }: { trainings: Training[]; s
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button className="btn btn-ghost" onClick={backfillThumbs} disabled={bfBusy} style={{ fontSize: 13 }}>{bfBusy ? "Working…" : "Backfill PDF thumbnails"}</button>
-          {bf && <span className="muted" style={{ fontSize: 12.5 }}>{bf}</span>}
-        </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
         <button className="btn btn-primary" onClick={() => setForm({ initial: null })}><Icon name="book" size={16} /> New training</button>
       </div>
 
