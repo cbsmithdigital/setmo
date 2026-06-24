@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { getTrainingAssetUrl } from "@/lib/storage";
+import { getTrainingAssetUrl, downloadTrainingAsset } from "@/lib/storage";
 import { error } from "@/lib/api";
 
 const STAFF = ["PLATFORM_ADMIN", "SUPPORT"];
@@ -24,6 +24,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   // External link (Vimeo/YouTube/etc.) → straight redirect.
   if (/^https?:\/\//i.test(ref)) return NextResponse.redirect(ref);
+
+  // Same-origin byte stream (dl=1, staff) — used to re-read PDFs for thumbnail backfill.
+  if (new URL(req.url).searchParams.get("dl") === "1" && STAFF.includes(user.role)) {
+    const buf = await downloadTrainingAsset(ref);
+    if (!buf) return error("Asset unavailable", 404);
+    return new Response(new Uint8Array(buf), { status: 200, headers: { "Content-Type": "application/octet-stream", "Cache-Control": "private, no-store" } });
+  }
 
   // Uploaded file → short-lived signed URL.
   const url = await getTrainingAssetUrl(ref);

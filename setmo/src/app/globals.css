@@ -900,3 +900,30 @@ a {
 @media (max-width: 560px) {
   .hrail > * { width: 82vw; }
 }
+
+/* Side-scroll arrows for content rails */
+.rail-wrap { position: relative; }
+.rail-arrow {
+  position: absolute;
+  top: 96px; /* roughly centered on the card thumbnail */
+  transform: translateY(-50%);
+  z-index: 6;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--s2, #15132a);
+  border: 1px solid var(--line);
+  color: var(--text, #e2e8f0);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition: background .15s, transform .15s;
+}
+.rail-arrow:hover { background: var(--s3, #1a1a2e); }
+.rail-arrow.left { left: -10px; }
+.rail-arrow.right { right: -10px; }
+/* Touch devices swipe — hide the arrows there */
+@media (max-width: 768px) {
+  .rail-arrow { display: none; }
+}

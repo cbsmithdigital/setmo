@@ -46,6 +46,17 @@ async function generatePdfThumb(file: File): Promise<File | null> {
   }
 }
 
+// Upload a file directly to storage via a signed URL; returns the stored path.
+async function uploadTrainingFile(trainingId: string, f: File): Promise<string> {
+  const up = await fetch(`/api/platform/trainings/upload-url`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ trainingId, filename: f.name }) });
+  const uj = await up.json().catch(() => ({}));
+  if (!up.ok || !uj.token) throw new Error(uj.error ?? "Couldn't start the upload.");
+  const supabase = createClient();
+  const { error } = await supabase.storage.from(uj.bucket).uploadToSignedUrl(uj.path, uj.token, f, { contentType: f.type || undefined });
+  if (error) throw new Error(error.message);
+  return uj.path as string;
+}
+
 function TrainingForm({ initial, skills, onClose }: { initial: Training | null; skills: Skill[]; onClose: () => void }) {
   const router = useRouter();
   const editing = Boolean(initial);
@@ -96,20 +107,9 @@ function TrainingForm({ initial, skills, onClose }: { initial: Training | null; 
         id = j.id;
       }
 
-      // Direct-to-storage upload helper (asset + optional thumbnail).
-      const upload = async (f: File): Promise<string> => {
-        const up = await fetch(`/api/platform/trainings/upload-url`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ trainingId: id, filename: f.name }) });
-        const uj = await up.json().catch(() => ({}));
-        if (!up.ok || !uj.token) throw new Error(uj.error ?? "Couldn't start the upload.");
-        const supabase = createClient();
-        const { error: upErr } = await supabase.storage.from(uj.bucket).uploadToSignedUrl(uj.path, uj.token, f, { contentType: f.type || undefined });
-        if (upErr) throw new Error(upErr.message);
-        return uj.path as string;
-      };
-
       if (effectiveMode === "upload" && file && id) {
         setStage("Uploading file…");
-        const path = await upload(file);
+        const path = await uploadTrainingFile(id, file);
         await fetch(`/api/platform/trainings/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetRef: path }) });
       }
       // Thumbnail: manual upload, else auto-generate from a PDF's first page.
@@ -120,7 +120,7 @@ function TrainingForm({ initial, skills, onClose }: { initial: Training | null; 
       }
       if (thumbToUpload && id) {
         setStage("Uploading thumbnail…");
-        const tpath = await upload(thumbToUpload);
+        const tpath = await uploadTrainingFile(id, thumbToUpload);
         await fetch(`/api/platform/trainings/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ thumbRef: tpath }) });
       }
 
@@ -239,7 +239,39 @@ export function TrainingsAdmin({ trainings, skills }: { trainings: Training[]; s
   const router = useRouter();
   const [form, setForm] = useState<{ initial: Training | null } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [bf, setBf] = useState<string | null>(null);
+  const [bfBusy, setBfBusy] = useState(false);
   const nameOf = (key: string) => skills.find((s) => s.key === key)?.name ?? "All skills";
+
+  async function backfillThumbs() {
+    setBfBusy(true);
+    setBf("Finding PDFs…");
+    try {
+      const res = await fetch("/api/platform/trainings/pdf-backfill");
+      const j = await res.json().catch(() => ({ pending: [] }));
+      const pending: { id: string; title: string }[] = j.pending ?? [];
+      if (!pending.length) { setBf("All PDFs already have thumbnails."); setBfBusy(false); return; }
+      let done = 0, failed = 0;
+      for (const p of pending) {
+        setBf(`Generating ${done + failed + 1} of ${pending.length}…`);
+        try {
+          const dl = await fetch(`/api/trainings/${p.id}/asset?dl=1`);
+          if (!dl.ok) { failed++; continue; }
+          const thumb = await generatePdfThumb(new File([await dl.blob()], "doc.pdf", { type: "application/pdf" }));
+          if (!thumb) { failed++; continue; }
+          const path = await uploadTrainingFile(p.id, thumb);
+          await fetch(`/api/platform/trainings/${p.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ thumbRef: path }) });
+          done++;
+        } catch { failed++; }
+      }
+      setBf(`Done — ${done} generated${failed ? `, ${failed} skipped` : ""}.`);
+      router.refresh();
+    } catch {
+      setBf("Backfill failed.");
+    } finally {
+      setBfBusy(false);
+    }
+  }
 
   async function patch(id: string, body: object) {
     setBusyId(id);
@@ -263,7 +295,11 @@ export function TrainingsAdmin({ trainings, skills }: { trainings: Training[]; s
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button className="btn btn-ghost" onClick={backfillThumbs} disabled={bfBusy} style={{ fontSize: 13 }}>{bfBusy ? "Working…" : "Backfill PDF thumbnails"}</button>
+          {bf && <span className="muted" style={{ fontSize: 12.5 }}>{bf}</span>}
+        </div>
         <button className="btn btn-primary" onClick={() => setForm({ initial: null })}><Icon name="book" size={16} /> New training</button>
       </div>
 

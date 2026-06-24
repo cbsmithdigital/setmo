@@ -2,8 +2,31 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
+
+// Horizontal rail with desktop scroll arrows (auto-hidden at the ends / no overflow).
+function Rail({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [over, setOver] = useState({ left: false, right: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setOver({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => { el.removeEventListener("scroll", update); window.removeEventListener("resize", update); };
+  }, []);
+  const scroll = (dir: number) => ref.current?.scrollBy({ left: dir * ref.current.clientWidth * 0.8, behavior: "smooth" });
+  return (
+    <div className="rail-wrap">
+      {over.left && <button className="rail-arrow left" onClick={() => scroll(-1)} aria-label="Scroll left"><span style={{ display: "inline-flex", transform: "rotate(180deg)" }}><Icon name="arrow" size={18} /></span></button>}
+      <div ref={ref} className="hrail">{children}</div>
+      {over.right && <button className="rail-arrow right" onClick={() => scroll(1)} aria-label="Scroll right"><Icon name="arrow" size={18} /></button>}
+    </div>
+  );
+}
 
 type Asset = { hasAsset: boolean; external: boolean; assetUrl: string | null; thumbUrl: string | null };
 type Video = { id: string; title: string; mins: number; skill: string; why: string; status: string } & Asset;
@@ -240,10 +263,12 @@ export function TrainingsClient({
           No lessons yet — run a few sessions and we&apos;ll recommend coaching tied to your weak spots.
         </div>
       ) : (
-        <div className="hrail" style={{ marginBottom: 32 }}>
-          {allVideos.map((v, i) => (
-            <VideoCard key={v.id} v={v} index={i} onOpen={() => setOpen({ v, i })} />
-          ))}
+        <div style={{ marginBottom: 32 }}>
+          <Rail>
+            {allVideos.map((v, i) => (
+              <VideoCard key={v.id} v={v} index={i} onOpen={() => setOpen({ v, i })} />
+            ))}
+          </Rail>
         </div>
       )}
 
@@ -254,10 +279,12 @@ export function TrainingsClient({
           <p className="muted" style={{ fontSize: 13.5, marginBottom: 18 }}>
             Go deeper between calls — scripts and drills you can keep on hand.
           </p>
-          <div className="hrail" style={{ marginBottom: 32 }}>
-            {workbooks.map((w) => (
-              <DocCard key={w.id} title={w.title} desc={w.desc} meta={`${w.tag} · ${w.pages} pp`} thumbUrl={w.thumbUrl} assetUrl={w.assetUrl} hasAsset={w.hasAsset} />
-            ))}
+          <div style={{ marginBottom: 32 }}>
+            <Rail>
+              {workbooks.map((w) => (
+                <DocCard key={w.id} title={w.title} desc={w.desc} meta={`${w.tag} · ${w.pages} pp`} thumbUrl={w.thumbUrl} assetUrl={w.assetUrl} hasAsset={w.hasAsset} />
+              ))}
+            </Rail>
           </div>
         </>
       )}
@@ -269,14 +296,14 @@ export function TrainingsClient({
           <p className="muted" style={{ fontSize: 13.5, marginBottom: 18 }}>
             Scripts, SOPs, and resources for running your practice.
           </p>
-          <div className="hrail">
+          <Rail>
             {opsVideos.map((v, i) => (
               <VideoCard key={v.id} v={v} index={i} onOpen={() => setOpen({ v, i: allVideos.length + i })} />
             ))}
             {opsDocs.map((d) => (
               <DocCard key={d.id} title={d.title} desc={d.desc} meta={`PDF · ${d.length} pp`} thumbUrl={d.thumbUrl} assetUrl={d.assetUrl} hasAsset={d.hasAsset} />
             ))}
-          </div>
+          </Rail>
         </>
       )}
 
