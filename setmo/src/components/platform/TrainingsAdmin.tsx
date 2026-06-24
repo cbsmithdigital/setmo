@@ -11,10 +11,12 @@ type Training = {
   title: string;
   description: string;
   type: "VIDEO" | "WORKBOOK";
+  category: "SETTER" | "OPERATIONS";
   targetSkillKey: string;
   length: number;
   status: "DRAFT" | "PUBLISHED";
   assetRef: string;
+  thumbRef: string;
 };
 type Skill = { key: string; name: string };
 
@@ -27,6 +29,7 @@ function TrainingForm({ initial, skills, onClose }: { initial: Training | null; 
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [type, setType] = useState<"VIDEO" | "WORKBOOK">(initial?.type ?? "VIDEO");
+  const [category, setCategory] = useState<"SETTER" | "OPERATIONS">(initial?.category ?? "SETTER");
   const [skillKey, setSkillKey] = useState(initial?.targetSkillKey ?? "");
   const [length, setLength] = useState(String(initial?.length ?? 0));
   const [status, setStatus] = useState<"DRAFT" | "PUBLISHED">(initial?.status ?? "DRAFT");
@@ -34,6 +37,8 @@ function TrainingForm({ initial, skills, onClose }: { initial: Training | null; 
   const [link, setLink] = useState(initial && isLink(initial.assetRef) ? initial.assetRef : "");
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [thumbFile, setThumbFile] = useState<File | null>(null);
+  const thumbInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
@@ -50,6 +55,7 @@ function TrainingForm({ initial, skills, onClose }: { initial: Training | null; 
         title: title.trim(),
         description: description.trim() || null,
         type,
+        category,
         targetSkillKey: skillKey || null,
         length: Number(length) || 0,
         status,
@@ -67,16 +73,26 @@ function TrainingForm({ initial, skills, onClose }: { initial: Training | null; 
         id = j.id;
       }
 
-      if (effectiveMode === "upload" && file && id) {
-        setStage("Getting upload URL…");
-        const up = await fetch(`/api/platform/trainings/upload-url`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ trainingId: id, filename: file.name }) });
+      // Direct-to-storage upload helper (asset + optional thumbnail).
+      const upload = async (f: File): Promise<string> => {
+        const up = await fetch(`/api/platform/trainings/upload-url`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ trainingId: id, filename: f.name }) });
         const uj = await up.json().catch(() => ({}));
         if (!up.ok || !uj.token) throw new Error(uj.error ?? "Couldn't start the upload.");
-        setStage("Uploading file…");
         const supabase = createClient();
-        const { error: upErr } = await supabase.storage.from(uj.bucket).uploadToSignedUrl(uj.path, uj.token, file, { contentType: file.type || undefined });
+        const { error: upErr } = await supabase.storage.from(uj.bucket).uploadToSignedUrl(uj.path, uj.token, f, { contentType: f.type || undefined });
         if (upErr) throw new Error(upErr.message);
-        await fetch(`/api/platform/trainings/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetRef: uj.path }) });
+        return uj.path as string;
+      };
+
+      if (effectiveMode === "upload" && file && id) {
+        setStage("Uploading file…");
+        const path = await upload(file);
+        await fetch(`/api/platform/trainings/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetRef: path }) });
+      }
+      if (thumbFile && id) {
+        setStage("Uploading thumbnail…");
+        const tpath = await upload(thumbFile);
+        await fetch(`/api/platform/trainings/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ thumbRef: tpath }) });
       }
 
       router.refresh();
@@ -99,25 +115,36 @@ function TrainingForm({ initial, skills, onClose }: { initial: Training | null; 
         {err && <div className="banner error" style={{ marginBottom: 16 }}>{err}</div>}
 
         <div className="field">
-          <label>Type</label>
+          <label>Collection</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className={"btn " + (category === "SETTER" ? "btn-primary" : "btn-ghost")} style={{ flex: 1 }} onClick={() => setCategory("SETTER")}>Setter training</button>
+            <button type="button" className={"btn " + (category === "OPERATIONS" ? "btn-primary" : "btn-ghost")} style={{ flex: 1 }} onClick={() => setCategory("OPERATIONS")}>Operations asset</button>
+          </div>
+          <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>{category === "SETTER" ? "Shown to setters on Trainings, tied to a skill." : "An operations tool/resource shown to office & group admins on Resources."}</p>
+        </div>
+
+        <div className="field">
+          <label>Format</label>
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" className={"btn " + (type === "VIDEO" ? "btn-primary" : "btn-ghost")} style={{ flex: 1 }} onClick={() => setType("VIDEO")}>Video</button>
-            <button type="button" className={"btn " + (type === "WORKBOOK" ? "btn-primary" : "btn-ghost")} style={{ flex: 1 }} onClick={() => setType("WORKBOOK")}>Workbook (PDF)</button>
+            <button type="button" className={"btn " + (type === "WORKBOOK" ? "btn-primary" : "btn-ghost")} style={{ flex: 1 }} onClick={() => setType("WORKBOOK")}>{category === "OPERATIONS" ? "PDF / document" : "Workbook (PDF)"}</button>
           </div>
         </div>
 
-        <div className="field"><label htmlFor="t-title">Title</label><input id="t-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Objection handling: the spouse stall" /></div>
-        <div className="field"><label htmlFor="t-desc">Description</label><textarea id="t-desc" className="input" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What the setter will learn." /></div>
+        <div className="field"><label htmlFor="t-title">Title</label><input id="t-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={category === "OPERATIONS" ? "Front-desk phone script" : "Objection handling: the spouse stall"} /></div>
+        <div className="field"><label htmlFor="t-desc">Description</label><textarea id="t-desc" className="input" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What it covers." /></div>
 
         <div style={{ display: "flex", gap: 12 }}>
-          <div className="field" style={{ flex: 1 }}>
-            <label htmlFor="t-skill">Targets skill</label>
-            <select id="t-skill" className="input" value={skillKey} onChange={(e) => setSkillKey(e.target.value)}>
-              <option value="">All skills</option>
-              {skills.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
-            </select>
-          </div>
-          <div className="field" style={{ width: 130 }}>
+          {category === "SETTER" && (
+            <div className="field" style={{ flex: 1 }}>
+              <label htmlFor="t-skill">Targets skill</label>
+              <select id="t-skill" className="input" value={skillKey} onChange={(e) => setSkillKey(e.target.value)}>
+                <option value="">All skills</option>
+                {skills.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="field" style={{ width: category === "SETTER" ? 130 : "100%" }}>
             <label htmlFor="t-len">{type === "VIDEO" ? "Minutes" : "Pages"}</label>
             <input id="t-len" className="input" inputMode="numeric" value={length} onChange={(e) => setLength(e.target.value.replace(/[^0-9]/g, ""))} />
           </div>
@@ -148,6 +175,22 @@ function TrainingForm({ initial, skills, onClose }: { initial: Training | null; 
             </>
           )}
         </div>
+
+        {/* optional thumbnail (videos) */}
+        {type === "VIDEO" && (
+          <div className="field">
+            <label>Thumbnail <span className="muted" style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span></label>
+            <input ref={thumbInputRef} type="file" accept="image/*" onChange={(e) => setThumbFile(e.target.files?.[0] ?? null)} style={{ display: "none" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <button type="button" className="btn btn-ghost" style={{ flex: "none" }} onClick={() => thumbInputRef.current?.click()}>
+                <Icon name="doc" size={15} /> Choose image
+              </button>
+              <span className="muted" style={{ fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {thumbFile ? thumbFile.name : initial?.thumbRef ? "A thumbnail is set — choose to replace" : "Uploaded videos auto-use their first frame"}
+              </span>
+            </div>
+          </div>
+        )}
 
         <div className="field">
           <label>Status</label>
@@ -200,7 +243,7 @@ export function TrainingsAdmin({ trainings, skills }: { trainings: Training[]; s
       <div className="card rise" style={{ overflowX: "auto" }}>
         <div style={{ minWidth: 720 }}>
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1.4fr", gap: 14, padding: "12px 20px", borderBottom: "1px solid var(--line)", fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--muted)" }}>
-            <div>Title</div><div>Type</div><div>Targets</div><div>Asset</div><div>Status / actions</div>
+            <div>Title</div><div>Format</div><div>Collection</div><div>Asset</div><div>Status / actions</div>
           </div>
           {trainings.length === 0 && <div className="card-pad muted" style={{ fontSize: 14 }}>No trainings yet — create your first one.</div>}
           {trainings.map((t, i) => (
@@ -209,8 +252,8 @@ export function TrainingsAdmin({ trainings, skills }: { trainings: Training[]; s
                 <div style={{ fontWeight: 600, fontSize: 14.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</div>
                 <div className="muted" style={{ fontSize: 12 }}>{t.length} {t.type === "VIDEO" ? "min" : "pp"}</div>
               </div>
-              <div><span className="chip" style={{ padding: "2px 9px", fontSize: 11 }}>{t.type === "VIDEO" ? "Video" : "Workbook"}</span></div>
-              <div className="muted" style={{ fontSize: 13 }}>{nameOf(t.targetSkillKey)}</div>
+              <div><span className="chip" style={{ padding: "2px 9px", fontSize: 11 }}>{t.type === "VIDEO" ? "Video" : "PDF"}</span></div>
+              <div className="muted" style={{ fontSize: 13 }}>{t.category === "OPERATIONS" ? "Operations" : nameOf(t.targetSkillKey)}</div>
               <div><span className={"chip " + (t.assetRef ? "mint" : "amber")} style={{ padding: "2px 9px", fontSize: 11 }}>{assetLabel(t.assetRef)}</span></div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span className={"chip " + (t.status === "PUBLISHED" ? "mint" : "")} style={{ padding: "2px 9px", fontSize: 11 }}>{t.status === "PUBLISHED" ? "Published" : "Draft"}</span>

@@ -5,16 +5,18 @@ import { TrainingsAdmin } from "@/components/platform/TrainingsAdmin";
 
 export default async function PlatformTrainingsPage() {
   await requireRole("PLATFORM_ADMIN", "SUPPORT");
-  const rows = await prisma.training.findMany({ orderBy: [{ type: "asc" }, { title: "asc" }] });
+  const rows = await prisma.training.findMany({ orderBy: [{ category: "asc" }, { type: "asc" }, { title: "asc" }] });
   const trainings = rows.map((t) => ({
     id: t.id,
     title: t.title,
     description: t.description ?? "",
     type: t.type as "VIDEO" | "WORKBOOK",
+    category: t.category as "SETTER" | "OPERATIONS",
     targetSkillKey: t.targetSkillKey ?? "",
     length: t.length,
     status: t.status as "DRAFT" | "PUBLISHED",
     assetRef: t.assetRef ?? "",
+    thumbRef: t.thumbRef ?? "",
   }));
   const skills = IMPLANT_RUBRIC.map((s) => ({ key: s.key, name: s.name }));
 

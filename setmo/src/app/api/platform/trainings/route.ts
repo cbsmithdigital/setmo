@@ -9,10 +9,12 @@ const Body = z.object({
   title: z.string().min(2).max(200),
   description: z.string().max(2000).optional().nullable(),
   type: z.enum(["VIDEO", "WORKBOOK"]),
+  category: z.enum(["SETTER", "OPERATIONS"]).optional(),
   targetSkillKey: z.string().max(40).optional().nullable(),
   length: z.number().int().min(0).max(100000).optional(),
   status: z.enum(["DRAFT", "PUBLISHED"]).optional(),
   assetRef: z.string().max(2000).optional().nullable(), // external URL, or set later via upload
+  thumbRef: z.string().max(2000).optional().nullable(),
 });
 
 // POST /api/platform/trainings — create a training (platform staff only).
@@ -29,10 +31,12 @@ export async function POST(req: Request) {
       title: b.title,
       description: b.description ?? null,
       type: b.type,
+      category: b.category ?? "SETTER",
       targetSkillKey: b.targetSkillKey || null,
       length: b.length ?? 0,
       status: b.status ?? "DRAFT",
       assetRef: b.assetRef || null,
+      thumbRef: b.thumbRef || null,
     },
   });
   return json({ id: t.id });

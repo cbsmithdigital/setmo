@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 
-type Asset = { hasAsset: boolean; external: boolean; assetUrl: string | null };
+type Asset = { hasAsset: boolean; external: boolean; assetUrl: string | null; thumbUrl: string | null };
 type Video = { id: string; title: string; mins: number; skill: string; why: string; status: string } & Asset;
 type Workbook = { id: string; title: string; pages: number; done: number; desc: string; tag: string } & Asset;
 
@@ -36,8 +36,15 @@ const thumbFor = (id: string, i: number) => THUMBS[i % THUMBS.length];
 function VideoCard({ v, index, onOpen }: { v: Video; index: number; onOpen: (v: Video) => void }) {
   return (
     <button onClick={() => onOpen(v)} className="card" style={{ textAlign: "left", overflow: "hidden", padding: 0 }}>
-      <div style={{ position: "relative", aspectRatio: "16/9", background: thumbFor(v.id, index), display: "grid", placeItems: "center" }}>
-        <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(135deg,transparent,transparent 18px,rgba(0,0,0,.06) 18px,rgba(0,0,0,.06) 36px)" }} />
+      <div style={{ position: "relative", aspectRatio: "16/9", background: thumbFor(v.id, index), display: "grid", placeItems: "center", overflow: "hidden" }}>
+        {v.thumbUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={v.thumbUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : v.hasAsset && !v.external && v.assetUrl ? (
+          <video src={`${v.assetUrl}#t=0.1`} preload="metadata" muted style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : (
+          <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(135deg,transparent,transparent 18px,rgba(0,0,0,.06) 18px,rgba(0,0,0,.06) 36px)" }} />
+        )}
         <div style={{ position: "relative", width: 48, height: 48, borderRadius: "50%", background: "rgba(255,255,255,.18)", border: "1.5px solid rgba(255,255,255,.45)", display: "grid", placeItems: "center", color: "#fff" }}>
           <Icon name="play" size={20} />
         </div>
@@ -102,7 +109,12 @@ function VideoModal({ video, index, onClose }: { video: Video; index: number; on
             )
           ) : (
             <>
-              <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(135deg,transparent,transparent 22px,rgba(0,0,0,.06) 22px,rgba(0,0,0,.06) 44px)" }} />
+              {video.thumbUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={video.thumbUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(135deg,transparent,transparent 22px,rgba(0,0,0,.06) 22px,rgba(0,0,0,.06) 44px)" }} />
+              )}
               {video.hasAsset ? (
                 <button onClick={() => setPlaying(true)} style={{ position: "relative", width: 78, height: 78, borderRadius: "50%", background: "rgba(255,255,255,.16)", backdropFilter: "blur(8px)", border: "1.5px solid rgba(255,255,255,.4)", display: "grid", placeItems: "center", color: "#fff" }}>
                   <Icon name="play" size={30} />

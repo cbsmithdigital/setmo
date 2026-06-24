@@ -26,6 +26,7 @@ const NAV_OFFICE: NavItem[] = [
   { href: "/office/team", label: "Team", icon: "team" },
   { href: "/office/goals", label: "Goals & rewards", icon: "flame" },
   { href: "/office/catalog", label: "Service catalog", icon: "target" },
+  { href: "/resources", label: "Resources", icon: "book" },
   { href: "/office/billing", label: "Usage & billing", icon: "card" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
   { href: "/library", label: "Saved", icon: "doc" },
@@ -36,6 +37,7 @@ const NAV_GROUP: NavItem[] = [
   { href: "/group", label: "Portfolio", icon: "building" },
   { href: "/group/performance", label: "Performance", icon: "chart" },
   { href: "/group/goals", label: "Goals & rewards", icon: "flame" },
+  { href: "/resources", label: "Resources", icon: "book" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
 ];
 

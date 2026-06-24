@@ -119,6 +119,10 @@ enum TrainingStatus {
   DRAFT
   PUBLISHED
 }
+enum TrainingCategory {
+  SETTER
+  OPERATIONS
+}
 
 enum RecommendationStatus {
   ACTIVE
@@ -562,14 +566,16 @@ model CoachInsight {
 }
 
 model Training {
-  id             String         @id @default(uuid())
+  id             String           @id @default(uuid())
   title          String
   description    String?
   type           TrainingType
-  length         Int            @default(0) // minutes (video) / pages (workbook)
-  targetSkillKey String?        @map("target_skill_key")
-  status         TrainingStatus @default(DRAFT)
-  assetRef       String?        @map("asset_ref")
+  category       TrainingCategory @default(SETTER) // setter trainings vs operations assets
+  length         Int              @default(0) // minutes (video) / pages (workbook)
+  targetSkillKey String?          @map("target_skill_key")
+  status         TrainingStatus   @default(DRAFT)
+  assetRef       String?          @map("asset_ref")
+  thumbRef       String?          @map("thumb_ref") // optional thumbnail image (storage path or URL)
 
   recommendations Recommendation[]
 

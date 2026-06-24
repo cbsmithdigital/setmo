@@ -381,16 +381,16 @@ export async function getSetterTrainings(userId: string) {
       orderBy: { createdAt: "desc" },
       include: { training: true },
     }),
-    prisma.training.findMany({ where: { status: "PUBLISHED" } }),
+    prisma.training.findMany({ where: { status: "PUBLISHED", category: "SETTER" } }),
   ]);
 
   const recByTraining = new Map(recs.map((r) => [r.trainingId, r]));
 
   // Resolve a training's playable asset: external link as-is, uploaded file via
   // the auth-gated asset route, or none.
-  const asset = (id: string, ref: string | null) => {
+  const asset = (id: string, ref: string | null, thumb?: string | null) => {
     const external = !!ref && /^https?:\/\//i.test(ref);
-    return { hasAsset: !!ref, external, assetUrl: ref ? (external ? ref : `/api/trainings/${id}/asset`) : null };
+    return { hasAsset: !!ref, external, assetUrl: ref ? (external ? ref : `/api/trainings/${id}/asset`) : null, thumbUrl: thumb ? `/api/trainings/${id}/asset?kind=thumb` : null };
   };
 
   const recommended = recs
@@ -402,7 +402,7 @@ export async function getSetterTrainings(userId: string) {
       skill: skillName(r.skillKey),
       why: r.reason,
       status: r.status === "COMPLETED" ? "done" : "new",
-      ...asset(r.training.id, r.training.assetRef),
+      ...asset(r.training.id, r.training.assetRef, r.training.thumbRef),
     }));
 
   const recommendedIds = new Set(recommended.map((r) => r.id));
@@ -416,7 +416,7 @@ export async function getSetterTrainings(userId: string) {
       skill: t.targetSkillKey ? skillName(t.targetSkillKey) : "All skills",
       why: t.description ?? "Sharpen a core skill.",
       status: recByTraining.get(t.id)?.status === "COMPLETED" ? "done" : "start",
-      ...asset(t.id, t.assetRef),
+      ...asset(t.id, t.assetRef, t.thumbRef),
     }));
 
   const workbooks = trainings
@@ -428,10 +428,33 @@ export async function getSetterTrainings(userId: string) {
       done: 0,
       desc: t.description ?? "",
       tag: t.targetSkillKey ? skillName(t.targetSkillKey) : "Core",
-      ...asset(t.id, t.assetRef),
+      ...asset(t.id, t.assetRef, t.thumbRef),
     }));
 
   return { recommended, videos, workbooks };
+}
+
+// Operations assets — videos & documents for office/group admins (not setters).
+export async function getOperationsAssets() {
+  const rows = await prisma.training.findMany({
+    where: { status: "PUBLISHED", category: "OPERATIONS" },
+    orderBy: [{ type: "asc" }, { title: "asc" }],
+  });
+  return rows.map((t) => {
+    const ref = t.assetRef;
+    const external = !!ref && /^https?:\/\//i.test(ref);
+    return {
+      id: t.id,
+      title: t.title,
+      desc: t.description ?? "",
+      type: t.type as "VIDEO" | "WORKBOOK",
+      length: t.length,
+      hasAsset: !!ref,
+      external,
+      assetUrl: ref ? (external ? ref : `/api/trainings/${t.id}/asset`) : null,
+      thumbUrl: t.thumbRef ? `/api/trainings/${t.id}/asset?kind=thumb` : null,
+    };
+  });
 }
 
 // ---------- office service catalog ----------

@@ -10,10 +10,12 @@ const Patch = z.object({
   title: z.string().min(2).max(200).optional(),
   description: z.string().max(2000).optional().nullable(),
   type: z.enum(["VIDEO", "WORKBOOK"]).optional(),
+  category: z.enum(["SETTER", "OPERATIONS"]).optional(),
   targetSkillKey: z.string().max(40).optional().nullable(),
   length: z.number().int().min(0).max(100000).optional(),
   status: z.enum(["DRAFT", "PUBLISHED"]).optional(),
   assetRef: z.string().max(2000).optional().nullable(),
+  thumbRef: z.string().max(2000).optional().nullable(),
 });
 
 // PATCH /api/platform/trainings/:id — update fields (platform staff only).
@@ -39,10 +41,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ...(b.title !== undefined ? { title: b.title } : {}),
       ...(b.description !== undefined ? { description: b.description } : {}),
       ...(b.type !== undefined ? { type: b.type } : {}),
+      ...(b.category !== undefined ? { category: b.category } : {}),
       ...(b.targetSkillKey !== undefined ? { targetSkillKey: b.targetSkillKey || null } : {}),
       ...(b.length !== undefined ? { length: b.length } : {}),
       ...(b.status !== undefined ? { status: b.status } : {}),
       ...(b.assetRef !== undefined ? { assetRef: b.assetRef || null } : {}),
+      ...(b.thumbRef !== undefined ? { thumbRef: b.thumbRef || null } : {}),
     },
   });
   return json({ ok: true });
