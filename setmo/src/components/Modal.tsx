@@ -36,7 +36,7 @@ export function ModalShell({
       <div
         onClick={(e) => e.stopPropagation()}
         className="card card-glow"
-        style={{ width: `min(${width}px,94vw)`, animation: "popin .3s var(--spring) both" }}
+        style={{ width: `min(${width}px,94vw)`, maxHeight: "92vh", overflowY: "auto", animation: "popin .3s var(--spring) both" }}
         role="dialog"
         aria-modal="true"
       >

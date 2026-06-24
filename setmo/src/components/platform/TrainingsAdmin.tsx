@@ -23,6 +23,29 @@ type Skill = { key: string; name: string };
 const isLink = (ref: string) => /^https?:\/\//i.test(ref);
 const assetLabel = (ref: string) => (!ref ? "No asset" : isLink(ref) ? "Linked" : "Uploaded");
 
+// Render a PDF's first page to a JPEG thumbnail (best-effort, browser-side).
+async function generatePdfThumb(file: File): Promise<File | null> {
+  try {
+    const pdfjs = await import("pdfjs-dist");
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+    const data = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({ data }).promise;
+    const page = await pdf.getPage(1);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: Math.min(2, 800 / base.width) });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    await page.render({ canvasContext: ctx, viewport, canvas }).promise;
+    const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.82));
+    return blob ? new File([blob], "thumb.jpg", { type: "image/jpeg" }) : null;
+  } catch {
+    return null;
+  }
+}
+
 function TrainingForm({ initial, skills, onClose }: { initial: Training | null; skills: Skill[]; onClose: () => void }) {
   const router = useRouter();
   const editing = Boolean(initial);
@@ -89,9 +112,15 @@ function TrainingForm({ initial, skills, onClose }: { initial: Training | null; 
         const path = await upload(file);
         await fetch(`/api/platform/trainings/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ assetRef: path }) });
       }
-      if (thumbFile && id) {
+      // Thumbnail: manual upload, else auto-generate from a PDF's first page.
+      let thumbToUpload: File | null = thumbFile;
+      if (!thumbToUpload && type === "WORKBOOK" && effectiveMode === "upload" && file) {
+        setStage("Generating thumbnail…");
+        thumbToUpload = await generatePdfThumb(file);
+      }
+      if (thumbToUpload && id) {
         setStage("Uploading thumbnail…");
-        const tpath = await upload(thumbFile);
+        const tpath = await upload(thumbToUpload);
         await fetch(`/api/platform/trainings/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ thumbRef: tpath }) });
       }
 
@@ -176,21 +205,19 @@ function TrainingForm({ initial, skills, onClose }: { initial: Training | null; 
           )}
         </div>
 
-        {/* optional thumbnail (videos) */}
-        {type === "VIDEO" && (
-          <div className="field">
-            <label>Thumbnail <span className="muted" style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span></label>
-            <input ref={thumbInputRef} type="file" accept="image/*" onChange={(e) => setThumbFile(e.target.files?.[0] ?? null)} style={{ display: "none" }} />
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <button type="button" className="btn btn-ghost" style={{ flex: "none" }} onClick={() => thumbInputRef.current?.click()}>
-                <Icon name="doc" size={15} /> Choose image
-              </button>
-              <span className="muted" style={{ fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {thumbFile ? thumbFile.name : initial?.thumbRef ? "A thumbnail is set — choose to replace" : "Uploaded videos auto-use their first frame"}
-              </span>
-            </div>
+        {/* optional thumbnail */}
+        <div className="field">
+          <label>Thumbnail <span className="muted" style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span></label>
+          <input ref={thumbInputRef} type="file" accept="image/*" onChange={(e) => setThumbFile(e.target.files?.[0] ?? null)} style={{ display: "none" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button type="button" className="btn btn-ghost" style={{ flex: "none" }} onClick={() => thumbInputRef.current?.click()}>
+              <Icon name="doc" size={15} /> Choose image
+            </button>
+            <span className="muted" style={{ fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {thumbFile ? thumbFile.name : initial?.thumbRef ? "A thumbnail is set — choose to replace" : type === "VIDEO" ? "Uploaded videos auto-use their first frame" : "Auto-generated from page 1 — or choose your own"}
+            </span>
           </div>
-        )}
+        </div>
 
         <div className="field">
           <label>Status</label>

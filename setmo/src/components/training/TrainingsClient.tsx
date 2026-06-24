@@ -158,17 +158,47 @@ function VideoModal({ video, index, onClose }: { video: Video; index: number; on
   );
 }
 
+type OpsAsset = { id: string; title: string; desc: string; type: "VIDEO" | "WORKBOOK"; length: number } & Asset;
+
+// PDF / document card (workbooks + operations docs): thumbnail (page 1) or icon.
+function DocCard({ title, desc, meta, thumbUrl, assetUrl, hasAsset }: { title: string; desc: string; meta: string; thumbUrl: string | null; assetUrl: string | null; hasAsset: boolean }) {
+  return (
+    <div className="card card-pad" style={{ display: "flex", flexDirection: "column" }}>
+      <div style={{ position: "relative", aspectRatio: "16/10", borderRadius: 10, overflow: "hidden", marginBottom: 12, background: "linear-gradient(135deg,#24243a,#15132a)", display: "grid", placeItems: "center" }}>
+        {thumbUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={thumbUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }} />
+        ) : (
+          <div style={{ color: "var(--purple-2)" }}><Icon name="doc" size={30} /></div>
+        )}
+      </div>
+      <div style={{ fontWeight: 700, fontSize: 15.5, marginBottom: 6 }}>{title}</div>
+      {desc && <p className="muted" style={{ fontSize: 13, marginBottom: 12, flex: 1 }}>{desc}</p>}
+      <div style={{ marginBottom: 12 }}><span className="chip" style={{ padding: "2px 9px", fontSize: 11 }}>{meta}</span></div>
+      {hasAsset ? (
+        <a className="btn btn-ghost" style={{ width: "100%" }} href={assetUrl ?? "#"} target="_blank" rel="noreferrer"><Icon name="doc" size={16} /> Open</a>
+      ) : (
+        <button className="btn btn-ghost" style={{ width: "100%" }} disabled><Icon name="doc" size={16} /> Coming soon</button>
+      )}
+    </div>
+  );
+}
+
 export function TrainingsClient({
   recommended,
   videos,
   workbooks,
+  operations = [],
 }: {
   recommended: Video[];
   videos: Video[];
   workbooks: Workbook[];
+  operations?: OpsAsset[];
 }) {
   const [open, setOpen] = useState<{ v: Video; i: number } | null>(null);
   const allVideos = [...recommended, ...videos];
+  const opsVideos: Video[] = operations.filter((o) => o.type === "VIDEO").map((o) => ({ id: o.id, title: o.title, mins: o.length, skill: "Operations", why: o.desc || "Operations resource", status: "start", hasAsset: o.hasAsset, external: o.external, assetUrl: o.assetUrl, thumbUrl: o.thumbUrl }));
+  const opsDocs = operations.filter((o) => o.type === "WORKBOOK");
 
   return (
     <div className="content">
@@ -210,7 +240,7 @@ export function TrainingsClient({
           No lessons yet — run a few sessions and we&apos;ll recommend coaching tied to your weak spots.
         </div>
       ) : (
-        <div className="grid g-3" style={{ marginBottom: 32 }}>
+        <div className="hrail" style={{ marginBottom: 32 }}>
           {allVideos.map((v, i) => (
             <VideoCard key={v.id} v={v} index={i} onOpen={() => setOpen({ v, i })} />
           ))}
@@ -224,41 +254,28 @@ export function TrainingsClient({
           <p className="muted" style={{ fontSize: 13.5, marginBottom: 18 }}>
             Go deeper between calls — scripts and drills you can keep on hand.
           </p>
-          <div className="grid g-3">
-            {workbooks.map((w) => {
-              const pct = w.pages > 0 ? Math.round((w.done / w.pages) * 100) : 0;
-              const complete = w.done >= w.pages && w.pages > 0;
-              return (
-                <div key={w.id} className="card card-pad" style={{ display: "flex", flexDirection: "column" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-                    <div style={{ width: 46, height: 54, borderRadius: 8, background: "linear-gradient(135deg,#24243a,#1a1a2e)", border: "1px solid var(--line)", display: "grid", placeItems: "center", color: "var(--purple-2)", position: "relative" }}>
-                      <Icon name="doc" size={22} />
-                      <span style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: 99, background: "var(--grad)" }} />
-                    </div>
-                    <span className="chip" style={{ padding: "3px 10px" }}>{w.tag}</span>
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 7 }}>{w.title}</div>
-                  <p className="muted" style={{ fontSize: 13.5, marginBottom: 16, flex: 1 }}>{w.desc}</p>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                    <div style={{ flex: 1, height: 6, borderRadius: 99, background: "#181828", overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: pct + "%", background: complete ? "var(--grad-mint)" : "var(--grad)", borderRadius: 99 }} />
-                    </div>
-                    <span style={{ fontSize: 12, color: complete ? "var(--mint)" : "var(--muted)", fontWeight: 600, whiteSpace: "nowrap" }}>
-                      {complete ? "Complete" : `${w.done}/${w.pages} pp`}
-                    </span>
-                  </div>
-                  {w.hasAsset ? (
-                    <a className="btn btn-ghost" style={{ width: "100%" }} href={w.assetUrl ?? "#"} target="_blank" rel="noreferrer">
-                      <Icon name="doc" size={16} /> Open workbook
-                    </a>
-                  ) : (
-                    <button className="btn btn-ghost" style={{ width: "100%" }} disabled>
-                      <Icon name="doc" size={16} /> Coming soon
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+          <div className="hrail" style={{ marginBottom: 32 }}>
+            {workbooks.map((w) => (
+              <DocCard key={w.id} title={w.title} desc={w.desc} meta={`${w.tag} · ${w.pages} pp`} thumbUrl={w.thumbUrl} assetUrl={w.assetUrl} hasAsset={w.hasAsset} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* operations & tools */}
+      {(opsVideos.length > 0 || opsDocs.length > 0) && (
+        <>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Operations &amp; tools</div>
+          <p className="muted" style={{ fontSize: 13.5, marginBottom: 18 }}>
+            Scripts, SOPs, and resources for running your practice.
+          </p>
+          <div className="hrail">
+            {opsVideos.map((v, i) => (
+              <VideoCard key={v.id} v={v} index={i} onOpen={() => setOpen({ v, i: allVideos.length + i })} />
+            ))}
+            {opsDocs.map((d) => (
+              <DocCard key={d.id} title={d.title} desc={d.desc} meta={`PDF · ${d.length} pp`} thumbUrl={d.thumbUrl} assetUrl={d.assetUrl} hasAsset={d.hasAsset} />
+            ))}
           </div>
         </>
       )}

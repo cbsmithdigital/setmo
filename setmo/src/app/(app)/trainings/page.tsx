@@ -1,13 +1,14 @@
 import { requireUser } from "@/lib/auth";
-import { getSetterTrainings, getAllowance } from "@/lib/queries";
+import { getSetterTrainings, getAllowance, getOperationsAssets } from "@/lib/queries";
 import { AllowanceMeter } from "@/components/ui/widgets";
 import { TrainingsClient } from "@/components/training/TrainingsClient";
 
 export default async function TrainingsPage() {
   const user = await requireUser();
-  const [trainings, allowance] = await Promise.all([
+  const [trainings, allowance, operations] = await Promise.all([
     getSetterTrainings(user.id),
     getAllowance(user.officeId!),
+    getOperationsAssets(),
   ]);
 
   return (
@@ -25,6 +26,7 @@ export default async function TrainingsPage() {
         recommended={trainings.recommended}
         videos={trainings.videos}
         workbooks={trainings.workbooks}
+        operations={operations}
       />
     </>
   );

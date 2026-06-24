@@ -878,3 +878,25 @@ a {
     flex-wrap: wrap;
   }
 }
+
+/* Horizontal scroll rail for content sections (trainings, resources) */
+.hrail {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 12px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.hrail > * {
+  flex: 0 0 auto;
+  width: 300px;
+  scroll-snap-align: start;
+}
+.hrail::-webkit-scrollbar { height: 8px; }
+.hrail::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
+.hrail::-webkit-scrollbar-track { background: transparent; }
+@media (max-width: 560px) {
+  .hrail > * { width: 82vw; }
+}
