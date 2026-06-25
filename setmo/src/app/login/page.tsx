@@ -57,7 +57,7 @@ export default function LoginPage() {
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
-            padding: "0 8vw",
+            padding: "0 32px",
             maxWidth: 560,
             margin: "0 auto",
             width: "100%",

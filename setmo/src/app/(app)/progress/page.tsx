@@ -130,6 +130,7 @@ export default async function ProgressPage({
                       <div style={{ fontWeight: 600, fontSize: 14.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.persona}</div>
                       <div className="muted" style={{ fontSize: 12.5 }}>{whenLabel(s.when)} · {mmss(s.durationSeconds)}</div>
                     </div>
+                    <span className="chip" style={{ padding: "2px 9px", fontSize: 11 }} title="Likely show rate">{s.showRate}% show</span>
                     <Delta v={s.delta} />
                     <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 19, width: 44, textAlign: "right" }} className={s.score >= 4 ? "mint-text" : "grad-text"}>
                       {s.score.toFixed(1)}

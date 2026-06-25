@@ -49,7 +49,7 @@ export default function SignupPage() {
     <>
       <div className="app-bg" />
       <div style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr", position: "relative", zIndex: 1 }} className="login-grid">
-        <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 8vw", maxWidth: 560, margin: "0 auto", width: "100%" }}>
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 32px", maxWidth: 560, margin: "0 auto", width: "100%" }}>
           <div className="sb-logo" style={{ padding: "0 0 30px" }}>
             <Image src="/setmo-icon.png" alt="" width={36} height={36} style={{ objectFit: "contain" }} />
             <span>Set<span style={{ color: "var(--mint)" }}>Mo</span></span>

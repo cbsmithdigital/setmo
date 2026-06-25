@@ -88,6 +88,9 @@ export default async function ResultsPage({
               {r.prev != null && r.score < r.prev && (
                 <span className="chip">Down from {r.prev.toFixed(1)} — next rep counts</span>
               )}
+              <span className="chip" title="Estimated likelihood this booked consult actually shows, based on the call">
+                <Icon name="target" size={13} /> {r.showRate}% likely to show
+              </span>
             </div>
             {r.narrative && <h2 style={{ fontSize: 24, maxWidth: "22em", lineHeight: 1.2 }}>{r.narrative}</h2>}
           </div>

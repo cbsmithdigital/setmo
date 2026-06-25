@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getMinuteBalance, lastPurchasedMinutes } from "@/lib/usage";
+import { callShowRate } from "@/lib/audit";
 import { skillName, skillTier, rubricFor, type SkillTierKey } from "@/lib/skills";
 import { SERVICE_META, SERVICE_ORDER } from "@/lib/service-meta";
 import { fullName, initialsOf } from "@/lib/format";
@@ -375,6 +376,7 @@ export async function getSetterProgress(userId: string, officeId: string, range?
       durationSeconds: s.durationSeconds ?? 0,
       score: cur,
       delta: prev != null ? Number((cur - prev).toFixed(1)) : 0,
+      showRate: callShowRate((s.evaluation?.skills ?? []).map((k) => ({ skillKey: k.skillKey, score: Number(k.score) }))),
     };
   });
 
@@ -742,6 +744,7 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer) 
     durationSeconds: session.durationSeconds ?? 0,
     score: e.overallScore != null ? Number(e.overallScore) : 0,
     prev: prev?.evaluation?.overallScore != null ? Number(prev.evaluation.overallScore) : null,
+    showRate: callShowRate(skills.map((s) => ({ skillKey: s.skillKey, score: s.score }))),
     narrative: e.narrative ?? "",
     skills,
     wins: (e.wins as string[] | null) ?? [],

@@ -24,7 +24,7 @@ export default function ActivateAccountPage() {
   return (
     <>
       <div className="app-bg" />
-      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 8vw", maxWidth: 480, margin: "0 auto", width: "100%", position: "relative", zIndex: 1 }}>
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 32px", maxWidth: 480, margin: "0 auto", width: "100%", position: "relative", zIndex: 1 }}>
         <div className="sb-logo" style={{ padding: "0 0 30px" }}>
           <Image src="/setmo-icon.png" alt="" width={36} height={36} style={{ objectFit: "contain" }} />
           <span>Set<span style={{ color: "var(--mint)" }}>Mo</span></span>
