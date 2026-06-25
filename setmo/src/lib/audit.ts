@@ -4,7 +4,7 @@ import { SERVICE_META } from "@/lib/service-meta";
 import type { ServiceKey } from "@/generated/prisma/client";
 
 // ---- tunable constants (the prospect-facing recovery math lives here) ----
-export const AUDIT_CALLS = 5;
+export const AUDIT_CALLS = 1; // one-call trial (was 5) — less friction
 export const DEFAULT_CASE_VALUE = 12000; // full-arch default
 export const DEFAULT_MONTHLY_LEADS = 20;
 export const AUDIT_CALL_MAX_SECONDS = 12 * 60; // hard cap per audit call
@@ -132,7 +132,7 @@ export async function auditCallCounts(auditId: string) {
   return { total: sessions.length, scored: calls.filter((c) => c === "scored").length, calls };
 }
 
-/** Compute + persist the report once all 5 calls are scored. Idempotent. */
+/** Compute + persist the report once the trial call is scored. Idempotent. */
 export async function finalizeAudit(auditId: string) {
   const audit = await prisma.setterAudit.findUnique({ where: { id: auditId } });
   if (!audit) return null;

@@ -15,7 +15,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (audit.status !== "ACTIVE") return error("This audit isn't active yet.", 403);
 
   const counts = await auditCallCounts(id);
-  if (counts.total >= AUDIT_CALLS) return error("All 5 audit calls have been used.", 409);
+  if (counts.total >= AUDIT_CALLS) return error("Your audit call has already been used.", 409);
 
   const persona = await generatePersona();
   const firstName = audit.contactName.split(/\s+/)[0] ?? "";

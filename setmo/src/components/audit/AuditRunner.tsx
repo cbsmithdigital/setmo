@@ -91,10 +91,14 @@ export function AuditRunner({
       <style>{`@keyframes mkt-pulsebar{0%,100%{opacity:.55}50%{opacity:1}}`}</style>
 
       <h3 style={{ fontSize: 23, margin: "18px 0 8px" }}>
-        {done ? "Scoring complete — building your report…" : `Hi ${contactName.split(" ")[0]} — let's run your 5 calls.`}
+        {done
+          ? "Scoring complete — building your report…"
+          : `Hi ${contactName.split(" ")[0]} — let's run your ${totalCalls === 1 ? "call" : `${totalCalls} calls`}.`}
       </h3>
       <p style={{ color: "var(--m-muted)", fontSize: 15, marginBottom: 22 }}>
-        {scored}/{totalCalls} scored{scoring > 0 ? ` · ${scoring} scoring now (a minute or two each)` : ""}. Each call is a realistic AI lead — talk to it like a real inbound. Under 12 minutes each.
+        {totalCalls === 1
+          ? "It's a realistic AI lead — talk to it like a real inbound. Up to 12 minutes."
+          : `${scored}/${totalCalls} scored${scoring > 0 ? ` · ${scoring} scoring now (a minute or two each)` : ""}. Each call is a realistic AI lead — talk to it like a real inbound. Under 12 minutes each.`}
       </p>
 
       {!done && callsLeft > 0 && (
@@ -104,11 +108,11 @@ export function AuditRunner({
           disabled={inCall}
           style={{ marginBottom: 14 }}
         >
-          {inCall ? "On a call…" : started === 0 ? "Start my first call" : `Start call ${started + 1} of ${totalCalls}`}
+          {inCall ? "On a call…" : totalCalls === 1 ? "Start my call" : started === 0 ? "Start my first call" : `Start call ${started + 1} of ${totalCalls}`}
         </button>
       )}
       {!done && callsLeft <= 0 && scoring > 0 && (
-        <p className="audit-note" style={{ textAlign: "center" }}>All 5 calls are in — finishing scoring now. This page updates automatically.</p>
+        <p className="audit-note" style={{ textAlign: "center" }}>{totalCalls === 1 ? "Your call is in" : "All your calls are in"} — finishing scoring now. This page updates automatically.</p>
       )}
 
       {/* invite a setter to run the calls instead */}

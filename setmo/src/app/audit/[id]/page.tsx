@@ -68,7 +68,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
         <div className="sec-head" style={{ marginBottom: 22 }}>
           <span className="eyebrow">Setter Audit · {r.practiceName}</span>
           <h2 style={{ fontSize: 34, margin: "10px 0 6px" }}>Your report is ready.</h2>
-          <p style={{ fontSize: 15.5 }}>{r.bookedCount} of {r.totalCalls} setable consults booked across your 5 calls.</p>
+          <p style={{ fontSize: 15.5 }}>We scored your call on the same 8-point rubric your team would train against.</p>
         </div>
 
         {/* scorecard (dark panel, matches the marketing mock) */}
@@ -76,8 +76,8 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
           <div className="ar-top">
             <div className="ar-score" style={{ background: r.overall >= 4 ? "linear-gradient(135deg,#34d399,#10b981)" : "linear-gradient(135deg,#f7b955,#f59e0b)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent" }}>{r.overall.toFixed(1)}</div>
             <div>
-              <div className="lab">Overall readiness · {r.totalCalls} leads scored</div>
-              <div className="sub">{r.bookedCount} of {r.totalCalls} setable consults booked</div>
+              <div className="lab">Overall readiness · {r.totalCalls} call{r.totalCalls === 1 ? "" : "s"} scored</div>
+              <div className="sub">{r.bookedCount} of {r.totalCalls} consult{r.totalCalls === 1 ? "" : "s"} booked</div>
             </div>
           </div>
           <div className="ar-leak">Top leaking skills</div>
@@ -115,7 +115,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
 
         {/* per-call notes */}
         <div className="audit-card" style={{ marginBottom: 18 }}>
-          <h3 style={{ fontSize: 18, marginBottom: 14 }}>Call by call</h3>
+          <h3 style={{ fontSize: 18, marginBottom: 14 }}>Your call</h3>
           {r.perCall.map((c) => (
             <div key={c.n} style={{ padding: "12px 0", borderTop: c.n > 1 ? "1px solid var(--m-line)" : "none" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
@@ -167,8 +167,8 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
     <Shell>
       <div className="sec-head" style={{ marginBottom: 22 }}>
         <span className="eyebrow">Free Setter Audit · {audit.practiceName}</span>
-        <h2 style={{ fontSize: 32, margin: "10px 0 6px" }}>Five calls. One honest report.</h2>
-        <p style={{ fontSize: 15.5 }}>Run them now, or send the link to your setter. We score each on the 8-point rubric and unlock your report at the end.</p>
+        <h2 style={{ fontSize: 32, margin: "10px 0 6px" }}>One call. One honest report.</h2>
+        <p style={{ fontSize: 15.5 }}>Run it now, or send the link to your setter. We score it on the 8-point rubric and unlock your report.</p>
       </div>
       <AuditRunner
         id={id}

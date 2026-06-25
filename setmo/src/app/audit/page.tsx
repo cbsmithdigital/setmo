@@ -24,7 +24,7 @@ export default function AuditIntakePage() {
         <div className="sec-head" style={{ marginBottom: 24 }}>
           <span className="eyebrow">Free Setter Audit</span>
           <h2 style={{ fontSize: 34, margin: "12px 0 12px" }}>See what your front desk is leaving on the table.</h2>
-          <p style={{ fontSize: 16 }}>Run 5 quick practice calls, scored on the same 8-point rubric your team would train against. We&apos;ll show you exactly where booked consults are slipping — and what recovering them is worth. <b style={{ color: "var(--ink-soft)" }}>First audit free, one per practice.</b></p>
+          <p style={{ fontSize: 16 }}>Run one quick practice call, scored on the same 8-point rubric your team would train against. We&apos;ll show you exactly where booked consults are slipping — and what recovering them is worth, then walk you through it with Setty. <b style={{ color: "var(--ink-soft)" }}>Free, one per email every 30 days.</b></p>
         </div>
         <AuditIntake />
       </div>
