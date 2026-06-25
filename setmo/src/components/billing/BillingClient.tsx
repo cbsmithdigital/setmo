@@ -63,10 +63,11 @@ export function BillingClient({
   async function manageAccess() {
     setBusy(true);
     try {
-      const res = await fetch("/api/office/subscription/checkout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      const res = await fetch("/api/office/billing-portal", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
       const j = await res.json().catch(() => ({}));
       if (j.url) window.location.href = j.url;
-    } finally {
+      else setBusy(false);
+    } catch {
       setBusy(false);
     }
   }

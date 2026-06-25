@@ -231,6 +231,13 @@ export async function chargeMinutesAuto(opts: { officeId: string; customerId: st
   return true;
 }
 
+/** Stripe-hosted billing portal — customers cancel, update card, view invoices. */
+export async function createBillingPortalSession(opts: { customerId: string; returnUrl: string }): Promise<string> {
+  const stripe = getStripe();
+  const session = await stripe.billingPortal.sessions.create({ customer: opts.customerId, return_url: opts.returnUrl });
+  return session.url;
+}
+
 export function constructWebhookEvent(rawBody: string, signature: string | null): Stripe.Event {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret) throw new Error("STRIPE_WEBHOOK_SECRET not configured.");
