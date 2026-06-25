@@ -9,8 +9,13 @@ import { DEFAULT_PRICING, type PricingConfig } from "@/lib/pricing";
 type BillingData = {
   balance: { purchasedMin: number; usedMin: number; remainingMin: number };
   accessMonthly: number;
+  annualAccess: number;
   subscribed: boolean;
   accessStatus: string | null;
+  plan: "monthly" | "annual";
+  accountDiscountPct: number;
+  monthlyDiscountPct: number;
+  annualDiscountPct: number;
   autoTopUp: boolean;
   topUpMinutes: number;
   nextInvoiceDate: string | null;
@@ -73,6 +78,18 @@ export function BillingClient({
     }
   }
 
+  async function switchToAnnual() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/office/subscription/checkout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan: "annual" }) });
+      const j = await res.json().catch(() => ({}));
+      if (j.url) window.location.href = j.url;
+      else setBusy(false);
+    } catch {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="topbar">
@@ -103,20 +120,25 @@ export function BillingClient({
             <div className="card card-pad rise">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <h3 style={{ fontSize: 18 }}>Practice Access</h3>
-                <span className="chip mint" style={{ padding: "3px 10px" }}>Active</span>
+                <span className="chip mint" style={{ padding: "3px 10px" }}>Active · {data.plan === "annual" ? "Annual" : "Monthly"}</span>
               </div>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 6, marginBottom: 4 }}>
-                <span style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 40 }} className="grad-text">${data.accessMonthly.toFixed(2)}</span>
-                <span className="muted" style={{ fontSize: 14, paddingBottom: 6 }}>/ month</span>
+                <span style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 40 }} className="grad-text">${(data.plan === "annual" ? data.annualAccess : data.accessMonthly).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="muted" style={{ fontSize: 14, paddingBottom: 6 }}>/ {data.plan === "annual" ? "year" : "month"}</span>
               </div>
               <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
-                Per location, month-to-month. Unlimited users, all features included. No contract.
+                Per location. Unlimited users, all features included. {data.accountDiscountPct > 0 ? `${data.accountDiscountPct}% off all token purchases.` : ""}
               </p>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, padding: "10px 0", borderTop: "1px solid var(--line-soft)" }}>
                 <span className="muted">Next invoice</span>
                 <b>{data.nextInvoiceDate ?? "—"}</b>
               </div>
-              <button className="btn btn-ghost" style={{ width: "100%", marginTop: 14 }} onClick={manageAccess} disabled={busy}>
+              {data.plan === "monthly" && (
+                <button className="btn btn-primary" style={{ width: "100%", marginTop: 14 }} onClick={switchToAnnual} disabled={busy}>
+                  <Icon name="spark" size={16} /> Switch to annual — 2 months free + {data.annualDiscountPct}% off tokens
+                </button>
+              )}
+              <button className="btn btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={manageAccess} disabled={busy}>
                 <Icon name="card" size={16} /> Manage access
               </button>
             </div>
@@ -166,7 +188,16 @@ export function BillingClient({
 
         {/* buy minutes (slider) — combined activation when not yet subscribed */}
         <div id="activate-card" style={{ marginBottom: 24 }}>
-          <MinutePurchase defaultPeople={recommendPeople} cfg={pricing} mode={data.subscribed ? "topup" : "activate"} accessMonthly={data.accessMonthly} />
+          <MinutePurchase
+            defaultPeople={recommendPeople}
+            cfg={pricing}
+            mode={data.subscribed ? "topup" : "activate"}
+            accessMonthly={data.accessMonthly}
+            annualAccess={data.annualAccess}
+            discountPct={data.accountDiscountPct}
+            monthlyDiscountPct={data.monthlyDiscountPct}
+            annualDiscountPct={data.annualDiscountPct}
+          />
         </div>
 
         {/* invoices */}

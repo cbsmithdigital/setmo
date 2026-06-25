@@ -33,16 +33,18 @@ export {
 } from "@/lib/pricing";
 export type { MinuteQuote } from "@/lib/pricing";
 
-/** Monthly Practice Access subscription ($44.95 / location, month-to-month). */
+/** Practice Access subscription — monthly ($44.95) or annual prepay (10× = 2 months free). */
 export async function createAccessCheckout(opts: {
   officeId: string;
   stripeCustomerId?: string | null;
   customerEmail?: string;
   origin: string;
+  plan?: "monthly" | "annual";
 }): Promise<string> {
   const stripe = getStripe();
   const cfg = await getPricingConfig();
-  const meta = { kind: "access", officeId: opts.officeId };
+  const annual = opts.plan === "annual";
+  const meta = { kind: "access", officeId: opts.officeId, plan: annual ? "annual" : "monthly" };
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     ...(opts.stripeCustomerId
@@ -50,20 +52,20 @@ export async function createAccessCheckout(opts: {
       : opts.customerEmail
         ? { customer_email: opts.customerEmail }
         : {}),
-    // Stripe Tax: collect a billing address and compute sales tax automatically.
     billing_address_collection: "required",
     automatic_tax: { enabled: true },
-    // Let customers enter a promotion code (coupons managed in the Stripe dashboard).
     allow_promotion_codes: true,
     line_items: [
       {
         quantity: 1,
         price_data: {
           currency: "usd",
-          unit_amount: Math.round(cfg.accessMonthly * 100),
-          recurring: { interval: "month" },
+          unit_amount: Math.round((annual ? cfg.accessMonthly * 10 : cfg.accessMonthly) * 100),
+          recurring: { interval: annual ? "year" : "month" },
           tax_behavior: "exclusive",
-          product_data: { name: "SetMo — Practice Access", description: "Monthly access per location. Unlimited users, all features." },
+          product_data: annual
+            ? { name: "SetMo — Practice Access (annual)", description: "Annual access per location — 2 months free. Unlimited users, all features." }
+            : { name: "SetMo — Practice Access", description: "Monthly access per location. Unlimited users, all features." },
         },
       },
     ],
@@ -76,18 +78,21 @@ export async function createAccessCheckout(opts: {
   return session.url;
 }
 
-/** One-time purchase of a minute balance (any amount on the slider). */
+/** One-time token purchase (any amount on the slider). `discountPct` = account tier. */
 export async function createMinuteCheckout(opts: {
   officeId: string;
   minutes: number;
   stripeCustomerId?: string | null;
   customerEmail?: string;
   origin: string;
+  discountPct?: number;
 }): Promise<string> {
   const stripe = getStripe();
   const quote = minuteQuote(opts.minutes, await getPricingConfig());
-  // amountCents = pre-tax minutes cost, so commission accrual ignores tax.
-  const meta = { kind: "minutes", officeId: opts.officeId, minutes: String(quote.minutes), amountCents: String(quote.total * 100) };
+  const tokens = quote.minutes * 10;
+  const total = Math.round(quote.total * (1 - (opts.discountPct ?? 0) / 100)); // account discount on tokens
+  // amountCents = pre-tax cash (post-discount), so commission accrues on real revenue.
+  const meta = { kind: "minutes", officeId: opts.officeId, minutes: String(quote.minutes), amountCents: String(total * 100) };
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     ...(opts.stripeCustomerId
@@ -95,21 +100,19 @@ export async function createMinuteCheckout(opts: {
       : opts.customerEmail
         ? { customer_email: opts.customerEmail }
         : {}),
-    // Stripe Tax: collect a billing address and compute sales tax automatically.
     billing_address_collection: "required",
     automatic_tax: { enabled: true },
-    // Let customers enter a promotion code (coupons managed in the Stripe dashboard).
     allow_promotion_codes: true,
     line_items: [
       {
         quantity: 1,
         price_data: {
           currency: "usd",
-          unit_amount: quote.total * 100,
+          unit_amount: total * 100,
           tax_behavior: "exclusive",
           product_data: {
-            name: `SetMo — ${quote.minutes.toLocaleString()} minutes`,
-            description: `Practice/coaching minutes ($${quote.perMin.toFixed(2)}/min). Roll over, never expire.`,
+            name: `SetMo — ${tokens.toLocaleString()} tokens`,
+            description: `Practice & coaching tokens (≈ ${quote.minutes.toLocaleString()} min). Roll over, never expire.${opts.discountPct ? ` ${opts.discountPct}% account discount applied.` : ""}`,
           },
         },
       },
@@ -133,12 +136,17 @@ export async function createActivationCheckout(opts: {
   stripeCustomerId?: string | null;
   customerEmail?: string;
   origin: string;
+  plan?: "monthly" | "annual";
+  discountPct?: number;
 }): Promise<string> {
   const stripe = getStripe();
   const cfg = await getPricingConfig();
   const quote = minuteQuote(opts.minutes, cfg);
-  // session metadata drives minute granting; subscription metadata drives access sync.
-  const meta = { kind: "activation", officeId: opts.officeId, minutes: String(quote.minutes), amountCents: String(quote.total * 100) };
+  const annual = opts.plan === "annual";
+  const tokens = quote.minutes * 10;
+  const tokenTotal = Math.round(quote.total * (1 - (opts.discountPct ?? 0) / 100));
+  // session metadata drives token granting; subscription metadata drives access sync.
+  const meta = { kind: "activation", officeId: opts.officeId, minutes: String(quote.minutes), amountCents: String(tokenTotal * 100) };
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     ...(opts.stripeCustomerId
@@ -154,26 +162,28 @@ export async function createActivationCheckout(opts: {
         quantity: 1,
         price_data: {
           currency: "usd",
-          unit_amount: Math.round(cfg.accessMonthly * 100),
-          recurring: { interval: "month" },
+          unit_amount: Math.round((annual ? cfg.accessMonthly * 10 : cfg.accessMonthly) * 100),
+          recurring: { interval: annual ? "year" : "month" },
           tax_behavior: "exclusive",
-          product_data: { name: "SetMo — Practice Access", description: "Monthly access per location. Unlimited users, all features." },
+          product_data: annual
+            ? { name: "SetMo — Practice Access (annual)", description: "Annual access per location — 2 months free. Unlimited users, all features." }
+            : { name: "SetMo — Practice Access", description: "Monthly access per location. Unlimited users, all features." },
         },
       },
       {
         quantity: 1,
         price_data: {
           currency: "usd",
-          unit_amount: quote.total * 100,
+          unit_amount: tokenTotal * 100,
           tax_behavior: "exclusive",
           product_data: {
-            name: `SetMo — ${quote.minutes.toLocaleString()} minutes`,
-            description: `Starter minute balance ($${quote.perMin.toFixed(2)}/min). Roll over, never expire.`,
+            name: `SetMo — ${tokens.toLocaleString()} tokens`,
+            description: `Starter token balance (≈ ${quote.minutes.toLocaleString()} min). Roll over, never expire.${opts.discountPct ? ` ${opts.discountPct}% account discount applied.` : ""}`,
           },
         },
       },
     ],
-    subscription_data: { metadata: { kind: "access", officeId: opts.officeId } },
+    subscription_data: { metadata: { kind: "access", officeId: opts.officeId, plan: annual ? "annual" : "monthly" } },
     metadata: meta,
     success_url: `${opts.origin}/office/billing?activate=success`,
     cancel_url: `${opts.origin}/office/billing?activate=cancel`,
@@ -192,6 +202,10 @@ export async function chargeMinutesAuto(opts: { officeId: string; customerId: st
   const { prisma } = await import("@/lib/db");
   const stripe = getStripe();
   const quote = minuteQuote(opts.minutes, await getPricingConfig());
+  const { accountTokenDiscountPct } = await import("@/lib/usage");
+  const discountPct = await accountTokenDiscountPct(opts.officeId);
+  const total = Math.round(quote.total * (1 - discountPct / 100)); // account discount on tokens
+  const tokens = quote.minutes * 10;
 
   // Find a saved card: the customer's invoice default, else any attached card.
   const customer = (await stripe.customers.retrieve(opts.customerId)) as Stripe.Customer;
@@ -205,14 +219,14 @@ export async function chargeMinutesAuto(opts: { officeId: string; customerId: st
   let pi: Stripe.PaymentIntent;
   try {
     pi = await stripe.paymentIntents.create({
-      amount: quote.total * 100,
+      amount: total * 100,
       currency: "usd",
       customer: opts.customerId,
       payment_method: pm,
       off_session: true,
       confirm: true,
-      description: `SetMo — ${quote.minutes.toLocaleString()} minutes (auto top-up)`,
-      metadata: { kind: "minutes_auto", officeId: opts.officeId, minutes: String(quote.minutes), amountCents: String(quote.total * 100) },
+      description: `SetMo — ${tokens.toLocaleString()} tokens (auto top-up)`,
+      metadata: { kind: "minutes_auto", officeId: opts.officeId, minutes: String(quote.minutes), amountCents: String(total * 100) },
     });
   } catch {
     return false; // declined / requires authentication — admins were already warned
@@ -223,10 +237,10 @@ export async function chargeMinutesAuto(opts: { officeId: string; customerId: st
   const existing = await prisma.conversationBundle.findFirst({ where: { stripePaymentIntent: pi.id } });
   if (!existing) {
     const { addMinutes } = await import("@/lib/usage");
-    await addMinutes(opts.officeId, quote.minutes, pi.id);
+    await addMinutes(opts.officeId, quote.minutes, pi.id, total * 100);
     const { accrueCommission } = await import("@/lib/partners");
     const sub = await prisma.subscription.findUnique({ where: { officeId: opts.officeId }, select: { paidInvoices: true } });
-    await accrueCommission({ officeId: opts.officeId, kind: "MINUTES", baseCents: quote.total * 100, stripeRef: `${pi.id}:min`, earned: (sub?.paidInvoices ?? 0) >= 2 }).catch(() => {});
+    await accrueCommission({ officeId: opts.officeId, kind: "MINUTES", baseCents: total * 100, stripeRef: `${pi.id}:min`, earned: (sub?.paidInvoices ?? 0) >= 2 }).catch(() => {});
   }
   return true;
 }

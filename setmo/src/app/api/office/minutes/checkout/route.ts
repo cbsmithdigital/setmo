@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
 import { createMinuteCheckout, isStripeConfigured, MIN_MINUTES, MAX_MINUTES } from "@/lib/stripe";
+import { accountTokenDiscountPct } from "@/lib/usage";
 import { error, json } from "@/lib/api";
 
 const Body = z.object({ minutes: z.number().int().min(MIN_MINUTES).max(MAX_MINUTES) });
 
-// POST /api/office/minutes/checkout — buy a minute balance (slider amount).
+// POST /api/office/minutes/checkout — buy tokens (slider amount).
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
@@ -23,6 +24,7 @@ export async function POST(req: Request) {
       stripeCustomerId: user.office?.stripeCustomerId,
       customerEmail: user.email,
       minutes: parsed.data.minutes,
+      discountPct: await accountTokenDiscountPct(user.officeId),
       origin,
     });
     return json({ url });

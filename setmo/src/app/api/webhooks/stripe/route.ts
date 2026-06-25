@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import { prisma } from "@/lib/db";
-import { constructWebhookEvent } from "@/lib/stripe";
+import { constructWebhookEvent, getStripe } from "@/lib/stripe";
 import { addMinutes } from "@/lib/usage";
 import { accrueCommission, markOfficeCommissionsEarned, clawbackOfficeCommissions } from "@/lib/partners";
 import { getPricingConfig } from "@/lib/config";
@@ -59,14 +59,15 @@ async function applyMinutes(session: Stripe.Checkout.Session) {
   const existing = await prisma.conversationBundle.findFirst({ where: { stripePaymentIntent: paymentRef } });
   if (existing) return; // idempotent
 
-  await addMinutes(officeId, minutes, paymentRef);
+  // Pre-tax cash for tokens (post-discount; set at checkout). Excludes the access line on activation.
+  const cashCents = Number(session.metadata?.amountCents ?? session.amount_total ?? 0);
+  await addMinutes(officeId, minutes, paymentRef, cashCents || undefined);
 
   const sub = await prisma.subscription.findUnique({ where: { officeId }, select: { paidInvoices: true } });
   await accrueCommission({
     officeId,
     kind: "MINUTES",
-    // Pre-tax minutes cost (set at checkout); for activation this excludes the access line.
-    baseCents: Number(session.metadata?.amountCents ?? session.amount_total ?? 0),
+    baseCents: cashCents,
     stripeRef: `${paymentRef}:min`,
     earned: (sub?.paidInvoices ?? 0) >= EARN_AFTER_PAYMENTS,
   });
@@ -78,17 +79,18 @@ async function onInvoicePaid(invoice: Stripe.Invoice) {
   if (!customerId) return;
   // The access subscription row is created by customer.subscription.created (with
   // officeId from metadata) before the first invoice.paid, so match by customer.
-  const sub = await prisma.subscription.findFirst({ where: { stripeCustomerId: customerId }, select: { officeId: true, paidInvoices: true } });
+  const sub = await prisma.subscription.findFirst({ where: { stripeCustomerId: customerId }, select: { officeId: true, paidInvoices: true, plan: true } });
   if (!sub) return;
 
   const count = sub.paidInvoices + 1;
   await prisma.subscription.update({ where: { officeId: sub.officeId }, data: { paidInvoices: count } });
 
   const earned = count >= EARN_AFTER_PAYMENTS;
-  // Base ACCESS commission on the access list price — not invoice.amount_paid,
-  // which now includes tax and (on the first activation invoice) bundled minutes.
+  // Base ACCESS commission on the access list price (monthly, or 10× for annual) —
+  // not invoice.amount_paid, which includes tax and (on activation) bundled tokens.
   const cfg = await getPricingConfig();
-  await accrueCommission({ officeId: sub.officeId, kind: "ACCESS", baseCents: Math.round(cfg.accessMonthly * 100), stripeRef: invoice.id ?? `inv:${sub.officeId}:${count}`, earned });
+  const accessCents = Math.round(cfg.accessMonthly * (sub.plan === "ANNUAL" ? 10 : 1) * 100);
+  await accrueCommission({ officeId: sub.officeId, kind: "ACCESS", baseCents: accessCents, stripeRef: invoice.id ?? `inv:${sub.officeId}:${count}`, earned });
   // Crossing the 2nd payment earns everything that was pending for this account.
   if (count === EARN_AFTER_PAYMENTS) await markOfficeCommissionsEarned(sub.officeId);
 }
@@ -104,13 +106,26 @@ async function syncAccess(sub: Stripe.Subscription) {
   const item = sub.items.data[0];
   const status = sub.status === "active" ? "ACTIVE" : sub.status === "past_due" ? "PAST_DUE" : "CANCELED";
   const periodEnd = item?.current_period_end ? new Date(item.current_period_end * 1000) : null;
+  // Plan from subscription metadata, else the price interval (year → annual).
+  const plan = (sub.metadata?.plan === "annual" || item?.price?.recurring?.interval === "year") ? "ANNUAL" : "MONTHLY";
 
   await prisma.subscription.upsert({
     where: { officeId },
-    update: { stripeCustomerId: customerId, stripeSubscriptionId: sub.id, status, currentPeriodEnd: periodEnd },
-    create: { officeId, stripeCustomerId: customerId, stripeSubscriptionId: sub.id, status, currentPeriodEnd: periodEnd },
+    update: { stripeCustomerId: customerId, stripeSubscriptionId: sub.id, status, currentPeriodEnd: periodEnd, plan },
+    create: { officeId, stripeCustomerId: customerId, stripeSubscriptionId: sub.id, status, currentPeriodEnd: periodEnd, plan },
   });
   if (customerId) await prisma.office.update({ where: { id: officeId }, data: { stripeCustomerId: customerId } });
+
+  // Switching plans (e.g. monthly → annual) creates a new sub for the same
+  // customer — cancel any other active subs so the office isn't double-billed.
+  if (status === "ACTIVE" && customerId) {
+    try {
+      const others = await getStripe().subscriptions.list({ customer: customerId, status: "active", limit: 10 });
+      for (const o of others.data) {
+        if (o.id !== sub.id) await getStripe().subscriptions.cancel(o.id).catch(() => {});
+      }
+    } catch { /* best-effort */ }
+  }
 
   // Lapsed/cancelled before earning → claw back still-pending commissions.
   if (status === "CANCELED") await clawbackOfficeCommissions(officeId);

@@ -5,6 +5,8 @@ import { DEFAULT_PRICING, type PricingConfig } from "@/lib/pricing";
 // Effective platform config = DB row (if any) merged over code defaults. The
 // PricingConfig slice is what the pricing functions consume.
 export type PlatformConfig = PricingConfig & {
+  monthlyTokenDiscountPct: number; // off token purchases for monthly accounts
+  annualTokenDiscountPct: number; // off token purchases for annual-prepay accounts
   assessmentCooldownDays: number;
   alertLowBalanceDays: number;
   alertZeroUsageDays: number;
@@ -13,6 +15,8 @@ export type PlatformConfig = PricingConfig & {
 
 export const DEFAULT_CONFIG: PlatformConfig = {
   ...DEFAULT_PRICING,
+  monthlyTokenDiscountPct: 8,
+  annualTokenDiscountPct: 15,
   assessmentCooldownDays: 30, // one free audit per email per 30 days
   alertLowBalanceDays: 14,
   alertZeroUsageDays: 14,
@@ -31,6 +35,8 @@ export const getPlatformConfig = cache(async (): Promise<PlatformConfig> => {
       maxMinutes: row.maxMinutes,
       basePerMin: row.basePerMinCents / 100,
       groupThreshold: row.groupThreshold,
+      monthlyTokenDiscountPct: row.monthlyTokenDiscountPct,
+      annualTokenDiscountPct: row.annualTokenDiscountPct,
       assessmentCooldownDays: row.assessmentCooldownDays,
       alertLowBalanceDays: row.alertLowBalanceDays,
       alertZeroUsageDays: row.alertZeroUsageDays,
@@ -54,6 +60,8 @@ export type ConfigPatch = {
   maxMinutes?: number;
   basePerMinCents?: number;
   groupThreshold?: number;
+  monthlyTokenDiscountPct?: number;
+  annualTokenDiscountPct?: number;
   assessmentCooldownDays?: number;
   alertLowBalanceDays?: number;
   alertZeroUsageDays?: number;

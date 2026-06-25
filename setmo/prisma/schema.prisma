@@ -147,6 +147,10 @@ enum SubscriptionStatus {
   PAST_DUE
   CANCELED
 }
+enum BillingPlan {
+  MONTHLY
+  ANNUAL
+}
 
 enum LeaderboardScope {
   OFFICE
@@ -611,6 +615,7 @@ model Subscription {
   isFounder            Boolean            @default(false) @map("is_founder")
   cadence              Cadence            @default(QUARTERLY)
   pricePerSeat         Decimal            @default(59.99) @map("price_per_seat") @db.Decimal(6, 2) // legacy
+  plan                 BillingPlan        @default(MONTHLY) // monthly access vs annual prepay
   status               SubscriptionStatus @default(ACTIVE)
   currentPeriodEnd     DateTime?          @map("current_period_end")
   paidInvoices         Int                @default(0) @map("paid_invoices") // access payments captured (2nd → partner commission earns)
@@ -669,7 +674,9 @@ model PlatformConfig {
   maxMinutes                 Int      @default(1200) @map("max_minutes")
   basePerMinCents            Int      @default(72) @map("base_per_min_cents")
   groupThreshold             Int      @default(2) @map("group_threshold")
-  assessmentCooldownDays     Int      @default(60) @map("assessment_cooldown_days")
+  monthlyTokenDiscountPct    Int      @default(8) @map("monthly_token_discount_pct")
+  annualTokenDiscountPct     Int      @default(15) @map("annual_token_discount_pct")
+  assessmentCooldownDays     Int      @default(30) @map("assessment_cooldown_days")
   alertLowBalanceDays        Int      @default(14) @map("alert_low_balance_days")
   alertZeroUsageDays         Int      @default(14) @map("alert_zero_usage_days")
   alertLiabilityCeilingCents Int      @default(1000000) @map("alert_liability_ceiling_cents")

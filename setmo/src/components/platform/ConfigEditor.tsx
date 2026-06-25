@@ -27,6 +27,8 @@ export function ConfigEditor({ config }: { config: PlatformConfig }) {
     maxMinutes: String(config.maxMinutes),
     basePerMin: String(config.basePerMin),
     groupThreshold: String(config.groupThreshold),
+    monthlyTokenDiscountPct: String(config.monthlyTokenDiscountPct),
+    annualTokenDiscountPct: String(config.annualTokenDiscountPct),
     assessmentCooldownDays: String(config.assessmentCooldownDays),
     alertLowBalanceDays: String(config.alertLowBalanceDays),
     alertZeroUsageDays: String(config.alertZeroUsageDays),
@@ -48,6 +50,8 @@ export function ConfigEditor({ config }: { config: PlatformConfig }) {
       maxMinutes: Math.round(Number(f.maxMinutes)),
       basePerMin: Number(f.basePerMin),
       groupThreshold: Math.round(Number(f.groupThreshold)),
+      monthlyTokenDiscountPct: Math.round(Number(f.monthlyTokenDiscountPct)),
+      annualTokenDiscountPct: Math.round(Number(f.annualTokenDiscountPct)),
       assessmentCooldownDays: Math.round(Number(f.assessmentCooldownDays)),
       alertLowBalanceDays: Math.round(Number(f.alertLowBalanceDays)),
       alertZeroUsageDays: Math.round(Number(f.alertZeroUsageDays)),
@@ -69,6 +73,15 @@ export function ConfigEditor({ config }: { config: PlatformConfig }) {
         <div className="grid g-3" style={{ gap: 16 }}>
           <NumField label="Access price" prefix="$" suffix="/mo" value={f.accessMonthly} onChange={set("accessMonthly")} />
           <NumField label="Group unlock at" suffix="locations" value={f.groupThreshold} onChange={set("groupThreshold")} />
+        </div>
+      </div>
+
+      <div className="card card-pad">
+        <h3 style={{ fontSize: 17, marginBottom: 4 }}>Token discounts (early-adopter)</h3>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>Account discount off all token purchases. Annual prepay also gets 2 months free on access. Adjust after Aug 1.</p>
+        <div className="grid g-2" style={{ gap: 16 }}>
+          <NumField label="Monthly plan token discount" suffix="%" value={f.monthlyTokenDiscountPct} onChange={set("monthlyTokenDiscountPct")} />
+          <NumField label="Annual plan token discount" suffix="%" value={f.annualTokenDiscountPct} onChange={set("annualTokenDiscountPct")} />
         </div>
       </div>
 

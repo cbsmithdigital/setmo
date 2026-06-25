@@ -6,33 +6,41 @@ import { tokenQuote, recommendTokens, tokensToMinutes, TOKEN_STEP, minTokens, ma
 
 const SALES_EMAIL = "hello@growdental.ai,adam@growdental.ai";
 
-// Drag-slider token purchase. 1 min of live AI = 10 tokens. The recommendation
-// comes from how many people are on the phones; price + discount update live.
+// Drag-slider token purchase. 1 min of live AI = 10 tokens. In activate mode the
+// admin also picks monthly vs annual prepay (2 months free + a bigger token discount).
 export function MinutePurchase({
   defaultPeople = 1,
   cfg = DEFAULT_PRICING,
   mode = "topup",
   accessMonthly = 44.95,
+  annualAccess = 449.5,
   discountPct = 0,
+  monthlyDiscountPct = 0,
+  annualDiscountPct = 0,
 }: {
   defaultPeople?: number;
   cfg?: PricingConfig;
   mode?: "topup" | "activate";
   accessMonthly?: number;
-  discountPct?: number; // account token discount (annual 15 / monthly 8)
+  annualAccess?: number;
+  discountPct?: number; // topup: the account's current token discount
+  monthlyDiscountPct?: number; // activate: token discount if they pick monthly
+  annualDiscountPct?: number; // activate: token discount if they pick annual
 }) {
   const isActivate = mode === "activate";
   const [people, setPeople] = useState(String(defaultPeople));
   const recommended = useMemo(() => recommendTokens(Number(people) || 1, cfg), [people, cfg]);
   const [tokens, setTokens] = useState(recommended);
-
+  const [plan, setPlan] = useState<"monthly" | "annual">("monthly");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const MIN_T = minTokens(cfg);
   const MAX_T = maxTokens(cfg);
-  const quote = tokenQuote(tokens, cfg, discountPct);
-  const todayTotal = quote.total + (isActivate ? accessMonthly : 0);
+  const effDiscount = isActivate ? (plan === "annual" ? annualDiscountPct : monthlyDiscountPct) : discountPct;
+  const quote = tokenQuote(tokens, cfg, effDiscount);
+  const accessCharge = plan === "annual" ? annualAccess : accessMonthly;
+  const todayTotal = quote.total + (isActivate ? accessCharge : 0);
 
   function applyRecommended() {
     setTokens(recommendTokens(Number(people) || 1, cfg));
@@ -45,7 +53,7 @@ export function MinutePurchase({
       const res = await fetch(isActivate ? "/api/office/activate/checkout" : "/api/office/minutes/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ minutes: tokensToMinutes(quote.tokens) }),
+        body: JSON.stringify({ minutes: tokensToMinutes(quote.tokens), ...(isActivate ? { plan } : {}) }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j.url) { setErr(j.error ?? "Couldn't start checkout"); return; }
@@ -60,9 +68,28 @@ export function MinutePurchase({
       <h3 style={{ fontSize: 18, marginBottom: 4 }}>{isActivate ? "Practice Access & tokens" : "Buy tokens"}</h3>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 16 }}>
         {isActivate
-          ? `Go live today: $${accessMonthly.toFixed(2)} Practice Access plus your starter tokens, in one payment. Tokens power every practice & coaching call, roll over, and never expire — pick how many to start with.`
+          ? "Go live today: Practice Access plus your starter tokens, in one payment. Tokens power every practice & coaching call (10 tokens ≈ 1 min of live AI), roll over, and never expire."
           : "Tokens power every practice & coaching call (10 tokens ≈ 1 minute of live AI). They roll over and never expire. Bigger balances earn a better rate."}
       </p>
+
+      {/* plan toggle (activation only) */}
+      {isActivate && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className={"btn " + (plan === "monthly" ? "btn-primary" : "btn-ghost")} style={{ flex: 1, padding: "9px 10px", fontSize: 13 }} onClick={() => setPlan("monthly")}>
+              Monthly · ${accessMonthly.toFixed(2)}/mo
+            </button>
+            <button type="button" className={"btn " + (plan === "annual" ? "btn-primary" : "btn-ghost")} style={{ flex: 1, padding: "9px 10px", fontSize: 13 }} onClick={() => setPlan("annual")}>
+              Annual · 2 months free
+            </button>
+          </div>
+          <p className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
+            {plan === "annual"
+              ? `$${annualAccess.toLocaleString()}/year (2 months free) + ${annualDiscountPct}% off all tokens.`
+              : `$${accessMonthly.toFixed(2)}/month + ${monthlyDiscountPct}% off all tokens.`} Early-adopter pricing through Aug 1.
+          </p>
+        </div>
+      )}
 
       {/* recommendation input */}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
@@ -113,10 +140,10 @@ export function MinutePurchase({
 
       {isActivate && (
         <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13, padding: "12px 0", borderTop: "1px solid var(--line-soft)", marginBottom: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}><span className="muted">Practice Access (first month)</span><b>${accessMonthly.toFixed(2)}</b></div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}><span className="muted">{quote.tokens.toLocaleString()} starter tokens</span><b>${quote.total.toLocaleString()}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span className="muted">Practice Access ({plan === "annual" ? "first year" : "first month"})</span><b>${accessCharge.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}><span className="muted">{quote.tokens.toLocaleString()} starter tokens{effDiscount > 0 ? ` (${effDiscount}% off)` : ""}</span><b>${quote.total.toLocaleString()}</b></div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14.5, marginTop: 4 }}><span style={{ fontWeight: 700 }}>Due today</span><b className="mint-text" style={{ fontFamily: "var(--font-lato)" }}>${todayTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></div>
-          <div className="muted" style={{ fontSize: 11.5 }}>Then ${accessMonthly.toFixed(2)}/month for access. Buy more tokens anytime. Plus tax where applicable.</div>
+          <div className="muted" style={{ fontSize: 11.5 }}>Then {plan === "annual" ? `$${annualAccess.toLocaleString()}/year` : `$${accessMonthly.toFixed(2)}/month`} for access. Buy more tokens anytime ({effDiscount}% off). Plus tax where applicable.</div>
         </div>
       )}
 

@@ -520,7 +520,8 @@ export async function getOfficeCatalog(officeId: string) {
 export async function getOfficeBilling(officeId: string) {
   const { getStripe, isStripeConfigured } = await import("@/lib/stripe");
   const { getPlatformConfig } = await import("@/lib/config");
-  const accessMonthly = (await getPlatformConfig()).accessMonthly;
+  const cfg = await getPlatformConfig();
+  const accessMonthly = cfg.accessMonthly;
 
   const [balance, subscription, office] = await Promise.all([
     getMinuteBalance(officeId),
@@ -546,11 +547,20 @@ export async function getOfficeBilling(officeId: string) {
     }
   }
 
+  const active = subscription?.status === "ACTIVE";
+  const plan = subscription?.plan === "ANNUAL" ? "annual" : "monthly";
+  const accountDiscountPct = active ? (plan === "annual" ? cfg.annualTokenDiscountPct : cfg.monthlyTokenDiscountPct) : 0;
+
   return {
     balance,
     accessMonthly,
-    subscribed: subscription?.status === "ACTIVE",
+    annualAccess: Math.round(accessMonthly * 10 * 100) / 100, // 2 months free
+    subscribed: active,
     accessStatus: subscription?.status ?? null,
+    plan: plan as "monthly" | "annual",
+    accountDiscountPct,
+    monthlyDiscountPct: cfg.monthlyTokenDiscountPct,
+    annualDiscountPct: cfg.annualTokenDiscountPct,
     autoTopUp: office?.autoTopUp ?? false,
     topUpMinutes: await lastPurchasedMinutes(officeId),
     nextInvoiceDate: subscription?.currentPeriodEnd

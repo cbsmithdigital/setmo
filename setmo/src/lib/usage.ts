@@ -19,12 +19,23 @@ export async function getMinuteBalance(officeId: string): Promise<{ purchasedMin
   return { purchasedMin, usedMin, remainingMin, remainingSeconds: Math.max(0, remainingMin * 60) };
 }
 
-/** Append purchased minutes to a location's rolling balance (one row per purchase). */
-export async function addMinutes(officeId: string, minutes: number, stripePaymentIntent?: string | null) {
-  const amountCents = Math.round(minuteQuote(minutes, await getPricingConfig()).total * 100); // cash revenue (matches checkout price)
+/** Append purchased minutes to a location's rolling balance (one row per purchase).
+ *  Pass `amountCents` to record the actual (post-discount) cash; otherwise the
+ *  list price is used. */
+export async function addMinutes(officeId: string, minutes: number, stripePaymentIntent?: string | null, amountCents?: number) {
+  const cents = amountCents ?? Math.round(minuteQuote(minutes, await getPricingConfig()).total * 100);
   return prisma.conversationBundle.create({
-    data: { officeId, minutesPurchased: minutes, minutesRemaining: minutes, hours: Math.round(minutes / 60), amountCents, stripePaymentIntent: stripePaymentIntent ?? null },
+    data: { officeId, minutesPurchased: minutes, minutesRemaining: minutes, hours: Math.round(minutes / 60), amountCents: cents, stripePaymentIntent: stripePaymentIntent ?? null },
   });
+}
+
+/** Account's token-purchase discount tier: annual 15% / monthly 8% / none 0% (config-driven). */
+export async function accountTokenDiscountPct(officeId: string): Promise<number> {
+  const { getPlatformConfig } = await import("@/lib/config");
+  const cfg = await getPlatformConfig();
+  const sub = await prisma.subscription.findUnique({ where: { officeId }, select: { status: true, plan: true } });
+  if (!sub || sub.status !== "ACTIVE") return 0;
+  return sub.plan === "ANNUAL" ? cfg.annualTokenDiscountPct : cfg.monthlyTokenDiscountPct;
 }
 
 /** Pre-session gate. Assessment calls are always allowed (free); practice/coach
