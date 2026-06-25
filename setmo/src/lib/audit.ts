@@ -77,6 +77,14 @@ export function callShowRate(skills: { skillKey: string; score: number }[]): num
   return Math.max(18, Math.min(74, Math.round(14 * composite)));
 }
 
+// Color band for a likely-show-rate pill: ≤35 grey · 36–45 red · 46–55 yellow · 56+ green.
+export function showRateColor(rate: number): { bg: string; fg: string } {
+  if (rate >= 56) return { bg: "rgba(52,211,153,.15)", fg: "var(--mint)" };
+  if (rate >= 46) return { bg: "rgba(251,191,36,.16)", fg: "var(--amber)" };
+  if (rate >= 36) return { bg: "rgba(239,68,68,.15)", fg: "#fb7185" };
+  return { bg: "rgba(148,163,184,.15)", fg: "var(--muted)" };
+}
+
 // ---- estimated-recovery model ----
 // Driven by the conversation MISSES: weak objection/closing caps the set rate,
 // weak rapport/discovery/value caps the show rate. We funnel a conservative lift

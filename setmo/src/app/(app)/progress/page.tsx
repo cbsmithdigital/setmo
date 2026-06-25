@@ -5,6 +5,7 @@ import { StatTile } from "@/components/ui/StatTile";
 import { Sparkline, Delta } from "@/components/ui/widgets";
 import { Icon } from "@/components/ui/Icon";
 import { whenLabel, mmss } from "@/lib/format";
+import { showRateColor } from "@/lib/audit";
 import { ScoreOverTime, UniversalRadar } from "@/components/progress/ProgressCharts";
 import { ProgressControls } from "@/components/progress/ProgressControls";
 
@@ -113,30 +114,49 @@ export default async function ProgressPage({
             {/* all sessions this period — click into any call's details */}
             <div className="card card-pad rise" style={{ marginTop: 18, animationDelay: ".2s" }}>
               <h3 style={{ fontSize: 18, marginBottom: 4 }}>Sessions</h3>
-              <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
+              <p className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
                 Every scored call in this period — click any to see its full breakdown.
               </p>
+
+              {/* column header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "0 8px 10px", borderBottom: "1px solid var(--line)", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)" }}>
+                <div style={{ width: 42, flex: "none" }} />
+                <div style={{ flex: 1, minWidth: 0 }}>Session</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
+                  <span style={{ width: 64, textAlign: "center" }}>Show rate</span>
+                  <span style={{ width: 56, textAlign: "center" }}>Trend</span>
+                  <span style={{ width: 48, textAlign: "right" }}>Score</span>
+                </div>
+              </div>
+
               <div style={{ display: "flex", flexDirection: "column" }}>
-                {d.sessions.map((s, i) => (
-                  <Link
-                    key={s.id}
-                    href={`/results/${s.id}`}
-                    style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 8px", borderRadius: 10, borderTop: i ? "1px solid var(--line-soft)" : "none" }}
-                  >
-                    <div style={{ width: 42, height: 42, borderRadius: 11, background: "var(--s3)", display: "grid", placeItems: "center", color: "var(--purple-2)", flex: "none" }}>
-                      <Icon name="mic" size={18} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.persona}</div>
-                      <div className="muted" style={{ fontSize: 12.5 }}>{whenLabel(s.when)} · {mmss(s.durationSeconds)}</div>
-                    </div>
-                    <span className="chip" style={{ padding: "2px 9px", fontSize: 11 }} title="Likely show rate">{s.showRate}% show</span>
-                    <Delta v={s.delta} />
-                    <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 19, width: 44, textAlign: "right" }} className={s.score >= 4 ? "mint-text" : "grad-text"}>
-                      {s.score.toFixed(1)}
-                    </div>
-                  </Link>
-                ))}
+                {d.sessions.map((s, i) => {
+                  const c = showRateColor(s.showRate);
+                  return (
+                    <Link
+                      key={s.id}
+                      href={`/results/${s.id}`}
+                      style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 8px", borderRadius: 10, borderTop: i ? "1px solid var(--line-soft)" : "none" }}
+                    >
+                      <div style={{ width: 42, height: 42, borderRadius: 11, background: "var(--s3)", display: "grid", placeItems: "center", color: "var(--purple-2)", flex: "none" }}>
+                        <Icon name="mic" size={18} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.persona}</div>
+                        <div className="muted" style={{ fontSize: 12.5 }}>{whenLabel(s.when)} · {mmss(s.durationSeconds)}</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
+                        <span style={{ width: 64, display: "flex", justifyContent: "center" }}>
+                          <span className="chip" style={{ display: "inline-flex", justifyContent: "center", width: 52, padding: "2px 0", fontSize: 11.5, fontWeight: 700, background: c.bg, color: c.fg, border: "none" }} title="Likely show rate">{s.showRate}%</span>
+                        </span>
+                        <div style={{ width: 56, display: "flex", justifyContent: "center" }}><Delta v={s.delta} /></div>
+                        <div style={{ width: 48, textAlign: "right", fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 19 }} className={s.score >= 4 ? "mint-text" : "grad-text"}>
+                          {s.score.toFixed(1)}
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           </>

@@ -6,6 +6,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Ring } from "@/components/ui/widgets";
 import { RecordingActions } from "@/components/RecordingActions";
 import { mmss } from "@/lib/format";
+import { showRateColor } from "@/lib/audit";
 
 function ResultSkill({
   s,
@@ -88,7 +89,7 @@ export default async function ResultsPage({
               {r.prev != null && r.score < r.prev && (
                 <span className="chip">Down from {r.prev.toFixed(1)} — next rep counts</span>
               )}
-              <span className="chip" title="Estimated likelihood this booked consult actually shows, based on the call">
+              <span className="chip" style={{ background: showRateColor(r.showRate).bg, color: showRateColor(r.showRate).fg, border: "none" }} title="Estimated likelihood this booked consult actually shows, based on the call">
                 <Icon name="target" size={13} /> {r.showRate}% likely to show
               </span>
             </div>
