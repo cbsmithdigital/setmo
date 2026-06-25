@@ -234,6 +234,23 @@ export async function buildAuditReport(auditId: string) {
     training: trainings.find((t) => t.targetSkillKey === l.key)?.title ?? `Drill ${l.name.toLowerCase()}`,
   }));
 
+  // Real published trainings to showcase what's inside the platform — prefer ones
+  // targeting this prospect's weak skills, fall back to any published setter training.
+  const leakKeys = leaks.map((l) => l.key);
+  let exampleRows = leakKeys.length
+    ? await prisma.training.findMany({ where: { status: "PUBLISHED", category: "SETTER", targetSkillKey: { in: leakKeys } }, select: { id: true, title: true, type: true, length: true, targetSkillKey: true }, take: 6 })
+    : [];
+  if (exampleRows.length === 0) {
+    exampleRows = await prisma.training.findMany({ where: { status: "PUBLISHED", category: "SETTER" }, select: { id: true, title: true, type: true, length: true, targetSkillKey: true }, take: 6 });
+  }
+  const trainingExamples = exampleRows.map((t) => ({
+    id: t.id,
+    title: t.title,
+    type: t.type as "VIDEO" | "WORKBOOK",
+    length: t.length,
+    skill: t.targetSkillKey ? skillName(t.targetSkillKey) : "All skills",
+  }));
+
   return {
     id: audit.id,
     practiceName: audit.practiceName,
@@ -247,6 +264,7 @@ export async function buildAuditReport(auditId: string) {
     perCall,
     recovery: (audit.estimatedRecovery as ReturnType<typeof estimateRecovery> | null) ?? null,
     nextSteps,
+    trainingExamples,
     baselineAt: audit.baselineAt,
   };
 }

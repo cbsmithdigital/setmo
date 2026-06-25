@@ -5,10 +5,24 @@ import { auditCallCounts, buildAuditReport, AUDIT_CALLS, AUDIT_CALL_MAX_SECONDS 
 import { AuditRunner } from "@/components/audit/AuditRunner";
 import { AuditClaim } from "@/components/audit/AuditClaim";
 import { AuditRequestReview } from "@/components/audit/AuditRequestReview";
+import { SettyButton } from "@/components/audit/SettyButton";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import "../../marketing.css";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Your Setter Audit — SetMo" };
+
+// Setty's floating launcher renders only once the voice agent is configured (Stage 3).
+const settyEnabled = Boolean(process.env.SETMO_SETTY_AGENT_ID);
+
+const PLATFORM_FEATURES: { icon: IconName; title: string; desc: string }[] = [
+  { icon: "mic", title: "Unlimited AI practice", desc: "Your whole team reps real inbound calls against a lifelike AI lead — no live leads at risk." },
+  { icon: "chart", title: "8-point scoring every call", desc: "Objective rubric scoring with wins, misses, and the exact words to use next time." },
+  { icon: "chat", title: "Setty coaching", desc: "On-demand voice + chat coaching that knows each setter's calls and weak spots." },
+  { icon: "book", title: "Trainings library", desc: "Targeted video + workbook lessons that surface from how each setter actually scored." },
+  { icon: "trophy", title: "Goals & leaderboards", desc: "Team goals, streaks, and rewards that keep setters improving." },
+  { icon: "building", title: "Group / DSO command center", desc: "Roll-up performance across every location — free at 2+ locations." },
+];
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -143,8 +157,8 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
           ))}
         </div>
 
-        {/* next steps + CTA */}
-        <div className="audit-card">
+        {/* where to start */}
+        <div className="audit-card" style={{ marginBottom: 18 }}>
           <h3 style={{ fontSize: 18, marginBottom: 12 }}>Where to start</h3>
           {r.nextSteps.map((n, i) => (
             <div key={i} style={{ display: "flex", gap: 10, marginBottom: 8, fontSize: 14.5 }}>
@@ -152,11 +166,57 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
               <span><b>{n.skill}:</b> {n.training}</span>
             </div>
           ))}
+        </div>
+
+        {/* the coaching that closes the gap — real platform trainings */}
+        {r.trainingExamples.length > 0 && (
+          <div className="audit-card" style={{ marginBottom: 18 }}>
+            <h3 style={{ fontSize: 18, marginBottom: 4 }}>The coaching that closes the gap</h3>
+            <p style={{ color: "var(--m-muted)", fontSize: 14, marginBottom: 16 }}>A taste of the trainings inside SetMo — they surface automatically from how each setter scores.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 12 }}>
+              {r.trainingExamples.map((t) => (
+                <div key={t.id} style={{ border: "1px solid var(--m-line)", borderRadius: 14, padding: "14px 16px", background: "var(--paper)" }}>
+                  <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--purple-deep)", marginBottom: 8 }}>{t.type === "VIDEO" ? "Video" : "Workbook"} · {t.length} {t.type === "VIDEO" ? "min" : "pp"}</span>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6, lineHeight: 1.25 }}>{t.title}</div>
+                  <div style={{ fontSize: 12.5, color: "var(--m-muted)" }}>Targets {t.skill}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* everything in SetMo — platform walkthrough */}
+        <div className="audit-card" style={{ marginBottom: 18 }}>
+          <h3 style={{ fontSize: 18, marginBottom: 4 }}>Everything you get with SetMo</h3>
+          <p style={{ color: "var(--m-muted)", fontSize: 14, marginBottom: 16 }}>One flat price per location — unlimited users, every feature included.</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 14 }}>
+            {PLATFORM_FEATURES.map((f) => (
+              <div key={f.title} style={{ display: "flex", gap: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--purple-soft)", color: "var(--purple-deep)", display: "grid", placeItems: "center", flex: "none" }}>
+                  <Icon name={f.icon} size={18} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 3 }}>{f.title}</div>
+                  <div style={{ fontSize: 13, color: "var(--m-muted)", lineHeight: 1.45 }}>{f.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* CTA */}
+        <div className="audit-card">
+          <h3 style={{ fontSize: 20, marginBottom: 6 }}>Turn this into your team&apos;s baseline</h3>
+          <p style={{ color: "var(--m-muted)", fontSize: 14.5, marginBottom: 6 }}>
+            Activate SetMo for {r.practiceName} and put every setter on the same coaching. Early adopters who start before <b style={{ color: "var(--ink-soft)" }}>Aug 1</b> lock in special pricing.
+          </p>
           <AuditClaim auditId={id} />
           <p className="audit-note" style={{ textAlign: "center" }}>
-            This report is your baseline, saved {r.baselineAt ? new Date(r.baselineAt).toLocaleDateString() : "today"}. The report is yours to keep — or <a href="mailto:hello@growdental.ai?subject=SetMo%20for%20our%20group" style={{ color: "var(--purple-deep)", fontWeight: 600 }}>talk to us about a group</a>.
+            This report is your baseline, saved {r.baselineAt ? new Date(r.baselineAt).toLocaleDateString() : "today"}. Questions? Tap <b style={{ color: "var(--ink-soft)" }}>Talk to Setty</b> — or <a href="mailto:hello@growdental.ai?subject=SetMo%20for%20our%20group" style={{ color: "var(--purple-deep)", fontWeight: 600 }}>talk to us about a group</a>.
           </p>
         </div>
+
+        {settyEnabled && <SettyButton auditId={id} practiceName={r.practiceName} />}
       </Shell>
     );
   }
