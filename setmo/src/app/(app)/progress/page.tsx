@@ -1,7 +1,10 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { getSetterProgress, resolveAnalyticsRange } from "@/lib/queries";
 import { StatTile } from "@/components/ui/StatTile";
 import { Sparkline, Delta } from "@/components/ui/widgets";
+import { Icon } from "@/components/ui/Icon";
+import { whenLabel, mmss } from "@/lib/format";
 import { ScoreOverTime, UniversalRadar } from "@/components/progress/ProgressCharts";
 import { ProgressControls } from "@/components/progress/ProgressControls";
 
@@ -103,6 +106,35 @@ export default async function ProgressPage({
                       {s.score.toFixed(1)}
                     </div>
                   </div>
+                ))}
+              </div>
+            </div>
+
+            {/* all sessions this period — click into any call's details */}
+            <div className="card card-pad rise" style={{ marginTop: 18, animationDelay: ".2s" }}>
+              <h3 style={{ fontSize: 18, marginBottom: 4 }}>Sessions</h3>
+              <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
+                Every scored call in this period — click any to see its full breakdown.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {d.sessions.map((s, i) => (
+                  <Link
+                    key={s.id}
+                    href={`/results/${s.id}`}
+                    style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 8px", borderRadius: 10, borderTop: i ? "1px solid var(--line-soft)" : "none" }}
+                  >
+                    <div style={{ width: 42, height: 42, borderRadius: 11, background: "var(--s3)", display: "grid", placeItems: "center", color: "var(--purple-2)", flex: "none" }}>
+                      <Icon name="mic" size={18} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.persona}</div>
+                      <div className="muted" style={{ fontSize: 12.5 }}>{whenLabel(s.when)} · {mmss(s.durationSeconds)}</div>
+                    </div>
+                    <Delta v={s.delta} />
+                    <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 19, width: 44, textAlign: "right" }} className={s.score >= 4 ? "mint-text" : "grad-text"}>
+                      {s.score.toFixed(1)}
+                    </div>
+                  </Link>
                 ))}
               </div>
             </div>

@@ -350,16 +350,40 @@ export async function getSetterProgress(userId: string, officeId: string, range?
   const len = current.to.getTime() - current.from.getTime();
   const prior: AnalyticsRange = { from: new Date(current.from.getTime() - len), to: current.from };
 
-  const [a, allowance] = await Promise.all([
+  const [a, allowance, periodSessions] = await Promise.all([
     getSetterAnalytics(userId, current, prior, { allSkills: true }),
     getAllowance(officeId),
+    prisma.session.findMany({
+      where: { setterId: userId, status: "SCORED", startedAt: { gte: current.from, lte: current.to } },
+      orderBy: { startedAt: "desc" },
+      include: { evaluation: { include: { skills: true } } },
+    }),
   ]);
+
+  // Clickable session list for this period (newest first) with session-to-session delta.
+  const realPeriod = periodSessions.filter(isRealScored);
+  const chron = [...realPeriod].reverse();
+  const scoreOf = (s: (typeof periodSessions)[number]) => (s.evaluation?.overallScore != null ? Number(s.evaluation.overallScore) : 0);
+  const sessions = realPeriod.map((s) => {
+    const idx = chron.findIndex((x) => x.id === s.id);
+    const prev = idx > 0 ? scoreOf(chron[idx - 1]) : null;
+    const cur = scoreOf(s);
+    return {
+      id: s.id,
+      persona: (s.personaSeed as { persona?: string } | null)?.persona ?? "Practice lead",
+      when: s.startedAt,
+      durationSeconds: s.durationSeconds ?? 0,
+      score: cur,
+      delta: prev != null ? Number((cur - prev).toFixed(1)) : 0,
+    };
+  });
 
   return {
     points: a.points,
     series: a.series,
     universal: a.universal,
     snapshot: a.perSkill,
+    sessions,
     stats: {
       overallAvg: a.overallAvg,
       overallDelta: a.overallDelta,
