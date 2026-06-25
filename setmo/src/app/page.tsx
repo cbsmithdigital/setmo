@@ -146,7 +146,7 @@ export default async function LandingPage() {
         <div className="wrap stats-grid">
           <div className="stat reveal"><div className="deco" style={{ background: "var(--purple)" }} /><div className="big grad-text">0</div><p>real leads burned while your team learns. Every rep is against an AI patient.</p></div>
           <div className="stat reveal"><div className="deco" style={{ background: "var(--purple)" }} /><div className="big grad-text">8</div><p>skills scored on every single call — from rapport to closing the appointment.</p></div>
-          <div className="stat reveal"><div className="deco" style={{ background: "var(--m-mint)" }} /><div className="big mint-text">$44.95</div><p>per practice, per month. Unlimited users, all features — then pay-as-you-go minutes that roll over.</p></div>
+          <div className="stat reveal"><div className="deco" style={{ background: "var(--m-mint)" }} /><div className="big mint-text">$44.95</div><p>per practice, per month. Unlimited users, all features — then pay-as-you-go tokens that roll over.</p></div>
         </div>
       </section>
 
@@ -387,7 +387,7 @@ export default async function LandingPage() {
           <div className="sec-head center reveal">
             <span className="eyebrow">Pricing</span>
             <h2>Everything SetMo does, for <span className="mint-text">one flat price</span>.</h2>
-            <p>$44.95 per location, month-to-month — unlimited users, every feature included, plus pay-as-you-go minutes that roll over. A serious edge for a single office, and it scales to a whole group at no extra tier.</p>
+            <p>$44.95 per location, month-to-month — unlimited users, every feature included, plus pay-as-you-go tokens that roll over. A serious edge for a single office, and it scales to a whole group at no extra tier.</p>
           </div>
 
           <div className="tiers" style={{ gridTemplateColumns: "1fr", margin: 0 }}>
@@ -451,13 +451,13 @@ export default async function LandingPage() {
               ["Is this a real phone call?", "No — it's an in-browser voice conversation with an AI patient. Your setter is logged in and practicing safely; no real leads or phone lines are involved.", true],
               ["How is a setter scored?", "The AI grades each call across eight skills on a 1–5 scale — rapport, listening, discovery, pain-point exploration, objection handling, confidence, value building, and closing — with reasoning and specific feedback for each.", false],
               ["How does the free Setter Audit work?", "Every office gets one free audit. Your setter runs a live browser session against five simulated-but-setable leads — nothing to upload. We score all five on the same 8-point rubric and send back a report showing where booked consults are leaking and what recovering them is worth. Additional audits are $50 each.", false],
-              ["What does it cost?", "$44.95 per practice per month, month-to-month, with unlimited users and every feature included. On top of that you buy practice minutes as you go — they roll over and never expire, and the per-minute rate drops the more you buy. Groups get the multi-location command center and Setty Advisor free once they run 2+ locations.", false],
+              ["What does it cost?", "$44.95 per practice per month, month-to-month, with unlimited users and every feature included. On top of that you buy tokens as you go (10 tokens ≈ a minute of live AI) — they roll over and never expire, and the per-token rate drops the more you buy. Groups get the multi-location command center and Setty Advisor free once they run 2+ locations.", false],
               ["Who is Setty?", "Setty is SetMo's AI coach. For your office manager, Setty Office Coach reads every setter's scores, points out who's slipping and why, drafts the next training, and talks through the calls and decisions you're not sure about. For groups, Setty Advisor does the same across every location for your ops leaders. The data turns into action instead of another report.", false],
-              ["How does SetMo work across multiple locations?", "Each location runs on the same flat access fee and its own minute balance. Once you have 2+ locations you unlock — free — the Group command center that puts every office side by side (set rates, skill scores, trends), surfaces outliers automatically, and shows what your best offices do differently. Setty Advisor, trained on your data, recommends what to roll out where.", false],
-              ["Do I have to commit?", "No. SetMo is month-to-month — cancel anytime. There's no contract and no per-seat math; you pay the flat access fee per practice and buy minutes only as you need them.", false],
-              ["What counts against my minutes?", "Only actual conversation time on practice and coaching calls. Minutes come out of your purchased balance, roll over month to month, and never expire. When you're running low you'll get a warning — never a surprise overage. The free Setter Assessment is always on us and never deducts from your balance.", false],
+              ["How does SetMo work across multiple locations?", "Each location runs on the same flat access fee and its own token balance. Once you have 2+ locations you unlock — free — the Group command center that puts every office side by side (set rates, skill scores, trends), surfaces outliers automatically, and shows what your best offices do differently. Setty Advisor, trained on your data, recommends what to roll out where.", false],
+              ["Do I have to commit?", "No. SetMo is month-to-month — cancel anytime. There's no contract and no per-seat math; you pay the flat access fee per practice and buy tokens only as you need them.", false],
+              ["What counts against my tokens?", "Only actual practice and coaching usage (10 tokens ≈ a minute of live AI). Tokens come out of your purchased balance, roll over month to month, and never expire. When you're running low you'll get a warning — never a surprise overage. The free Setter Assessment is always on us and never deducts from your balance.", false],
               ["Which call types are supported?", "SetMo launches with the implant / full-arch / denture agent — the most complex, highest-value call. Cosmetic, ortho, wisdom teeth, and general are on the roadmap and slot right in.", false],
-              ["Is the assessment really free?", "Yes. Anyone can run a 5-call Setter Assessment and get the full report at no charge — and for paying practices it never costs minutes. Prospects can take a fresh one every couple of months to track progress.", false],
+              ["Is the assessment really free?", "Yes. Anyone can run a one-call Setter Assessment and get the full report at no charge — and for paying practices it never costs tokens. Prospects can take a fresh one every 30 days to track progress.", false],
               ["Do you store patient data?", "No. Every persona is fictional and AI-generated. SetMo is a training tool — it handles employee performance and practice data only, with no patient health information involved.", false],
             ].map(([q, a, open]) => (
               <details className="qa" key={q as string} open={open as boolean}>

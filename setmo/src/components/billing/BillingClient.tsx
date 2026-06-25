@@ -59,6 +59,7 @@ export function BillingClient({
   const { purchasedMin, usedMin, remainingMin } = data.balance;
   const pct = purchasedMin > 0 ? Math.min(100, (usedMin / purchasedMin) * 100) : 0;
   const low = purchasedMin > 0 && remainingMin <= purchasedMin * 0.2;
+  const tok = (m: number) => m * 10; // 1 min = 10 SetMo Tokens
 
   async function manageAccess() {
     setBusy(true);
@@ -77,7 +78,7 @@ export function BillingClient({
       <div className="topbar">
         <div className="tb-greet">
           <h1>Usage &amp; billing</h1>
-          <p>Practice access, your minute balance, and invoices for {practiceName}.</p>
+          <p>Practice access, your token balance, and invoices for {practiceName}.</p>
         </div>
         <div className="tb-right">
           <button className="btn btn-primary" onClick={() => setInvite(true)}>
@@ -87,11 +88,11 @@ export function BillingClient({
       </div>
 
       <div className="content">
-        {activateStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>You&apos;re live! Practice Access is active and your starter minutes are being added — give it a few seconds.</div>}
+        {activateStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>You&apos;re live! Practice Access is active and your starter tokens are being added — give it a few seconds.</div>}
         {activateStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Activation cancelled — no charge was made.</div>}
         {accessStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Practice Access is active — thanks! Manage it anytime here.</div>}
         {accessStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Checkout cancelled — no charge was made.</div>}
-        {minutesStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Payment received — your minutes will be added within a few seconds.</div>}
+        {minutesStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Payment received — your tokens will be added within a few seconds.</div>}
         {minutesStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Checkout cancelled — no charge was made.</div>}
 
         {/* Once subscribed: access status + minute balance. Before that, the
@@ -120,21 +121,21 @@ export function BillingClient({
               </button>
             </div>
 
-            {/* minute balance */}
+            {/* token balance */}
             <div className="card card-pad rise" style={{ animationDelay: ".06s" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                <h3 style={{ fontSize: 18 }}>Minute balance</h3>
+                <h3 style={{ fontSize: 18 }}>Token balance</h3>
                 <span className={"chip " + (low ? "amber" : "mint")} style={{ padding: "3px 10px" }}>{low ? "Running low" : "Healthy"}</span>
               </div>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginBottom: 8 }}>
-                <span className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 48, lineHeight: 1 }}>{remainingMin.toLocaleString()}</span>
-                <span className="muted" style={{ fontSize: 15, fontWeight: 600, paddingBottom: 8 }}>min left</span>
+                <span className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 48, lineHeight: 1 }}>{tok(remainingMin).toLocaleString()}</span>
+                <span className="muted" style={{ fontSize: 15, fontWeight: 600, paddingBottom: 8 }}>tokens left</span>
               </div>
               <div style={{ height: 10, borderRadius: 99, background: "#181828", overflow: "hidden", margin: "6px 0 8px" }}>
                 <div style={{ height: "100%", width: pct + "%", background: low ? "linear-gradient(90deg,#f59e0b,#ef4444)" : "var(--grad-mint)", borderRadius: 99 }} />
               </div>
               <p className="muted" style={{ fontSize: 12.5 }}>
-                {usedMin.toLocaleString()} of {purchasedMin.toLocaleString()} purchased minutes used. Minutes roll over — assessments are always free and never deducted.
+                {tok(usedMin).toLocaleString()} of {tok(purchasedMin).toLocaleString()} tokens used (≈ {remainingMin.toLocaleString()} min left). Tokens roll over — assessments are always free and never deducted.
               </p>
 
               {/* auto top-up */}
@@ -143,8 +144,8 @@ export function BillingClient({
                   <div style={{ fontWeight: 600, fontSize: 13.5 }}>Auto top-up</div>
                   <div className="muted" style={{ fontSize: 12 }}>
                     {data.topUpMinutes > 0
-                      ? <>Auto-buys <b>{data.topUpMinutes.toLocaleString()} minutes</b> (your last purchase) when the balance dips below 25.</>
-                      : <>Buy minutes once, then auto top-up can re-buy that amount automatically.</>}
+                      ? <>Auto-buys <b>{tok(data.topUpMinutes).toLocaleString()} tokens</b> (your last purchase) when the balance dips below 250.</>
+                      : <>Buy tokens once, then auto top-up can re-buy that amount automatically.</>}
                   </div>
                 </div>
                 <button
@@ -153,7 +154,7 @@ export function BillingClient({
                   aria-checked={autoTopUp}
                   disabled={autoBusy || data.topUpMinutes === 0}
                   onClick={() => toggleAutoTopUp(!autoTopUp)}
-                  title={data.topUpMinutes === 0 ? "Buy minutes first to enable auto top-up" : undefined}
+                  title={data.topUpMinutes === 0 ? "Buy tokens first to enable auto top-up" : undefined}
                   style={{ flex: "none", width: 46, height: 26, borderRadius: 99, padding: 3, background: autoTopUp ? "var(--grad-mint)" : "#2a2a40", border: "none", cursor: data.topUpMinutes === 0 ? "not-allowed" : "pointer", opacity: data.topUpMinutes === 0 ? 0.5 : 1, transition: "background .2s" }}
                 >
                   <span style={{ display: "block", width: 20, height: 20, borderRadius: "50%", background: "#fff", transform: autoTopUp ? "translateX(20px)" : "translateX(0)", transition: "transform .2s" }} />
@@ -172,7 +173,7 @@ export function BillingClient({
         <div className="eyebrow" style={{ marginBottom: 12 }}>Invoices</div>
         <div className="card rise" style={{ overflowX: "auto" }}>
           {data.invoices.length === 0 ? (
-            <div className="card-pad muted" style={{ fontSize: 13.5 }}>No invoices yet. Access charges and minute receipts will appear here once billing is live.</div>
+            <div className="card-pad muted" style={{ fontSize: 13.5 }}>No invoices yet. Access charges and token receipts will appear here once billing is live.</div>
           ) : (
             <div style={{ minWidth: 520 }}>
               {data.invoices.map((inv, i) => (

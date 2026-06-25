@@ -56,7 +56,7 @@ export default function SignupPage() {
           </div>
           <h1 style={{ fontSize: 34, marginBottom: 8 }}>Get SetMo now.</h1>
           <p className="muted" style={{ fontSize: 15.5, marginBottom: 24 }}>
-            $44.95/mo per location · unlimited users · all features. Create your account free — activate access &amp; add minutes when you&apos;re ready.
+            $44.95/mo per location · unlimited users · all features. Create your account free — activate access &amp; add tokens when you&apos;re ready.
           </p>
 
           <form onSubmit={onSubmit}>

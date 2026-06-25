@@ -42,7 +42,7 @@ export default async function OfficeOverviewPage() {
           </p>
         </div>
         <div className="tb-right" style={{ display: "flex", gap: 10 }}>
-          <Link className="btn btn-ghost" href="/office/billing"><Icon name="card" size={16} /> Buy minutes</Link>
+          <Link className="btn btn-ghost" href="/office/billing"><Icon name="card" size={16} /> Buy tokens</Link>
           <InviteButton allowGroupAdmin={!!user.organizationId && user.roles.some((r) => r === "GROUP_ADMIN" || r === "PLATFORM_ADMIN")} />
         </div>
       </div>
@@ -120,23 +120,23 @@ export default async function OfficeOverviewPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div className="card card-pad rise" style={{ animationDelay: ".1s" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                <h3 style={{ fontSize: 17 }}>Minute balance</h3>
+                <h3 style={{ fontSize: 17 }}>Token balance</h3>
                 <span className={"chip " + (low ? "amber" : "mint")} style={{ padding: "3px 10px" }}>
-                  {purchasedMin === 0 ? "Buy minutes" : low ? "Running low" : "Healthy"}
+                  {purchasedMin === 0 ? "Buy tokens" : low ? "Running low" : "Healthy"}
                 </span>
               </div>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginBottom: 6 }}>
                 <span className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 42, lineHeight: 1 }}>
-                  {remainingMin.toLocaleString()}
+                  {(remainingMin * 10).toLocaleString()}
                 </span>
                 <span className="muted" style={{ fontSize: 15, fontWeight: 600, paddingBottom: 6 }}>
-                  min left{purchasedMin > 0 ? ` of ${purchasedMin.toLocaleString()}` : ""}
+                  tokens left{purchasedMin > 0 ? ` of ${(purchasedMin * 10).toLocaleString()}` : ""}
                 </span>
               </div>
               <div style={{ height: 9, borderRadius: 99, background: "#181828", overflow: "hidden", margin: "8px 0 14px" }}>
                 <div style={{ height: "100%", width: poolPct + "%", background: low ? "linear-gradient(90deg,#f59e0b,#ef4444)" : "var(--grad-mint)", borderRadius: 99 }} />
               </div>
-              <Link className="btn btn-primary" href="/office/billing" style={{ width: "100%", justifyContent: "center" }}><Icon name="card" size={16} /> Buy minutes</Link>
+              <Link className="btn btn-primary" href="/office/billing" style={{ width: "100%", justifyContent: "center" }}><Icon name="card" size={16} /> Buy tokens</Link>
             </div>
 
             <div className="card card-pad rise" style={{ animationDelay: ".15s" }}>

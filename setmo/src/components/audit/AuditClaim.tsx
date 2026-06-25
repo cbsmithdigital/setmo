@@ -47,7 +47,7 @@ export function AuditClaim({ auditId }: { auditId: string }) {
   return (
     <form onSubmit={claim} style={{ marginTop: 18 }}>
       <p style={{ fontSize: 14, color: "var(--ink-soft)", marginBottom: 8 }}>
-        Create your practice account. Your assessment becomes your starting baseline, and you can add your team and minutes next.
+        Create your practice account. Your assessment becomes your starting baseline, and you can add your team and tokens next.
       </p>
       {err && <div className="banner error" style={{ marginBottom: 12 }}>{err}</div>}
       <input

@@ -68,6 +68,58 @@ export function minuteQuote(minutes: number, cfg: PricingConfig = DEFAULT_PRICIN
 /** True once the chosen amount needs a bulk conversation instead of self-serve. */
 export const isBulk = (minutes: number, cfg: PricingConfig = DEFAULT_PRICING) => minutes > cfg.maxMinutes;
 
+// ===========================================================================
+// SetMo Tokens — the customer-facing unit. 1 minute of live AI work = 10 tokens.
+// Internally everything is still minutes; tokens are a presentation + pricing
+// layer (tokens = minutes×10, $/token = $/min÷10). An account discount (annual
+// 15% / monthly 8%, config-driven) stacks on top of the volume-tier price.
+// ===========================================================================
+export const TOKENS_PER_MINUTE = 10;
+export const TOKEN_STEP = MINUTE_STEP * TOKENS_PER_MINUTE; // 100
+export const MINUTES_PER_CALL = 5; // ≈ typical practice call — calibrate after the first 9 sessions
+export const TOKENS_PER_CALL = MINUTES_PER_CALL * TOKENS_PER_MINUTE; // 50
+
+export const minutesToTokens = (m: number) => Math.round(m * TOKENS_PER_MINUTE);
+export const tokensToMinutes = (t: number) => Math.round(t / TOKENS_PER_MINUTE);
+export const tokensToCalls = (t: number) => Math.round(t / TOKENS_PER_CALL);
+export const minTokens = (cfg: PricingConfig = DEFAULT_PRICING) => cfg.minMinutes * TOKENS_PER_MINUTE;
+export const maxTokens = (cfg: PricingConfig = DEFAULT_PRICING) => cfg.maxMinutes * TOKENS_PER_MINUTE;
+
+export type TokenQuote = {
+  tokens: number;
+  minutes: number;
+  perToken: number;
+  total: number; // $ charged (after the account discount)
+  listTotal: number; // $ before the account discount
+  volumeDiscountPct: number; // from buying more
+  accountDiscountPct: number; // annual/monthly account tier
+  calls: number; // ≈ practice calls
+};
+
+/** Full token quote. `accountDiscountPct` (0/8/15) stacks on the volume price. */
+export function tokenQuote(tokens: number, cfg: PricingConfig = DEFAULT_PRICING, accountDiscountPct = 0): TokenQuote {
+  const q = minuteQuote(tokensToMinutes(tokens), cfg); // volume-tier minute quote
+  const tk = q.minutes * TOKENS_PER_MINUTE;
+  const listTotal = q.total;
+  const total = Math.round(listTotal * (1 - accountDiscountPct / 100));
+  return {
+    tokens: tk,
+    minutes: q.minutes,
+    perToken: round2(total / tk),
+    total,
+    listTotal,
+    volumeDiscountPct: q.discountPct,
+    accountDiscountPct,
+    calls: Math.round(q.minutes / MINUTES_PER_CALL),
+  };
+}
+
+/** Recommended starting tokens from how many people are on the phones. */
+export const recommendTokens = (people: number, cfg: PricingConfig = DEFAULT_PRICING) => recommendMinutes(people, cfg) * TOKENS_PER_MINUTE;
+
+/** Annual prepay = 2 months free → 10 × the monthly access price, billed yearly. */
+export const annualAccessUsd = (cfg: PricingConfig = DEFAULT_PRICING) => round2(cfg.accessMonthly * 10);
+
 /** Recommended starting balance from how many people are on the phones. */
 export function recommendMinutes(people: number, cfg: PricingConfig = DEFAULT_PRICING): number {
   const p = Math.max(1, Math.round(people));

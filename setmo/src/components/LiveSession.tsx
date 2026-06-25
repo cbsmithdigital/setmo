@@ -281,7 +281,7 @@ function SessionInner({
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <div className="chip">
-            <Icon name="clock" size={14} /> {Math.max(0, Math.round(remainingMinutes))} min left in pool
+            <Icon name="clock" size={14} /> {Math.max(0, Math.round(remainingMinutes) * 10).toLocaleString()} tokens left
           </div>
         </div>
       </div>

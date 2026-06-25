@@ -125,7 +125,7 @@ export async function sendAuditVerifyEmail(opts: { to: string; link: string; pra
     html: `
       <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
         <h2 style="color:#7c3aed">Your free Setter Audit for ${opts.practiceName}</h2>
-        <p>Confirm your email to start your 5 calls and unlock the report.</p>
+        <p>Confirm your email to start your call and unlock the report.</p>
         <p style="margin:28px 0">
           <a href="${opts.link}" style="background:#7c3aed;color:#fff;padding:12px 22px;
           border-radius:12px;text-decoration:none;font-weight:600">Start my audit</a>
@@ -145,9 +145,11 @@ export async function sendMinuteLowEmail(opts: { to: string[]; practiceName: str
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://setmo.growdental.ai";
   const billing = `${appUrl}/office/billing`;
 
+  const remainingTokens = opts.remaining * 10;
+  const topUpTokens = opts.topUpMinutes * 10;
   const autoLine = opts.autoTopUp
-    ? `It's set to <strong>auto-purchase ${opts.topUpMinutes.toLocaleString()} minutes</strong> when your available minutes dip below 25, so your team won't be interrupted. If you'd rather not auto-purchase, you can turn it off in Billing before then.`
-    : `Auto top-up is currently <strong>off</strong>, so calls will pause when the pool runs out. Add minutes — or switch on auto top-up — in Billing to keep your team going.`;
+    ? `It's set to <strong>auto-purchase ${topUpTokens.toLocaleString()} tokens</strong> when your balance dips below 250, so your team won't be interrupted. If you'd rather not auto-purchase, you can turn it off in Billing before then.`
+    : `Auto top-up is currently <strong>off</strong>, so calls will pause when the balance runs out. Add tokens — or switch on auto top-up — in Billing to keep your team going.`;
 
   let sent = 0;
   for (const to of opts.to) {
@@ -155,16 +157,16 @@ export async function sendMinuteLowEmail(opts: { to: string[]; practiceName: str
       await resend.emails.send({
         from,
         to,
-        subject: `${opts.practiceName}: your SetMo minutes are running low (${opts.remaining.toLocaleString()} left)`,
+        subject: `${opts.practiceName}: your SetMo tokens are running low (${remainingTokens.toLocaleString()} left)`,
         html: `
           <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
-            <h2 style="color:#7c3aed">Your minute pool is low</h2>
-            <p>It looks like your team has been using SetMo more, and your minute pool is low — about <strong>${opts.remaining.toLocaleString()} minutes</strong> remaining for ${opts.practiceName}.</p>
+            <h2 style="color:#7c3aed">Your token balance is low</h2>
+            <p>It looks like your team has been using SetMo more, and your token balance is low — about <strong>${remainingTokens.toLocaleString()} tokens</strong> remaining for ${opts.practiceName}.</p>
             <p>${autoLine}</p>
             <p style="margin:26px 0">
-              <a href="${billing}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">Manage minutes &amp; auto top-up</a>
+              <a href="${billing}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">Manage tokens &amp; auto top-up</a>
             </p>
-            <p style="color:#64708a;font-size:13px">Assessments are always free and never use your minutes.</p>
+            <p style="color:#64708a;font-size:13px">Assessments are always free and never use your tokens.</p>
           </div>
         `,
       });

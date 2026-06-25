@@ -110,7 +110,7 @@ export function AllowanceMeter({
   remainingMin,
   purchasedMin,
   usedMin,
-  label = "Practice minutes",
+  label = "Practice tokens",
 }: {
   remainingMin: number;
   purchasedMin: number;
@@ -120,21 +120,22 @@ export function AllowanceMeter({
   const pct = purchasedMin > 0 ? Math.min(100, (usedMin / purchasedMin) * 100) : 0;
   const remain = Math.max(0, remainingMin);
   const low = purchasedMin > 0 && remain <= purchasedMin * 0.2;
+  const tok = (m: number) => m * 10; // 1 min = 10 SetMo Tokens
   return (
     <div className={"allow" + (low ? " low" : "")}>
       <div className="row">
         <span>{label}</span>
-        <b>{remain.toLocaleString()} min left</b>
+        <b>{tok(remain).toLocaleString()} tokens left</b>
       </div>
       <div className="bar">
         <i style={{ width: pct + "%" }} />
       </div>
       <div className="row" style={{ margin: "7px 0 0" }}>
         <span>
-          {usedMin.toLocaleString()} of {purchasedMin.toLocaleString()} min used
+          {tok(usedMin).toLocaleString()} of {tok(purchasedMin).toLocaleString()} used
         </span>
         <span style={{ color: low ? "var(--amber)" : "var(--mint)" }}>
-          {purchasedMin === 0 ? "Buy minutes" : low ? "Running low" : "Healthy"}
+          {purchasedMin === 0 ? "Buy tokens" : low ? "Running low" : "Healthy"}
         </span>
       </div>
     </div>
