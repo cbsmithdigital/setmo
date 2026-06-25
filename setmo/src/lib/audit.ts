@@ -27,25 +27,25 @@ export function isFreeEmailDomain(domain: string): boolean {
   return FREE_EMAIL_DOMAINS.has(domain.toLowerCase());
 }
 
-// Prospects (not on a paid account) get one free assessment per practice every
-// 2 months. A retake inside the window routes to manual approval.
-export const ASSESSMENT_COOLDOWN_DAYS = 60;
+// Prospects get one free audit per EMAIL every 30 days (configurable).
+export const ASSESSMENT_COOLDOWN_DAYS = 30;
 
-/** True if this domain already ran an assessment within the cooldown window. */
-export async function domainUsedRecently(domain: string, exceptId?: string): Promise<boolean> {
+/** Whether this email already used its free audit within the cooldown window. */
+export async function emailUsedRecently(email: string, exceptId?: string): Promise<{ used: boolean; nextAt: Date | null }> {
   const { getPlatformConfig } = await import("@/lib/config");
   const days = (await getPlatformConfig()).assessmentCooldownDays;
   const since = new Date(Date.now() - days * 86400_000);
   const prior = await prisma.setterAudit.findFirst({
     where: {
-      emailDomain: domain.toLowerCase(),
+      email: email.trim().toLowerCase(),
       id: exceptId ? { not: exceptId } : undefined,
       status: { in: ["ACTIVE", "SCORED"] },
       createdAt: { gte: since },
     },
-    select: { id: true },
+    select: { createdAt: true },
+    orderBy: { createdAt: "desc" },
   });
-  return Boolean(prior);
+  return { used: Boolean(prior), nextAt: prior ? new Date(prior.createdAt.getTime() + days * 86400_000) : null };
 }
 
 // ---- per-call likely show rate ----

@@ -1,11 +1,11 @@
 import { prisma } from "@/lib/db";
-import { isFreeEmailDomain, domainUsedRecently } from "@/lib/audit";
+import { isFreeEmailDomain } from "@/lib/audit";
 import { setAuditCookie } from "@/lib/audit-auth";
 import { sendAuditApprovalRequest } from "@/lib/email";
 
 // GET /api/audit/:id/verify?token= — confirm the prospect's email (and serve as
-// the ongoing access link). Routes free-email / duplicate-domain audits to
-// manual approval; otherwise activates the audit. Then sets the access cookie.
+// the ongoing access link). Free/personal-email audits route to manual review;
+// otherwise the audit activates. Then sets the access cookie.
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const token = new URL(req.url).searchParams.get("token") ?? "";
@@ -16,11 +16,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return Response.redirect(`${origin}/audit?error=invalid`, 302);
   }
 
-  // First verification decides the approval path.
+  // First verification decides the approval path. A free/personal email domain
+  // routes to manual review (some practices use personal emails for staff); the
+  // per-email 30-day cooldown is enforced earlier, at audit creation.
   if (!audit.emailVerified) {
-    const free = isFreeEmailDomain(audit.emailDomain);
-    const dup = await domainUsedRecently(audit.emailDomain, audit.id);
-    const needsApproval = free || dup;
+    const needsApproval = isFreeEmailDomain(audit.emailDomain);
 
     await prisma.setterAudit.update({
       where: { id },
@@ -35,7 +35,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       await sendAuditApprovalRequest({
         practiceName: audit.practiceName,
         email: audit.email,
-        reason: free ? "Free / personal email domain" : "Practice already ran a free assessment in the last 2 months",
+        reason: "Personal / free email domain — prospect may request review",
         manageLink: `${origin}/api/audit/${id}/verify?token=${token}`,
       });
     }

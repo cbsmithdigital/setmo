@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { emailDomainOf } from "@/lib/audit";
+import { emailDomainOf, emailUsedRecently } from "@/lib/audit";
 import { partnerIdForCode } from "@/lib/partners";
 import { sendAuditVerifyEmail } from "@/lib/email";
 import { error, json } from "@/lib/api";
@@ -25,6 +25,13 @@ export async function POST(req: Request) {
   const email = workEmail.trim().toLowerCase();
   const domain = emailDomainOf(email);
   if (!domain) return error("Enter a valid email.", 422);
+
+  // One free audit per email per 30 days.
+  const cooldown = await emailUsedRecently(email);
+  if (cooldown.used) {
+    const when = cooldown.nextAt ? cooldown.nextAt.toLocaleDateString("en-US", { month: "long", day: "numeric" }) : "soon";
+    return error(`You've already run a free audit with this email. You can run another after ${when}.`, 429);
+  }
 
   const token = randomBytes(24).toString("base64url");
   const [firstName, ...rest] = contactName.trim().split(/\s+/);

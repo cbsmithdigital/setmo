@@ -4,6 +4,7 @@ import { loadAuditByCookie } from "@/lib/audit-auth";
 import { auditCallCounts, buildAuditReport, AUDIT_CALLS, AUDIT_CALL_MAX_SECONDS } from "@/lib/audit";
 import { AuditRunner } from "@/components/audit/AuditRunner";
 import { AuditClaim } from "@/components/audit/AuditClaim";
+import { AuditRequestReview } from "@/components/audit/AuditRequestReview";
 import "../../marketing.css";
 
 export const dynamic = "force-dynamic";
@@ -45,10 +46,14 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
     return (
       <Shell>
         <div className="audit-card">
-          <h3 style={{ fontSize: 22, marginBottom: 10 }}>We&apos;re reviewing your request 🔍</h3>
-          <p style={{ color: "var(--m-muted)", fontSize: 15.5 }}>
-            Because you used a personal email, we&apos;re confirming this one by hand. We&apos;ll email <b style={{ color: "var(--ink-soft)" }}>{audit.email}</b> shortly with your access link.
+          <h3 style={{ fontSize: 22, marginBottom: 10 }}>One quick check 🔍</h3>
+          <p style={{ color: "var(--m-muted)", fontSize: 15.5, marginBottom: 10 }}>
+            It looks like <b style={{ color: "var(--ink-soft)" }}>{audit.email}</b> is a personal email. SetMo is built for dental practices, so the fastest way in is to start the audit again with your <b style={{ color: "var(--ink-soft)" }}>practice email</b>.
           </p>
+          <p style={{ color: "var(--m-muted)", fontSize: 15.5 }}>
+            Some practices do use personal emails for staff or doctors. If that&apos;s you, request a review and we&apos;ll confirm your access by hand and email you your link.
+          </p>
+          <AuditRequestReview auditId={id} />
         </div>
       </Shell>
     );

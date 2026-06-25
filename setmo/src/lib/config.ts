@@ -13,7 +13,7 @@ export type PlatformConfig = PricingConfig & {
 
 export const DEFAULT_CONFIG: PlatformConfig = {
   ...DEFAULT_PRICING,
-  assessmentCooldownDays: 60,
+  assessmentCooldownDays: 30, // one free audit per email per 30 days
   alertLowBalanceDays: 14,
   alertZeroUsageDays: 14,
   alertLiabilityCeiling: 10000,
