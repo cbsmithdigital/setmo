@@ -110,7 +110,10 @@ async function syncAccess(sub: Stripe.Subscription) {
   if (!officeId) return;
 
   const item = sub.items.data[0];
-  const status = sub.status === "active" ? "ACTIVE" : sub.status === "past_due" ? "PAST_DUE" : "CANCELED";
+  // A paused subscription (super-admin "pause access") stays Stripe-active but
+  // its collection is voided — treat it as inactive so app access stays revoked.
+  const paused = Boolean(sub.pause_collection);
+  const status = paused ? "CANCELED" : sub.status === "active" ? "ACTIVE" : sub.status === "past_due" ? "PAST_DUE" : "CANCELED";
   const periodEnd = item?.current_period_end ? new Date(item.current_period_end * 1000) : null;
   // Plan from subscription metadata, else the price interval (year → annual).
   const plan = (sub.metadata?.plan === "annual" || item?.price?.recurring?.interval === "year") ? "ANNUAL" : "MONTHLY";
@@ -134,5 +137,6 @@ async function syncAccess(sub: Stripe.Subscription) {
   }
 
   // Lapsed/cancelled before earning → claw back still-pending commissions.
-  if (status === "CANCELED") await clawbackOfficeCommissions(officeId);
+  // A pause isn't a lapse (billing can resume), so don't claw back on pause.
+  if (status === "CANCELED" && !paused) await clawbackOfficeCommissions(officeId);
 }

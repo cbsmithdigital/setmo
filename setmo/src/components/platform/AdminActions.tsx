@@ -24,8 +24,12 @@ export function LocationActions({ officeId, accessActive }: { officeId: string; 
     setBusy(false);
   }
   async function access() {
+    const action = accessActive ? "pause" : "activate";
+    if (action === "pause" && !window.confirm("Pause access for this practice? This revokes their app access and stops Stripe billing (no future charges). You can reinstate it later.")) return;
     setBusy(true);
-    await post("/api/platform/access", { officeId, action: accessActive ? "pause" : "activate" });
+    const res = await fetch("/api/platform/access", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ officeId, action }) });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok && j.warning) window.alert(j.warning);
     router.refresh();
     setBusy(false);
   }
@@ -34,7 +38,7 @@ export function LocationActions({ officeId, accessActive }: { officeId: string; 
     <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
       <button className="btn btn-ghost" disabled={busy} onClick={grant} style={{ padding: "5px 10px", fontSize: 12 }}>+ Minutes</button>
       <button className="btn btn-ghost" disabled={busy} onClick={access} style={{ padding: "5px 10px", fontSize: 12, color: accessActive ? "var(--amber)" : "var(--mint)" }}>
-        {accessActive ? "Pause access" : "Activate"}
+        {accessActive ? "Pause access" : "Reinstate"}
       </button>
     </div>
   );
