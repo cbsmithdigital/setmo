@@ -279,6 +279,8 @@ a {
   justify-content: space-between;
   padding: 22px 36px;
   gap: 24px;
+  max-width: 1180px;
+  width: 100%;
 }
 .tb-greet h1 {
   font-size: 24px;
