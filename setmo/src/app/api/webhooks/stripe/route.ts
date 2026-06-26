@@ -59,8 +59,14 @@ async function applyMinutes(session: Stripe.Checkout.Session) {
   const existing = await prisma.conversationBundle.findFirst({ where: { stripePaymentIntent: paymentRef } });
   if (existing) return; // idempotent
 
-  // Pre-tax cash for tokens (post-discount; set at checkout). Excludes the access line on activation.
-  const cashCents = Number(session.metadata?.amountCents ?? session.amount_total ?? 0);
+  // Actual cash for the tokens, pre-tax and POST-promotion-code. For a standalone
+  // token purchase the whole session is the token line, so Stripe's amount_subtotal
+  // (after discounts/coupons, before tax) is the truth — capturing any coupon. The
+  // activation session also bills access, so there we fall back to the computed amount.
+  const subtotal = typeof session.amount_subtotal === "number" ? session.amount_subtotal : null;
+  const cashCents = session.metadata?.kind === "minutes" && subtotal != null
+    ? subtotal
+    : Number(session.metadata?.amountCents ?? session.amount_total ?? 0);
   await addMinutes(officeId, minutes, paymentRef, cashCents || undefined);
 
   const sub = await prisma.subscription.findUnique({ where: { officeId }, select: { paidInvoices: true } });
