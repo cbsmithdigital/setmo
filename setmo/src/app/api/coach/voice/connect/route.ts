@@ -3,8 +3,9 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
 import { getOfficeCoachContext } from "@/lib/office";
-import { canStartSession } from "@/lib/usage";
-import { coachAgentId, managerCoachAgentId, getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
+import { getGroupCoachContext } from "@/lib/group";
+import { canStartSession, canStartGroupCoach } from "@/lib/usage";
+import { coachAgentId, managerCoachAgentId, groupCoachAgentId, getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
 import {
   voiceCoachSystem,
   voiceCoachFirstMessage,
@@ -12,6 +13,8 @@ import {
   voiceCoachFromCallFirstMessage,
   managerVoiceSystem,
   managerVoiceFirstMessage,
+  groupVoiceSystem,
+  groupVoiceFirstMessage,
 } from "@/lib/coach-prompts";
 import { error, json } from "@/lib/api";
 
@@ -31,10 +34,17 @@ export async function POST(req: Request) {
   if (!user.officeId) return error("No office assigned", 400);
 
   const first = user.firstName ?? "there";
+  const activeRole = getActiveRole(user);
+
+  // Group/DSO acting role → the portfolio strategist (multi-office grounded).
+  // Checked before the generic manager branch since GROUP_ADMIN is a manager role.
+  if (activeRole === "GROUP_ADMIN" && user.organizationId) {
+    return groupVoiceConnect(user.id, user.organizationId, user.officeId, first);
+  }
 
   // Manager acting role → the management & training assistant (team-grounded),
   // not the setter call role-play.
-  if (isManagerRole(getActiveRole(user))) {
+  if (isManagerRole(activeRole)) {
     return managerVoiceConnect(user.id, user.officeId, first);
   }
 
@@ -113,6 +123,80 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     return error(e instanceof Error ? e.message : "Couldn't start the voice coach", 502);
+  }
+}
+
+// The group/DSO leader's portfolio strategist — grounded across every office.
+// Metered against the leader's own office pool (same pool model as the manager
+// assistant), so a COACH session is created and the post-call webhook draws the
+// duration down from that pool.
+async function groupVoiceConnect(userId: string, orgId: string, officeId: string, first: string) {
+  // Metered against the per-organization coach wallet (free monthly allowance +
+  // purchased tokens), NOT the office pool.
+  const allowance = await canStartGroupCoach(orgId);
+  if (!allowance.ok) {
+    return error("Your group Setty Advisor tokens are used up. Add a card and top up (50% off) to keep going, or wait for next month's free allowance.", 402);
+  }
+
+  const g = await getGroupCoachContext(orgId);
+  const officeLines = g.offices.map(
+    (o) =>
+      `${o.name}${o.city ? ` (${o.city})` : ""}: avg ${o.teamAvg ? o.teamAvg.toFixed(1) : "—"}/5, ${o.activeSetters} active setters, ${o.sessions} scored sessions, status ${o.status}`
+  );
+  const systemicGaps = g.heatmap.filter((h) => h.avg < 3.7).map((h) => h.name);
+  const topPerformers = g.topPerformers.map((t) => `${t.name} (${t.office})`);
+  const attention = g.attention.map((o) => o.name);
+
+  const systemPrompt = groupVoiceSystem({
+    first,
+    orgName: g.orgName,
+    officeCount: g.officeCount,
+    orgAvg: g.orgAvg,
+    totalActiveSetters: g.totalActiveSetters,
+    officeLines,
+    systemicGaps,
+    topPerformers,
+    attention,
+  });
+  const firstMessage = groupVoiceFirstMessage(first);
+  const agentId = groupCoachAgentId();
+
+  if (!isElevenLabsConfigured() || !agentId) {
+    return json({ configured: false, systemPrompt, firstMessage, focus: "group portfolio strategy" });
+  }
+
+  const coachSession = await prisma.session.create({
+    data: {
+      setterId: userId,
+      officeId,
+      organizationId: orgId, // metered against the org wallet, not the office pool
+      serviceType: "IMPLANT",
+      kind: "COACH",
+      status: "IN_PROGRESS",
+      personaSeed: { coaching: true, group: true, focus: "group portfolio strategy" },
+    },
+  });
+
+  const dynamicVariables: Record<string, string> = {
+    setter_first_name: first,
+    office_name: g.orgName,
+    focus: "group portfolio strategy",
+    session_id: coachSession.id,
+  };
+
+  try {
+    const signedUrl = await getSignedUrl(agentId);
+    return json({
+      configured: true,
+      signedUrl,
+      systemPrompt,
+      firstMessage,
+      dynamicVariables,
+      setterId: userId,
+      focus: "group portfolio strategy",
+    });
+  } catch (e) {
+    return error(e instanceof Error ? e.message : "Couldn't start the assistant", 502);
   }
 }
 

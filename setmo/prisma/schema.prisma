@@ -175,12 +175,34 @@ model Organization {
   name      String
   type      OrganizationType @default(GROUP)
   createdAt DateTime         @default(now())
+  // Group/DSO coach wallet: a monthly free voice allowance (config-driven) plus
+  // rolling purchased tokens. The Stripe customer is created when the leader buys.
+  stripeCustomerId String? @map("stripe_customer_id")
+  coachAlertStage  Int     @default(0) @map("coach_alert_stage") // 0 healthy, 1 alerted at the low-balance threshold
 
-  offices Office[]
-  users   User[]
-  goals   Goal[]
+  offices      Office[]
+  users        User[]
+  goals        Goal[]
+  tokenBundles OrgTokenBundle[]
 
   @@map("organization")
+}
+
+// Group/DSO coach token purchases (rolling, never reset). Distinct from office
+// ConversationBundle: these fund the group leader's Setty Advisor voice, metered
+// against the org wallet (monthly free allowance + these purchases).
+model OrgTokenBundle {
+  id                  String   @id @default(uuid())
+  organizationId      String   @map("organization_id")
+  minutesPurchased    Int      @map("minutes_purchased")
+  amountCents         Int?     @map("amount_cents") // actual cash paid (post-discount)
+  stripePaymentIntent String?  @map("stripe_payment_intent")
+  purchasedAt         DateTime @default(now()) @map("purchased_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("org_token_bundle")
 }
 
 model Office {
@@ -432,6 +454,7 @@ model Session {
   id                     String        @id @default(uuid())
   setterId               String        @map("setter_id")
   officeId               String        @map("office_id") // denormalized for scoping/leaderboards
+  organizationId         String?       @map("organization_id") // set for group/DSO coach sessions → metered against the org wallet, NOT the office pool
   serviceType            ServiceKey    @map("service_type")
   kind                   SessionKind   @default(PRACTICE) // PRACTICE (scored) | COACH (voice coaching, metered only)
   agentId                String?       @map("agent_id")
@@ -459,6 +482,7 @@ model Session {
 
   @@index([setterId])
   @@index([officeId])
+  @@index([organizationId])
   @@index([serviceType])
   @@index([auditId])
   @@map("session")
@@ -676,6 +700,8 @@ model PlatformConfig {
   groupThreshold             Int      @default(2) @map("group_threshold")
   monthlyTokenDiscountPct    Int      @default(8) @map("monthly_token_discount_pct")
   annualTokenDiscountPct     Int      @default(15) @map("annual_token_discount_pct")
+  groupFreeMinutesMonthly    Int      @default(120) @map("group_free_minutes_monthly") // free voice allowance per group/DSO per month
+  groupTokenDiscountPct      Int      @default(50) @map("group_token_discount_pct") // off list for group/DSO token purchases
   assessmentCooldownDays     Int      @default(30) @map("assessment_cooldown_days")
   alertLowBalanceDays        Int      @default(14) @map("alert_low_balance_days")
   alertZeroUsageDays         Int      @default(14) @map("alert_zero_usage_days")

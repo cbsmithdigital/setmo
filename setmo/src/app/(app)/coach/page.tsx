@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { requireUser, getActiveRole, isManagerRole } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
 import { getOfficeOverview } from "@/lib/office";
 import { getGroupOverview } from "@/lib/group";
+import { getOrgCoachBalance } from "@/lib/usage";
 import { CoachWorkspace } from "@/components/coach/CoachWorkspace";
 
 const GENERAL_STARTERS = [
@@ -62,11 +64,12 @@ export default async function CoachPage({
 
   // Group / DSO leader → Portfolio strategist (chat, multi-office grounded).
   if (activeRole === "GROUP_ADMIN" && user.organizationId) {
-    const g = await getGroupOverview(user.organizationId);
+    const [g, wallet] = await Promise.all([getGroupOverview(user.organizationId), getOrgCoachBalance(user.organizationId)]);
     const lagging = g.attention.map((o) => o.name).slice(0, 2);
     const welcome = `Hey ${first} 👋 I'm Setty Advisor. Across ${g.officeCount} practices you're averaging ${g.orgAvg.toFixed(1)}/5${
       lagging.length ? `, with ${lagging.join(" & ")} lagging` : ""
     }. Want me to show you where to focus across the group?`;
+    const lowWallet = wallet.remainingMin <= 15;
     return (
       <>
         <div className="topbar">
@@ -78,9 +81,15 @@ export default async function CoachPage({
             <span className="chip purple">Setty</span>
           </div>
         </div>
+        {lowWallet && (
+          <div className="content" style={{ paddingBottom: 0 }}>
+            <div className="banner" style={{ background: "rgba(251,191,36,.12)", borderColor: "rgba(251,191,36,.4)", color: "#fcd34d" }}>
+              Your Setty Advisor voice tokens are low (~{wallet.remainingMin} min left). <Link href="/group/billing" style={{ color: "#fcd34d", textDecoration: "underline", fontWeight: 600 }}>Add a card &amp; top up (50% off)</Link> — your free allowance refreshes next month. Chat is always free.
+            </div>
+          </div>
+        )}
         <CoachWorkspace
-          variant="manager"
-          voiceEnabled={false}
+          variant="group"
           intro={`Hey ${first} — let's look across the group.`}
           welcome={welcome}
           starters={[

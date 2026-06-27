@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
-import { minuteQuote } from "@/lib/pricing";
-import { getPricingConfig } from "@/lib/config";
+import { minuteQuote, tokenQuote, minutesToTokens } from "@/lib/pricing";
+import { getPricingConfig, getPlatformConfig } from "@/lib/config";
 
 // Minimum remaining time required to start a new (non-assessment) session.
 const MIN_START_SECONDS = 60;
@@ -11,7 +11,9 @@ const MIN_START_SECONDS = 60;
 export async function getMinuteBalance(officeId: string): Promise<{ purchasedMin: number; usedMin: number; remainingMin: number; remainingSeconds: number }> {
   const [purchases, used] = await Promise.all([
     prisma.conversationBundle.aggregate({ where: { officeId }, _sum: { minutesPurchased: true } }),
-    prisma.session.aggregate({ where: { officeId, isAudit: false, durationSeconds: { not: null } }, _sum: { durationSeconds: true } }),
+    // Exclude group/DSO coach sessions (organizationId set) — those meter against
+    // the org wallet, not this office's pool.
+    prisma.session.aggregate({ where: { officeId, organizationId: null, isAudit: false, durationSeconds: { not: null } }, _sum: { durationSeconds: true } }),
   ]);
   const purchasedMin = purchases._sum.minutesPurchased ?? 0;
   const usedMin = Math.round((used._sum.durationSeconds ?? 0) / 60);
@@ -120,4 +122,132 @@ export async function sweepMinuteThresholds(): Promise<{ checked: number }> {
   const offices = await prisma.office.findMany({ where: { bundles: { some: {} } }, select: { id: true } });
   for (const o of offices) await evaluateMinuteThresholds(o.id).catch(() => {});
   return { checked: offices.length };
+}
+
+// ===========================================================================
+// GROUP / DSO COACH WALLET — the Setty Advisor voice for a group leader is
+// metered against a PER-ORGANIZATION wallet (NOT an office pool):
+//   • a free monthly voice allowance (config: groupFreeMinutesMonthly, default
+//     120 min) that resets each calendar month (use-it-or-lose-it), then
+//   • rolling PURCHASED tokens (OrgTokenBundle) that never reset.
+// Consumption is derived from group-coach Session rows (organizationId set), so
+// the balance can never drift. Extra tokens are sold to group admins at
+// groupTokenDiscountPct off list (default 50%). They're prompted to add a card
+// at GROUP_ALERT_MIN remaining; new sessions hard-block once the wallet is empty.
+// ===========================================================================
+
+// Remaining minutes at which group admins are nudged to add a card / buy more.
+const GROUP_ALERT_MIN = 15;
+
+export type OrgCoachBalance = {
+  freePerMonth: number;
+  freeUsedThisMonth: number;
+  freeRemaining: number;
+  purchasedTotal: number;
+  purchasedRemaining: number;
+  remainingMin: number;
+  remainingSeconds: number;
+  periodResetsOn: Date;
+};
+
+/** The group/DSO coach wallet balance: this month's free allowance + rolling purchased tokens, minus group-coach usage. */
+export async function getOrgCoachBalance(orgId: string): Promise<OrgCoachBalance> {
+  const cfg = await getPlatformConfig();
+  const freePerMonth = cfg.groupFreeMinutesMonthly;
+
+  const [sessions, purchases] = await Promise.all([
+    prisma.session.findMany({
+      where: { organizationId: orgId, isAudit: false, durationSeconds: { not: null } },
+      select: { startedAt: true, durationSeconds: true },
+    }),
+    prisma.orgTokenBundle.aggregate({ where: { organizationId: orgId }, _sum: { minutesPurchased: true } }),
+  ]);
+
+  const now = new Date();
+  const monthKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}`;
+  const curKey = monthKey(now);
+  const byMonth = new Map<string, number>(); // calendar month → minutes consumed
+  for (const s of sessions) byMonth.set(monthKey(s.startedAt), (byMonth.get(monthKey(s.startedAt)) ?? 0) + Math.round((s.durationSeconds ?? 0) / 60));
+
+  const freeUsedThisMonth = byMonth.get(curKey) ?? 0;
+  const freeRemaining = Math.max(0, freePerMonth - freeUsedThisMonth);
+
+  // Purchased tokens are spent only on overflow past each month's free grant.
+  let overflow = 0;
+  for (const min of byMonth.values()) overflow += Math.max(0, min - freePerMonth);
+  const purchasedTotal = purchases._sum.minutesPurchased ?? 0;
+  const purchasedRemaining = Math.max(0, purchasedTotal - overflow);
+
+  const remainingMin = freeRemaining + purchasedRemaining;
+  return {
+    freePerMonth,
+    freeUsedThisMonth,
+    freeRemaining,
+    purchasedTotal,
+    purchasedRemaining,
+    remainingMin,
+    remainingSeconds: Math.max(0, remainingMin * 60),
+    periodResetsOn: new Date(now.getFullYear(), now.getMonth() + 1, 1),
+  };
+}
+
+/** Pre-session gate for the group/DSO Setty Advisor voice. */
+export async function canStartGroupCoach(orgId: string): Promise<{ ok: boolean; remainingSeconds: number }> {
+  const b = await getOrgCoachBalance(orgId);
+  return { ok: b.remainingSeconds > MIN_START_SECONDS, remainingSeconds: b.remainingSeconds };
+}
+
+/** The group/DSO token-purchase discount (off list), config-driven (default 50%). */
+export async function groupTokenDiscountPct(): Promise<number> {
+  return (await getPlatformConfig()).groupTokenDiscountPct;
+}
+
+/** Append purchased tokens to a group's rolling wallet. Pass `amountCents` for
+ *  the actual (post-discount) cash; otherwise the 50%-off list price is used. */
+export async function addOrgTokens(orgId: string, minutes: number, stripePaymentIntent?: string | null, amountCents?: number) {
+  let cents = amountCents;
+  if (cents == null) {
+    const [pc, cfg] = await Promise.all([getPricingConfig(), getPlatformConfig()]);
+    cents = Math.round(tokenQuote(minutesToTokens(minutes), pc, cfg.groupTokenDiscountPct).total * 100);
+  }
+  return prisma.orgTokenBundle.create({
+    data: { organizationId: orgId, minutesPurchased: minutes, amountCents: cents, stripePaymentIntent: stripePaymentIntent ?? null },
+  });
+}
+
+/** Active group admins for an org (for billing alerts). */
+async function groupAdminEmails(orgId: string): Promise<string[]> {
+  const admins = await prisma.user.findMany({
+    where: { organizationId: orgId, status: "ACTIVE", OR: [{ role: "GROUP_ADMIN" }, { memberships: { some: { role: "GROUP_ADMIN" } } }] },
+    select: { email: true },
+  });
+  return Array.from(new Set(admins.map((a) => a.email).filter(Boolean)));
+}
+
+/** Run after a group-coach call (and as a daily sweep): email group admins to add
+ *  a card / buy more once the wallet falls to the alert threshold; reset above it. */
+export async function evaluateOrgCoachThreshold(orgId: string): Promise<void> {
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { id: true, name: true, coachAlertStage: true } });
+  if (!org) return;
+  const { remainingMin } = await getOrgCoachBalance(orgId);
+
+  if (remainingMin > GROUP_ALERT_MIN) {
+    if (org.coachAlertStage !== 0) await prisma.organization.update({ where: { id: orgId }, data: { coachAlertStage: 0 } });
+    return;
+  }
+  if (org.coachAlertStage < 1) {
+    const to = await groupAdminEmails(orgId);
+    if (to.length) {
+      const { sendGroupCoachLowEmail } = await import("@/lib/email");
+      await sendGroupCoachLowEmail({ to, orgName: org.name, remaining: remainingMin }).catch(() => {});
+    }
+    await prisma.organization.update({ where: { id: orgId }, data: { coachAlertStage: 1 } });
+  }
+}
+
+/** Daily safety-net sweep: evaluate the coach wallet for every group/DSO. */
+export async function sweepOrgCoachThresholds(): Promise<{ checked: number }> {
+  const orgs = await prisma.organization.findMany({ select: { id: true } });
+  for (const o of orgs) await evaluateOrgCoachThreshold(o.id).catch(() => {});
+  return { checked: orgs.length };
 }

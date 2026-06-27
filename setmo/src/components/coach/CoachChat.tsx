@@ -17,7 +17,7 @@ export function CoachChat({
   welcome: string;
   starters: string[];
   onVoice?: (focus?: string) => void;
-  variant?: "setter" | "manager";
+  variant?: "setter" | "manager" | "group";
 }) {
   const [convo, setConvo] = useState<Turn[]>([]);
   const [input, setInput] = useState("");

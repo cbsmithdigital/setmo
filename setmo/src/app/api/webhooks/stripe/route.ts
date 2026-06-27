@@ -1,7 +1,7 @@
 import type Stripe from "stripe";
 import { prisma } from "@/lib/db";
 import { constructWebhookEvent, getStripe } from "@/lib/stripe";
-import { addMinutes } from "@/lib/usage";
+import { addMinutes, addOrgTokens } from "@/lib/usage";
 import { accrueCommission, markOfficeCommissionsEarned, clawbackOfficeCommissions } from "@/lib/partners";
 import { getPricingConfig } from "@/lib/config";
 import { error, json } from "@/lib/api";
@@ -29,6 +29,8 @@ export async function POST(req: Request) {
       // "minutes" = standalone top-up; "activation" = combined access + starter minutes.
       if ((kind === "minutes" || kind === "activation") && session.payment_status === "paid") {
         await applyMinutes(session);
+      } else if (kind === "group_minutes" && session.payment_status === "paid") {
+        await applyGroupTokens(session);
       }
       break;
     }
@@ -77,6 +79,26 @@ async function applyMinutes(session: Stripe.Checkout.Session) {
     stripeRef: `${paymentRef}:min`,
     earned: (sub?.paidInvoices ?? 0) >= EARN_AFTER_PAYMENTS,
   });
+}
+
+// Group/DSO token purchase → append to the org coach wallet + save the card.
+async function applyGroupTokens(session: Stripe.Checkout.Session) {
+  const organizationId = session.metadata?.organizationId;
+  const minutes = Number(session.metadata?.minutes ?? 0);
+  if (!organizationId || !minutes) return;
+
+  const paymentRef = typeof session.payment_intent === "string" ? session.payment_intent : session.id;
+  const existing = await prisma.orgTokenBundle.findFirst({ where: { stripePaymentIntent: paymentRef } });
+  if (existing) return; // idempotent
+
+  // Actual post-coupon, pre-tax cash (the whole session is the token line).
+  const subtotal = typeof session.amount_subtotal === "number" ? session.amount_subtotal : null;
+  const cashCents = subtotal ?? Number(session.metadata?.amountCents ?? session.amount_total ?? 0);
+  await addOrgTokens(organizationId, minutes, paymentRef, cashCents || undefined);
+
+  // Persist the Stripe customer (a card is now on file for next time).
+  const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
+  if (customerId) await prisma.organization.update({ where: { id: organizationId }, data: { stripeCustomerId: customerId } }).catch(() => {});
 }
 
 // Recurring access payment → count it, flip the 2nd-payment gate, accrue commission.

@@ -39,6 +39,7 @@ const NAV_GROUP: NavItem[] = [
   { href: "/group/goals", label: "Goals & rewards", icon: "flame" },
   { href: "/resources", label: "Resources", icon: "book" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
+  { href: "/group/billing", label: "Billing", icon: "card" },
 ];
 
 const NAV_PLATFORM: NavItem[] = [

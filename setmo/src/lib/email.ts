@@ -178,6 +178,41 @@ export async function sendMinuteLowEmail(opts: { to: string[]; practiceName: str
   return sent;
 }
 
+/** Group/DSO Setty Advisor wallet is low — prompt the leader to add a card / buy more. */
+export async function sendGroupCoachLowEmail(opts: { to: string[]; orgName: string; remaining: number }): Promise<number> {
+  const resend = getResend();
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!resend || !from || opts.to.length === 0) return 0;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://setmo.growdental.ai";
+  const billing = `${appUrl}/group/billing`;
+  const remainingTokens = Math.max(0, opts.remaining) * 10;
+
+  let sent = 0;
+  for (const to of opts.to) {
+    try {
+      await resend.emails.send({
+        from,
+        to,
+        subject: `${opts.orgName}: your Setty Advisor tokens are running low (${remainingTokens.toLocaleString()} left)`,
+        html: `
+          <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
+            <h2 style="color:#7c3aed">Your Setty Advisor balance is low</h2>
+            <p>You have about <strong>${remainingTokens.toLocaleString()} tokens</strong> (~${Math.max(0, opts.remaining)} min) left for ${opts.orgName} this month.</p>
+            <p>Add a card and top up to keep your strategy sessions going — group/DSO tokens are <strong>50% off</strong>. Your free monthly allowance refreshes at the start of next month.</p>
+            <p style="margin:26px 0">
+              <a href="${billing}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">Add a card &amp; buy tokens</a>
+            </p>
+          </div>
+        `,
+      });
+      sent++;
+    } catch {
+      /* skip a bad address, keep going */
+    }
+  }
+  return sent;
+}
+
 /** Password reset link (server-generated recovery, sent via Resend). */
 export async function sendPasswordResetEmail(opts: { to: string; link: string }): Promise<boolean> {
   const resend = getResend();

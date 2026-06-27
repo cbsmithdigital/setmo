@@ -126,6 +126,58 @@ export async function createMinuteCheckout(opts: {
 }
 
 /**
+ * Group/DSO coach token purchase — funds the leader's Setty Advisor voice wallet.
+ * Sold at `discountPct` off list (default 50% for group/DSO). Saves the card to a
+ * group-level Stripe customer so future purchases are one click.
+ */
+export async function createGroupTokenCheckout(opts: {
+  organizationId: string;
+  minutes: number;
+  stripeCustomerId?: string | null;
+  customerEmail?: string;
+  origin: string;
+  discountPct: number;
+}): Promise<string> {
+  const stripe = getStripe();
+  const quote = minuteQuote(opts.minutes, await getPricingConfig());
+  const tokens = quote.minutes * 10;
+  const total = Math.round(quote.total * (1 - (opts.discountPct ?? 0) / 100)); // group discount off list
+  const meta = { kind: "group_minutes", organizationId: opts.organizationId, minutes: String(quote.minutes), amountCents: String(total * 100) };
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    ...(opts.stripeCustomerId
+      ? { customer: opts.stripeCustomerId, customer_update: { address: "auto" as const } }
+      : opts.customerEmail
+        ? { customer_email: opts.customerEmail }
+        : {}),
+    // Save the card so the next top-up is one click (and a card is on file).
+    payment_intent_data: { setup_future_usage: "off_session" },
+    billing_address_collection: "required",
+    automatic_tax: { enabled: true },
+    allow_promotion_codes: true,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: total * 100,
+          tax_behavior: "exclusive",
+          product_data: {
+            name: `SetMo — ${tokens.toLocaleString()} Setty Advisor tokens`,
+            description: `Group/DSO coaching tokens (≈ ${quote.minutes.toLocaleString()} min). Roll over, never expire.${opts.discountPct ? ` ${opts.discountPct}% group discount applied.` : ""}`,
+          },
+        },
+      },
+    ],
+    metadata: meta,
+    success_url: `${opts.origin}/group/billing?tokens=success`,
+    cancel_url: `${opts.origin}/group/billing?tokens=cancel`,
+  });
+  if (!session.url) throw new Error("Stripe did not return a checkout URL");
+  return session.url;
+}
+
+/**
  * First-time activation: one Checkout session that starts the $44.95/mo access
  * subscription AND charges the chosen minutes once on the first invoice. Months
  * 2+ bill access only.

@@ -20,6 +20,13 @@ const COPY = {
     voiceTitle: "Talk it through",
     voiceDesc: "Think out loud with Setty — brainstorm, plan the week, or rehearse a 1:1. Uses your practice time.",
   },
+  group: {
+    prompt: "How do you want to work with Setty Advisor today?",
+    chatTitle: "Chat with Setty Advisor",
+    chatDesc: "Type it out. Benchmark practices, spot systemic vs. local gaps, and draft a plan for your managers — at your own pace.",
+    voiceTitle: "Talk it through",
+    voiceDesc: "Think out loud with Setty — compare offices, decide where to invest, or rehearse a manager conversation. Uses your practice time.",
+  },
 };
 
 // The Coach entry point: choose how to work (type it out vs talk it through),
@@ -37,7 +44,7 @@ export function CoachWorkspace({
   intro: string;
   welcome: string;
   starters: string[];
-  variant?: "setter" | "manager";
+  variant?: "setter" | "manager" | "group";
   voiceEnabled?: boolean;
 }) {
   const [mode, setMode] = useState<"choose" | "chat">("choose");
@@ -101,7 +108,7 @@ export function CoachWorkspace({
       {mode === "chat" && <CoachChat sessionId={sessionId} welcome={welcome} starters={starters} onVoice={openVoice} variant={variant} />}
 
       {voice.open && (
-        <VoiceCoach sessionId={variant === "manager" ? undefined : sessionId} focus={voice.focus} mode={variant} onClose={() => setVoice({ open: false })} />
+        <VoiceCoach sessionId={variant === "setter" ? sessionId : undefined} focus={voice.focus} mode={variant} onClose={() => setVoice({ open: false })} />
       )}
     </div>
   );

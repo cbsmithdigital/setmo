@@ -7,6 +7,8 @@ import { DEFAULT_PRICING, type PricingConfig } from "@/lib/pricing";
 export type PlatformConfig = PricingConfig & {
   monthlyTokenDiscountPct: number; // off token purchases for monthly accounts
   annualTokenDiscountPct: number; // off token purchases for annual-prepay accounts
+  groupFreeMinutesMonthly: number; // free Setty Advisor voice minutes per group/DSO per month
+  groupTokenDiscountPct: number; // off list for group/DSO token purchases
   assessmentCooldownDays: number;
   alertLowBalanceDays: number;
   alertZeroUsageDays: number;
@@ -17,6 +19,8 @@ export const DEFAULT_CONFIG: PlatformConfig = {
   ...DEFAULT_PRICING,
   monthlyTokenDiscountPct: 8,
   annualTokenDiscountPct: 15,
+  groupFreeMinutesMonthly: 120,
+  groupTokenDiscountPct: 50,
   assessmentCooldownDays: 30, // one free audit per email per 30 days
   alertLowBalanceDays: 14,
   alertZeroUsageDays: 14,
@@ -37,6 +41,8 @@ export const getPlatformConfig = cache(async (): Promise<PlatformConfig> => {
       groupThreshold: row.groupThreshold,
       monthlyTokenDiscountPct: row.monthlyTokenDiscountPct,
       annualTokenDiscountPct: row.annualTokenDiscountPct,
+      groupFreeMinutesMonthly: row.groupFreeMinutesMonthly,
+      groupTokenDiscountPct: row.groupTokenDiscountPct,
       assessmentCooldownDays: row.assessmentCooldownDays,
       alertLowBalanceDays: row.alertLowBalanceDays,
       alertZeroUsageDays: row.alertZeroUsageDays,
@@ -62,6 +68,8 @@ export type ConfigPatch = {
   groupThreshold?: number;
   monthlyTokenDiscountPct?: number;
   annualTokenDiscountPct?: number;
+  groupFreeMinutesMonthly?: number;
+  groupTokenDiscountPct?: number;
   assessmentCooldownDays?: number;
   alertLowBalanceDays?: number;
   alertZeroUsageDays?: number;

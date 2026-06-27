@@ -46,6 +46,14 @@ const COPY = {
     endBtn: "End session",
     listening: "Listening — go ahead",
   },
+  group: {
+    chip: "Setty Advisor",
+    topic: "Working on",
+    endedTitle: "Good session",
+    endedSub: "Come back any time to benchmark, plan, or rehearse.",
+    endBtn: "End session",
+    listening: "Listening — go ahead",
+  },
 };
 
 function Inner({
@@ -57,7 +65,7 @@ function Inner({
   sessionId?: string;
   focus?: string;
   onClose: () => void;
-  mode?: "setter" | "manager";
+  mode?: "setter" | "manager" | "group";
 }) {
   const copy = COPY[mode];
   const [phase, setPhase] = useState<Phase>("connecting");
@@ -199,7 +207,7 @@ function Inner({
   );
 }
 
-export function VoiceCoach(props: { sessionId?: string; focus?: string; onClose: () => void; mode?: "setter" | "manager" }) {
+export function VoiceCoach(props: { sessionId?: string; focus?: string; onClose: () => void; mode?: "setter" | "manager" | "group" }) {
   return (
     <ConversationProvider>
       <Inner {...props} />

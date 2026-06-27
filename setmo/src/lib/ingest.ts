@@ -41,6 +41,11 @@ export async function ingestPostCall(
       where: { id: session.id },
       data: { status: "COMPLETED", completedAt: new Date(), durationSeconds: duration },
     });
+    // Group/DSO coach call → re-check the org wallet (low-balance alert at 15 min).
+    if (session.organizationId) {
+      const { evaluateOrgCoachThreshold } = await import("@/lib/usage");
+      await evaluateOrgCoachThreshold(session.organizationId).catch(() => {});
+    }
     return { ok: true, sessionId: session.id, kind: "coach" };
   }
 

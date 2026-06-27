@@ -29,6 +29,8 @@ export function ConfigEditor({ config }: { config: PlatformConfig }) {
     groupThreshold: String(config.groupThreshold),
     monthlyTokenDiscountPct: String(config.monthlyTokenDiscountPct),
     annualTokenDiscountPct: String(config.annualTokenDiscountPct),
+    groupFreeMinutesMonthly: String(config.groupFreeMinutesMonthly),
+    groupTokenDiscountPct: String(config.groupTokenDiscountPct),
     assessmentCooldownDays: String(config.assessmentCooldownDays),
     alertLowBalanceDays: String(config.alertLowBalanceDays),
     alertZeroUsageDays: String(config.alertZeroUsageDays),
@@ -52,6 +54,8 @@ export function ConfigEditor({ config }: { config: PlatformConfig }) {
       groupThreshold: Math.round(Number(f.groupThreshold)),
       monthlyTokenDiscountPct: Math.round(Number(f.monthlyTokenDiscountPct)),
       annualTokenDiscountPct: Math.round(Number(f.annualTokenDiscountPct)),
+      groupFreeMinutesMonthly: Math.round(Number(f.groupFreeMinutesMonthly)),
+      groupTokenDiscountPct: Math.round(Number(f.groupTokenDiscountPct)),
       assessmentCooldownDays: Math.round(Number(f.assessmentCooldownDays)),
       alertLowBalanceDays: Math.round(Number(f.alertLowBalanceDays)),
       alertZeroUsageDays: Math.round(Number(f.alertZeroUsageDays)),
@@ -82,6 +86,15 @@ export function ConfigEditor({ config }: { config: PlatformConfig }) {
         <div className="grid g-2" style={{ gap: 16 }}>
           <NumField label="Monthly plan token discount" suffix="%" value={f.monthlyTokenDiscountPct} onChange={set("monthlyTokenDiscountPct")} />
           <NumField label="Annual plan token discount" suffix="%" value={f.annualTokenDiscountPct} onChange={set("annualTokenDiscountPct")} />
+        </div>
+      </div>
+
+      <div className="card card-pad">
+        <h3 style={{ fontSize: 17, marginBottom: 4 }}>Group / DSO coach</h3>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>Each group/DSO gets a free monthly Setty Advisor voice allowance; extra tokens are sold to group admins at a discount off list.</p>
+        <div className="grid g-2" style={{ gap: 16 }}>
+          <NumField label="Free voice allowance / group" suffix="min/mo" value={f.groupFreeMinutesMonthly} onChange={set("groupFreeMinutesMonthly")} />
+          <NumField label="Group token discount" suffix="%" value={f.groupTokenDiscountPct} onChange={set("groupTokenDiscountPct")} />
         </div>
       </div>
 
