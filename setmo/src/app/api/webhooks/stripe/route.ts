@@ -88,6 +88,31 @@ async function applyMinutes(session: Stripe.Checkout.Session) {
   });
 }
 
+// Off-session auto top-up invoice → grant tokens to the office (idempotent).
+async function applyAutoTopUpInvoice(invoice: Stripe.Invoice) {
+  const officeId = invoice.metadata?.officeId;
+  const minutes = Number(invoice.metadata?.minutes ?? 0);
+  if (!officeId || !minutes) return;
+
+  const paymentRef = invoice.id;
+  if (!paymentRef) return;
+  const existing = await prisma.conversationBundle.findFirst({ where: { stripePaymentIntent: paymentRef } });
+  if (existing) return; // idempotent
+
+  // Pre-tax token price we set on the line (tax was added on top, exclusive).
+  const cashCents = Number(invoice.metadata?.amountCents ?? invoice.subtotal ?? 0);
+  await addMinutes(officeId, minutes, paymentRef, cashCents || undefined);
+
+  const sub = await prisma.subscription.findUnique({ where: { officeId }, select: { paidInvoices: true } });
+  await accrueCommission({
+    officeId,
+    kind: "MINUTES",
+    baseCents: cashCents,
+    stripeRef: `${paymentRef}:min`,
+    earned: (sub?.paidInvoices ?? 0) >= EARN_AFTER_PAYMENTS,
+  }).catch(() => {});
+}
+
 // Group/DSO token purchase → append to the org coach wallet + save the card.
 async function applyGroupTokens(session: Stripe.Checkout.Session) {
   const organizationId = session.metadata?.organizationId;
@@ -110,6 +135,12 @@ async function applyGroupTokens(session: Stripe.Checkout.Session) {
 
 // Recurring access payment → count it, flip the 2nd-payment gate, accrue commission.
 async function onInvoicePaid(invoice: Stripe.Invoice) {
+  // Auto top-up invoice (tax-collected token purchase) → grant tokens, not access.
+  if (invoice.metadata?.kind === "minutes_auto") {
+    await applyAutoTopUpInvoice(invoice);
+    return;
+  }
+
   const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
   if (!customerId) return;
   // The access subscription row is created by customer.subscription.created (with

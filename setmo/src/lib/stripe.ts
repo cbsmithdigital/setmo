@@ -245,18 +245,17 @@ export async function createActivationCheckout(opts: {
 }
 
 /**
- * Auto top-up: charge the customer's saved card off-session for `minutes` and
- * grant them immediately on success. Returns true if charged + granted.
- * NOTE: off-session PaymentIntents don't run Stripe Tax (unlike Checkout); auto
- * top-ups are charged at the minute price without added sales tax.
+ * Auto top-up: charge the customer's saved card off-session for `minutes` via a
+ * one-off **invoice** with Stripe Tax enabled (so auto top-ups collect sales tax,
+ * matching Checkout). Tokens are granted by the `invoice.paid` webhook (kind
+ * "minutes_auto"), keeping a single grant path. Returns true if the invoice paid.
  */
 export async function chargeMinutesAuto(opts: { officeId: string; customerId: string; minutes: number }): Promise<boolean> {
-  const { prisma } = await import("@/lib/db");
   const stripe = getStripe();
   const quote = minuteQuote(opts.minutes, await getPricingConfig());
   const { accountTokenDiscountPct } = await import("@/lib/usage");
   const discountPct = await accountTokenDiscountPct(opts.officeId);
-  const total = Math.round(quote.total * (1 - discountPct / 100)); // account discount on tokens
+  const total = Math.round(quote.total * (1 - discountPct / 100)); // pre-tax token price (account discount applied)
   const tokens = quote.minutes * 10;
 
   // Find a saved card: the customer's invoice default, else any attached card.
@@ -268,33 +267,41 @@ export async function chargeMinutesAuto(opts: { officeId: string; customerId: st
   }
   if (!pm) return false; // no card on file → can't auto-charge
 
-  let pi: Stripe.PaymentIntent;
+  // Create the invoice first, bind the line item to it (never a pending/orphan
+  // item that could ride the next subscription invoice), finalize to compute tax,
+  // then pay off-session. Void on any failure so nothing lingers as owed.
+  let invoiceId: string | null = null;
   try {
-    pi = await stripe.paymentIntents.create({
-      amount: total * 100,
-      currency: "usd",
+    const invoice = await stripe.invoices.create({
       customer: opts.customerId,
-      payment_method: pm,
-      off_session: true,
-      confirm: true,
+      collection_method: "charge_automatically",
+      auto_advance: false,
+      automatic_tax: { enabled: true },
+      default_payment_method: pm,
       description: `SetMo — ${tokens.toLocaleString()} tokens (auto top-up)`,
       metadata: { kind: "minutes_auto", officeId: opts.officeId, minutes: String(quote.minutes), amountCents: String(total * 100) },
     });
+    invoiceId = invoice.id ?? null;
+    if (!invoiceId) return false;
+    await stripe.invoiceItems.create({
+      customer: opts.customerId,
+      invoice: invoiceId,
+      amount: total * 100,
+      currency: "usd",
+      tax_behavior: "exclusive",
+      description: `SetMo — ${tokens.toLocaleString()} tokens (auto top-up)`,
+    });
+    await stripe.invoices.finalizeInvoice(invoiceId);
+    const paid = await stripe.invoices.pay(invoiceId, { off_session: true });
+    if (paid.status !== "paid") {
+      await stripe.invoices.voidInvoice(invoiceId).catch(() => {});
+      return false;
+    }
+    return true; // tokens granted by the invoice.paid webhook (idempotent)
   } catch {
+    if (invoiceId) await stripe.invoices.voidInvoice(invoiceId).catch(() => {});
     return false; // declined / requires authentication — admins were already warned
   }
-  if (pi.status !== "succeeded") return false;
-
-  // Grant once (idempotent on the PaymentIntent id).
-  const existing = await prisma.conversationBundle.findFirst({ where: { stripePaymentIntent: pi.id } });
-  if (!existing) {
-    const { addMinutes } = await import("@/lib/usage");
-    await addMinutes(opts.officeId, quote.minutes, pi.id, total * 100);
-    const { accrueCommission } = await import("@/lib/partners");
-    const sub = await prisma.subscription.findUnique({ where: { officeId: opts.officeId }, select: { paidInvoices: true } });
-    await accrueCommission({ officeId: opts.officeId, kind: "MINUTES", baseCents: total * 100, stripeRef: `${pi.id}:min`, earned: (sub?.paidInvoices ?? 0) >= 2 }).catch(() => {});
-  }
-  return true;
 }
 
 /** Stripe-hosted billing portal — customers cancel, update card, view invoices. */
