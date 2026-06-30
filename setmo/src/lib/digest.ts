@@ -17,7 +17,9 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 export type DigestEmail = { subject: string; html: string; recipients: { email: string; userId: string }[] };
 
 // __UNSUB_URL__ is replaced per-recipient by the cron before sending.
-const POSTAL = process.env.SETMO_POSTAL_ADDRESS || "";
+// CAN-SPAM requires a valid physical postal address in the footer; this is the
+// business address, env-overridable if it ever changes.
+const POSTAL = process.env.SETMO_POSTAL_ADDRESS || "321 N Mall Drive H102, Saint George, UT 84790";
 
 function shell(title: string, bodyHtml: string, ctaLabel: string, ctaPath: string): string {
   return `
