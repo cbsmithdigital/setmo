@@ -93,6 +93,7 @@ type AdminGrounding = {
   heatmap: { name: string; avg: number }[];
   outcomes: { periodLabel: string; consultsBooked: number | null; note: string | null }[];
   trainings: { title: string; skillKey: string | null }[];
+  trainingImpact?: { avgDelta: number | null; measured: number; rows: { setterName: string; skillName: string; delta: number }[] };
 };
 
 export function coachAdminGrounding(first: string, g: AdminGrounding): string {
@@ -115,6 +116,9 @@ export function coachAdminGrounding(first: string, g: AdminGrounding): string {
   const trainings = g.trainings.length
     ? g.trainings.map((t) => `- "${t.title}"${t.skillKey ? ` (skill: ${t.skillKey})` : ""}`).join("\n")
     : "- None published.";
+  const impact = g.trainingImpact && g.trainingImpact.measured > 0
+    ? `${g.trainingImpact.avgDelta != null ? `avg ${g.trainingImpact.avgDelta >= 0 ? "+" : ""}${g.trainingImpact.avgDelta} on the targeted skill across ${g.trainingImpact.measured} completed training${g.trainingImpact.measured === 1 ? "" : "s"}.` : ""} ${g.trainingImpact.rows.map((r) => `${r.setterName}: ${r.skillName} ${r.delta >= 0 ? "+" : ""}${r.delta}`).join("; ")}`
+    : "No completed-training outcomes measured yet (assign a training, then we'll track whether the targeted skill moves).";
 
   return `You are coaching ${first}, the manager at ${g.practiceName}.
 
@@ -131,6 +135,9 @@ ${outcomes}
 
 AVAILABLE TRAININGS (you may assign these via the assign_training tool):
 ${trainings}
+
+TRAINING IMPACT (closed loop — did the targeted skill move after the training?):
+${impact}
 
 Start by orienting ${first} to the one or two things that matter most right now.`;
 }

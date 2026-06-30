@@ -623,6 +623,12 @@ model Recommendation {
   skillKey   String               @map("skill_key")
   reason     String // stored: "objection-handling scored 2/5 on the last two sessions"
   status     RecommendationStatus @default(ACTIVE)
+  // Close-the-loop: skill score when assigned vs. after training (computed from
+  // scored calls). baselineScore is captured at creation; completedAt stamps when
+  // the setter finished the training, after which the delta is measured.
+  baselineScore Float?    @map("baseline_score")
+  baselineAt    DateTime? @map("baseline_at")
+  completedAt   DateTime? @map("completed_at")
   createdAt  DateTime             @default(now()) @map("created_at")
 
   setter   User     @relation(fields: [setterId], references: [id], onDelete: Cascade)

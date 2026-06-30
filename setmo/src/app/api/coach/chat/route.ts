@@ -155,6 +155,7 @@ async function managerChat(
       heatmap: ctx.heatmap.map((h) => ({ name: h.name, avg: h.avg })),
       outcomes: ctx.outcomes.map((x) => ({ periodLabel: x.periodLabel, consultsBooked: x.consultsBooked, note: x.note })),
       trainings: ctx.trainings.map((t) => ({ title: t.title, skillKey: t.skillKey })),
+      trainingImpact: { avgDelta: ctx.trainingImpact.avgDelta, measured: ctx.trainingImpact.measured, rows: ctx.trainingImpact.rows.slice(0, 5).map((r) => ({ setterName: r.setterName, skillName: r.skillName, delta: r.delta })) },
     })
   );
 
@@ -229,7 +230,8 @@ async function assignTraining(
   if (existing) {
     await prisma.recommendation.update({ where: { id: existing.id }, data: { trainingId: training.id, reason } });
   } else {
-    await prisma.recommendation.create({ data: { setterId: setter.id, trainingId: training.id, skillKey: training.skillKey ?? skillKey, reason } });
+    const { createRecommendation } = await import("@/lib/coaching");
+    await createRecommendation({ setterId: setter.id, trainingId: training.id, skillKey: training.skillKey ?? skillKey, reason });
   }
   // Keep ctx in sync so the model doesn't double-assign within one turn.
   void officeId;

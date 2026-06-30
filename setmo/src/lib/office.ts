@@ -238,11 +238,13 @@ export async function getOfficeSkillMatrix(officeId: string, range: AnalyticsRan
 
 // Everything the Office Admin coach needs to be grounded + to take actions.
 export async function getOfficeCoachContext(officeId: string) {
-  const [overview, heatmap, outcomes, trainings] = await Promise.all([
+  const { getTrainingImpact } = await import("@/lib/coaching");
+  const [overview, heatmap, outcomes, trainings, trainingImpact] = await Promise.all([
     getOfficeOverview(officeId),
     getOfficeSkillHeatmap(officeId),
     prisma.officeOutcome.findMany({ where: { officeId }, orderBy: { periodLabel: "desc" }, take: 3 }),
     prisma.training.findMany({ where: { status: "PUBLISHED" }, select: { id: true, title: true, targetSkillKey: true } }),
+    getTrainingImpact(officeId),
   ]);
 
   return {
@@ -250,6 +252,7 @@ export async function getOfficeCoachContext(officeId: string) {
     heatmap,
     outcomes,
     trainings: trainings.map((t) => ({ id: t.id, title: t.title, skillKey: t.targetSkillKey })),
+    trainingImpact,
     setters: overview.team.map((t) => ({ id: t.id, name: t.name })),
   };
 }

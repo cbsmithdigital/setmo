@@ -12,9 +12,10 @@ export async function POST(
   if (!user) return error("Unauthorized", 401);
 
   const { id } = await params;
+  // Stamp completedAt so the close-the-loop delta is measured from this point.
   await prisma.recommendation.updateMany({
     where: { setterId: user.id, trainingId: id, status: "ACTIVE" },
-    data: { status: "COMPLETED" },
+    data: { status: "COMPLETED", completedAt: new Date() },
   });
 
   return json({ ok: true });

@@ -9,6 +9,7 @@ import { InviteButton } from "@/components/office/InviteButton";
 import { OutcomesCard } from "@/components/office/OutcomesCard";
 import { OutcomesInsight } from "@/components/office/OutcomesInsight";
 import { getOfficeOutcomeFunnel } from "@/lib/outcomes";
+import { getTrainingImpact } from "@/lib/coaching";
 import { getInsight } from "@/lib/insights";
 import { SettyInsight } from "@/components/coach/SettyInsight";
 import { relativeShort } from "@/lib/format";
@@ -21,11 +22,12 @@ export default async function OfficeOverviewPage() {
   const user = await requireRole("OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN");
   const o = await getOfficeOverview(user.officeId!);
   const period = currentPeriod();
-  const [outcome, funnel, insight, onboarding] = await Promise.all([
+  const [outcome, funnel, insight, onboarding, impact] = await Promise.all([
     getOutcome(user.officeId!, period.label),
     getOfficeOutcomeFunnel(user.officeId!, period.label),
     getInsight("OFFICE", user.officeId!),
     getOnboarding(user.officeId!),
+    getTrainingImpact(user.officeId!),
   ]);
   const { purchasedMin, usedMin, remainingMin } = o.allowance;
   const poolPct = purchasedMin > 0 ? Math.round((usedMin / purchasedMin) * 100) : 0;
@@ -50,6 +52,30 @@ export default async function OfficeOverviewPage() {
       <div className="content">
         <OnboardingChecklist data={onboarding} />
         <SettyInsight scope="OFFICE" subjectId={user.officeId!} insight={insight} />
+
+        {impact.measured > 0 && (
+          <div className="card card-pad rise" style={{ marginBottom: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
+              <h3 style={{ fontSize: 16 }}>Training impact <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>— did the skill move?</span></h3>
+              {impact.avgDelta != null && (
+                <span className={"chip " + (impact.avgDelta >= 0 ? "mint" : "amber")} style={{ padding: "3px 10px" }}>
+                  avg {impact.avgDelta >= 0 ? "+" : ""}{impact.avgDelta} on targeted skills
+                </span>
+              )}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              {impact.rows.slice(0, 5).map((r, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, fontSize: 13.5 }}>
+                  <span><b>{r.setterName}</b> · {r.skillName} <span className="muted">after “{r.trainingTitle}”</span></span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+                    <span className="muted">{r.baseline.toFixed(1)} → {r.after.toFixed(1)}</span>
+                    <span className={"chip " + (r.delta >= 0 ? "mint" : "amber")} style={{ padding: "2px 8px" }}>{r.delta >= 0 ? "+" : ""}{r.delta}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="grid g-4 rise" style={{ marginBottom: 18 }}>
           <StatTile lab="Team average" val={o.teamAvg.toFixed(1)} grad="var(--grad-mint)" sub="across active setters" />
