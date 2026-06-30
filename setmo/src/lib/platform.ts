@@ -137,7 +137,9 @@ async function officeStats(where: object): Promise<OfficeStat[]> {
   const cfg = await getPricingConfig();
   const [bundles, sessions] = await Promise.all([
     prisma.conversationBundle.findMany({ where: { officeId: { in: ids } }, select: { officeId: true, minutesPurchased: true, amountCents: true } }),
-    prisma.session.findMany({ where: { officeId: { in: ids }, durationSeconds: { not: null }, isAudit: false }, select: { officeId: true, durationSeconds: true, startedAt: true } }),
+    // organizationId: null → exclude group/DSO coach sessions; those meter against
+    // the org wallet, not an office pool, so they shouldn't inflate office burn/balance.
+    prisma.session.findMany({ where: { officeId: { in: ids }, organizationId: null, durationSeconds: { not: null }, isAudit: false }, select: { officeId: true, durationSeconds: true, startedAt: true } }),
   ]);
   const since30 = new Date(Date.now() - 30 * 86400_000);
   return offices.map((o) => {

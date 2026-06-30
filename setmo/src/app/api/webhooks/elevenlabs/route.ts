@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { verifyWebhookSignature } from "@/lib/elevenlabs";
 import { ingestPostCall, ingestAudio, scoreSession } from "@/lib/ingest";
+import { captureError } from "@/lib/observability";
 import { error, json } from "@/lib/api";
 
 // The transcript is CAPTURED synchronously (fast, <5s) so the one webhook we get
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
       try {
         await scoreSession(id);
       } catch (e) {
-        console.error("scoreSession failed", id, e);
+        captureError(e, { scope: "score-session", sessionId: id });
       }
     });
   }

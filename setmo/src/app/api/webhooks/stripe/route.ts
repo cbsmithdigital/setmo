@@ -4,6 +4,7 @@ import { constructWebhookEvent, getStripe } from "@/lib/stripe";
 import { addMinutes, addOrgTokens } from "@/lib/usage";
 import { accrueCommission, markOfficeCommissionsEarned, clawbackOfficeCommissions } from "@/lib/partners";
 import { getPricingConfig } from "@/lib/config";
+import { captureError } from "@/lib/observability";
 import { error, json } from "@/lib/api";
 
 // Account is "earned" for partner commission once it has cleared its 2nd payment.
@@ -22,7 +23,8 @@ export async function POST(req: Request) {
     return error(e instanceof Error ? e.message : "Invalid signature", 400);
   }
 
-  switch (event.type) {
+  try {
+    switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object;
       const kind = session.metadata?.kind;
@@ -46,6 +48,11 @@ export async function POST(req: Request) {
     }
     default:
       break;
+    }
+  } catch (e) {
+    // Capture + 500 so Stripe retries (transient DB/Stripe hiccups recover).
+    captureError(e, { scope: "stripe-webhook", type: event.type, eventId: event.id });
+    return error("Webhook handler failed", 500);
   }
 
   return json({ received: true });

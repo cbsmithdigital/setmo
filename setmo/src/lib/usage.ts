@@ -100,7 +100,10 @@ export async function evaluateMinuteThresholds(officeId: string): Promise<void> 
     if (amount > 0) {
       await prisma.office.update({ where: { id: officeId }, data: { lastAutoTopUpAt: new Date() } }); // claim before charging
       const { chargeMinutesAuto } = await import("@/lib/stripe");
-      await chargeMinutesAuto({ officeId, customerId: office.stripeCustomerId, minutes: amount }).catch(() => {});
+      await chargeMinutesAuto({ officeId, customerId: office.stripeCustomerId, minutes: amount }).catch(async (e) => {
+        const { captureError } = await import("@/lib/observability");
+        captureError(e, { scope: "auto-topup", officeId });
+      });
     }
   }
 
