@@ -45,13 +45,16 @@ function bucketMinutes(sessions: SessionLite[], isProspect: (officeId: string) =
 }
 
 export async function getPlatformOverview() {
-  const [offices, bundles, sessions, audits] = await Promise.all([
+  const [offices, bundles, orgBundles, sessions, audits] = await Promise.all([
     prisma.office.findMany({ select: { id: true, organizationId: true, isProspect: true, subscription: { select: { status: true } } } }),
     prisma.conversationBundle.findMany({ select: { officeId: true, minutesPurchased: true, amountCents: true, purchasedAt: true } }),
+    // Group/DSO coach-token purchases — a second token-revenue stream.
+    prisma.orgTokenBundle.findMany({ select: { minutesPurchased: true, amountCents: true, purchasedAt: true } }),
     prisma.session.findMany({ where: { durationSeconds: { not: null } }, select: { officeId: true, durationSeconds: true, isAudit: true, startedAt: true } }),
     prisma.setterAudit.findMany({ select: { status: true, office: { select: { isProspect: true } } } }),
   ]);
   const cfg = await getPricingConfig();
+  const orgCashOf = (b: { amountCents: number | null }) => (b.amountCents ?? 0) / 100;
 
   const prospect = new Set(offices.filter((o) => o.isProspect).map((o) => o.id));
   const isProspect = (id: string) => prospect.has(id);
@@ -63,8 +66,9 @@ export async function getPlatformOverview() {
   const standalone = realOffices.filter((o) => !o.organizationId).length;
   const accounts = orgIdsWithReal.size + standalone;
 
-  const purchasedMin = bundles.reduce((a, b) => a + b.minutesPurchased, 0);
-  const cashRev = bundles.reduce((a, b) => a + cashOf(b, cfg), 0);
+  // Token revenue/minutes span both office pools and group/DSO coach wallets.
+  const purchasedMin = bundles.reduce((a, b) => a + b.minutesPurchased, 0) + orgBundles.reduce((a, b) => a + b.minutesPurchased, 0);
+  const cashRev = bundles.reduce((a, b) => a + cashOf(b, cfg), 0) + orgBundles.reduce((a, b) => a + orgCashOf(b), 0);
   const buckets = bucketMinutes(sessions, isProspect);
 
   const cogs = buckets.payingMin * MINUTE_COST_USD;
@@ -90,11 +94,12 @@ export async function getPlatformOverview() {
   }
   const series = months.map((m) => {
     const mBundles = bundles.filter((b) => monthKey(b.purchasedAt) === m.key);
+    const mOrgBundles = orgBundles.filter((b) => monthKey(b.purchasedAt) === m.key);
     const mSessions = sessions.filter((s) => monthKey(s.startedAt) === m.key);
     const b = bucketMinutes(mSessions, isProspect);
     return {
       label: m.label,
-      cashRev: r2(mBundles.reduce((a, x) => a + cashOf(x, cfg), 0)),
+      cashRev: r2(mBundles.reduce((a, x) => a + cashOf(x, cfg), 0) + mOrgBundles.reduce((a, x) => a + orgCashOf(x), 0)),
       access: r2(accessMRR), // current run-rate (historical sub counts not tracked) — approximate
       cogs: r2(b.payingMin * MINUTE_COST_USD),
       cac: r2(b.prospectMin * MINUTE_COST_USD),

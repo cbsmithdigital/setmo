@@ -1,7 +1,9 @@
 import { requireRole } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { getOrgCoachBalance } from "@/lib/usage";
 import { getPlatformConfig, getPricingConfig } from "@/lib/config";
 import { GroupTokenPurchase } from "@/components/billing/GroupTokenPurchase";
+import { GroupManageCardButton } from "@/components/billing/GroupManageCardButton";
 
 export default async function GroupBillingPage() {
   const user = await requireRole("GROUP_ADMIN");
@@ -14,11 +16,13 @@ export default async function GroupBillingPage() {
     );
   }
 
-  const [balance, cfg, pricing] = await Promise.all([
+  const [balance, cfg, pricing, org] = await Promise.all([
     getOrgCoachBalance(user.organizationId),
     getPlatformConfig(),
     getPricingConfig(),
+    prisma.organization.findUnique({ where: { id: user.organizationId }, select: { stripeCustomerId: true } }),
   ]);
+  const hasCard = Boolean(org?.stripeCustomerId);
 
   const tk = (min: number) => (min * 10).toLocaleString();
   const resets = balance.periodResetsOn.toLocaleDateString(undefined, { month: "long", day: "numeric" });
@@ -31,7 +35,8 @@ export default async function GroupBillingPage() {
           <h1>Billing</h1>
           <p>Your Setty Advisor voice wallet — {balance.freePerMonth} free min/month, then {cfg.groupTokenDiscountPct}% off tokens.</p>
         </div>
-        <div className="tb-right">
+        <div className="tb-right" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {hasCard && <GroupManageCardButton />}
           <span className="chip purple">Setty Advisor</span>
         </div>
       </div>
