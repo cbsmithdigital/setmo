@@ -100,10 +100,13 @@ export async function getPartnerDashboard(partnerId: string, memberUserId: strin
 
   // Offices referred to this partner, optionally narrowed to the rep's codes.
   const codeStrings = scopedCodes.map((c) => c.code);
+  // Office referred directly OR via its group/DSO (so every location under a
+  // referred group shows up for the partner).
+  const inCodes = { in: codeStrings.length ? codeStrings : ["__none__"] };
   const offices = await prisma.office.findMany({
     where: memberUserId
-      ? { referredByPartnerId: partnerId, referralCode: { in: codeStrings.length ? codeStrings : ["__none__"] } }
-      : { referredByPartnerId: partnerId },
+      ? { OR: [{ referredByPartnerId: partnerId, referralCode: inCodes }, { organization: { referredByPartnerId: partnerId, referralCode: inCodes } }] }
+      : { OR: [{ referredByPartnerId: partnerId }, { organization: { referredByPartnerId: partnerId } }] },
     select: { id: true, name: true, isProspect: true, subscription: { select: { status: true } } },
   });
   const officeIds = offices.map((o) => o.id);

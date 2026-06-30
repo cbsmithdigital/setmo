@@ -179,6 +179,10 @@ model Organization {
   // rolling purchased tokens. The Stripe customer is created when the leader buys.
   stripeCustomerId String? @map("stripe_customer_id")
   coachAlertStage  Int     @default(0) @map("coach_alert_stage") // 0 healthy, 1 alerted at the low-balance threshold
+  // Partner who referred this group/DSO → every office under it earns commission
+  // for them (resolved office→org at accrual time, so later-added locations count).
+  referredByPartnerId String? @map("referred_by_partner_id")
+  referralCode        String? @map("referral_code")
 
   offices      Office[]
   users        User[]

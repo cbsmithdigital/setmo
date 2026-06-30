@@ -73,9 +73,16 @@ export async function updatePartnerTerms(partnerId: string, data: { track?: Trac
   return prisma.partner.update({ where: { id: partnerId }, data });
 }
 
-/** Count of a partner's currently-active, paying accounts (drives the rate tier). */
+/** Count of a partner's currently-active, paying accounts (drives the rate tier).
+ *  Includes offices referred directly AND every office under a referred group/DSO. */
 export async function activeAccountCount(partnerId: string): Promise<number> {
-  return prisma.office.count({ where: { referredByPartnerId: partnerId, isProspect: false, subscription: { status: "ACTIVE" } } });
+  return prisma.office.count({
+    where: {
+      isProspect: false,
+      subscription: { status: "ACTIVE" },
+      OR: [{ referredByPartnerId: partnerId }, { organization: { referredByPartnerId: partnerId } }],
+    },
+  });
 }
 
 export type PartnerRow = {
@@ -147,9 +154,11 @@ const periodKeyNow = () => {
  *  its 2nd payment yet (else PENDING until it does). */
 export async function accrueCommission(opts: { officeId: string; kind: "ACCESS" | "MINUTES"; baseCents: number; stripeRef: string; earned: boolean }) {
   if (!opts.baseCents || opts.baseCents <= 0) return;
-  const office = await prisma.office.findUnique({ where: { id: opts.officeId }, select: { referredByPartnerId: true } });
-  if (!office?.referredByPartnerId) return;
-  const partner = await prisma.partner.findUnique({ where: { id: office.referredByPartnerId }, select: { id: true, status: true, track: true, customRatePct: true, payoutMethod: true } });
+  const office = await prisma.office.findUnique({ where: { id: opts.officeId }, select: { referredByPartnerId: true, organization: { select: { referredByPartnerId: true } } } });
+  // Office-level referral wins; otherwise inherit the group/DSO's referring partner.
+  const referrerId = office?.referredByPartnerId ?? office?.organization?.referredByPartnerId ?? null;
+  if (!referrerId) return;
+  const partner = await prisma.partner.findUnique({ where: { id: referrerId }, select: { id: true, status: true, track: true, customRatePct: true, payoutMethod: true } });
   if (!partner || partner.status !== "APPROVED") return;
   if (await prisma.partnerCommission.findFirst({ where: { stripeRef: opts.stripeRef } })) return; // idempotent
 

@@ -50,7 +50,9 @@ export async function provisionAccount(opts: {
       await prisma.user.create({ data: { id: userId, email, firstName, lastName, role: "OFFICE_ADMIN", status: "ACTIVE", officeId: office.id } });
       await prisma.membership.create({ data: { userId, role: "OFFICE_ADMIN", scopeType: "OFFICE", scopeId: office.id } });
     } else {
-      const org = await prisma.organization.create({ data: { name: opts.orgName?.trim() || opts.practiceName, type: "GROUP" } });
+      // Org carries the partner referral too, so EVERY office under the group
+      // (this one + any added later) earns commission for the referring partner.
+      const org = await prisma.organization.create({ data: { name: opts.orgName?.trim() || opts.practiceName, type: "GROUP", ...refData } });
       const office = opts.claimOfficeId
         ? await prisma.office.update({ where: { id: opts.claimOfficeId }, data: { isProspect: false, name: opts.practiceName, organizationId: org.id } })
         : await prisma.office.create({ data: { name: opts.practiceName, isProspect: false, organizationId: org.id, ...refData } });
