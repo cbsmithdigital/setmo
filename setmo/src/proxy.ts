@@ -47,6 +47,7 @@ export async function proxy(request: NextRequest) {
     path === "/activate" ||
     path === "/reset-password" ||
     path.startsWith("/invite") ||
+    path.startsWith("/unsubscribe") || // token-signed email unsubscribe (no login)
     path.startsWith("/auth") ||
     // Public read-only shared-recording links (token-gated).
     path.startsWith("/shared") ||

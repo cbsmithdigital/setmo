@@ -13,7 +13,11 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://setmo.growdental.ai"
 const money = (v: number) => (v >= 1000 ? `$${Math.round(v / 1000)}k` : `$${v}`);
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-export type DigestEmail = { subject: string; html: string; recipients: string[] };
+// recipients carry userId so the cron can stamp a per-person unsubscribe link.
+export type DigestEmail = { subject: string; html: string; recipients: { email: string; userId: string }[] };
+
+// __UNSUB_URL__ is replaced per-recipient by the cron before sending.
+const POSTAL = process.env.SETMO_POSTAL_ADDRESS || "";
 
 function shell(title: string, bodyHtml: string, ctaLabel: string, ctaPath: string): string {
   return `
@@ -25,7 +29,8 @@ function shell(title: string, bodyHtml: string, ctaLabel: string, ctaPath: strin
       <a href="${APP_URL}${ctaPath}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600;font-size:14px">${esc(ctaLabel)}</a>
     </p>
     <p style="color:#8a94a6;font-size:12px;margin-top:22px;border-top:1px solid #ececf3;padding-top:14px">
-      You're getting this weekly summary from SetMo. Numbers cover the last 7 days unless noted.
+      You're receiving this weekly summary because you have a SetMo account. Numbers cover the last 7 days unless noted.<br/>
+      <a href="__UNSUB_URL__" style="color:#8a94a6;text-decoration:underline">Unsubscribe from weekly summaries</a>${POSTAL ? ` · SetMo by Grow Dental, ${esc(POSTAL)}` : " · SetMo by Grow Dental"}
     </p>
   </div>`;
 }
@@ -56,8 +61,8 @@ const isActiveEmail = (email: string | null | undefined) =>
 
 // ---- setter ----
 export async function buildSetterDigest(userId: string): Promise<DigestEmail | null> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, officeId: true, firstName: true, lastName: true, email: true, status: true, role: true } });
-  if (!user?.officeId || user.role !== "SETTER" || user.status !== "ACTIVE") return null;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, officeId: true, firstName: true, lastName: true, email: true, status: true, role: true, digestOptOut: true } });
+  if (!user?.officeId || user.role !== "SETTER" || user.status !== "ACTIVE" || user.digestOptOut) return null;
   const d = await getSetterHome(user);
   if (!d.recent.length) return null;
   const insight = await getInsight("SETTER", userId);
@@ -79,7 +84,7 @@ export async function buildSetterDigest(userId: string): Promise<DigestEmail | n
   return {
     subject: `Your SetMo week — ${d.sessionsThisWeek} rep${d.sessionsThisWeek === 1 ? "" : "s"}, ${d.avg ? d.avg.toFixed(1) : "—"}/5`,
     html: shell("Your training week", body, "Run a rep", "/practice"),
-    recipients: isActiveEmail(user.email) ? [user.email] : [],
+    recipients: isActiveEmail(user.email) ? [{ email: user.email, userId: user.id }] : [],
   };
 }
 
@@ -90,7 +95,7 @@ export async function buildOfficeDigest(officeId: string): Promise<DigestEmail |
   const [funnel, insight, admins] = await Promise.all([
     getOfficeOutcomeFunnel(officeId, currentPeriod().label),
     getInsight("OFFICE", officeId),
-    prisma.user.findMany({ where: { officeId, role: "OFFICE_ADMIN", status: "ACTIVE" }, select: { email: true } }),
+    prisma.user.findMany({ where: { officeId, role: "OFFICE_ADMIN", status: "ACTIVE", digestOptOut: false }, select: { id: true, email: true } }),
   ]);
   const withSessions = o.team.filter((t) => t.sessions > 0);
   const riser = [...withSessions].sort((a, b) => b.delta - a.delta)[0];
@@ -114,7 +119,7 @@ export async function buildOfficeDigest(officeId: string): Promise<DigestEmail |
   return {
     subject: `${o.practiceName}: team ${o.teamAvg.toFixed(1)}/5, ${o.sessionsThisWeek} sessions this week`,
     html: shell(`${o.practiceName} — weekly team report`, body, "Open your team", "/office/team"),
-    recipients: admins.map((a) => a.email).filter(isActiveEmail),
+    recipients: admins.filter((a) => isActiveEmail(a.email)).map((a) => ({ email: a.email, userId: a.id })),
   };
 }
 
@@ -125,7 +130,7 @@ export async function buildGroupDigest(orgId: string): Promise<DigestEmail | nul
   const [outcomes, insight, admins] = await Promise.all([
     getGroupOutcomes(orgId, currentPeriod().label),
     getInsight("GROUP", orgId),
-    prisma.user.findMany({ where: { organizationId: orgId, role: "GROUP_ADMIN", status: "ACTIVE" }, select: { email: true } }),
+    prisma.user.findMany({ where: { organizationId: orgId, role: "GROUP_ADMIN", status: "ACTIVE", digestOptOut: false }, select: { id: true, email: true } }),
   ]);
   const active = g.offices.filter((o) => o.activeSetters > 0);
   const top = active[0];
@@ -149,6 +154,6 @@ export async function buildGroupDigest(orgId: string): Promise<DigestEmail | nul
   return {
     subject: `${g.orgName}: group ${g.orgAvg.toFixed(1)}/5, ${money(outcomes.totalProduction)} this month`,
     html: shell(`${g.orgName} — portfolio weekly`, body, "Open performance", "/group/performance"),
-    recipients: admins.map((a) => a.email).filter(isActiveEmail),
+    recipients: admins.filter((a) => isActiveEmail(a.email)).map((a) => ({ email: a.email, userId: a.id })),
   };
 }

@@ -97,20 +97,26 @@ export async function sendPartnerApplicationAlert(opts: {
 }
 
 /** Generic transactional send (weekly digests). Returns recipients actually sent to. */
-export async function sendDigestEmail(opts: { to: string[]; subject: string; html: string }): Promise<number> {
+// Sends one digest to one recipient. `unsubscribeUrl` (RFC 8058) enables Gmail's
+// one-click unsubscribe and is also linked in the email footer.
+export async function sendDigestEmail(opts: { to: string; subject: string; html: string; unsubscribeUrl?: string }): Promise<number> {
   const resend = getResend();
   const from = process.env.RESEND_FROM_EMAIL;
-  if (!resend || !from || opts.to.length === 0) return 0;
-  let sent = 0;
-  for (const to of opts.to) {
-    try {
-      await resend.emails.send({ from, to, subject: opts.subject, html: opts.html });
-      sent++;
-    } catch {
-      /* skip a bad address, keep going */
-    }
+  if (!resend || !from || !opts.to) return 0;
+  try {
+    await resend.emails.send({
+      from,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      ...(opts.unsubscribeUrl
+        ? { headers: { "List-Unsubscribe": `<${opts.unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } }
+        : {}),
+    });
+    return 1;
+  } catch {
+    return 0; // skip a bad address, keep going
   }
-  return sent;
 }
 
 /** Verify-your-email link to unlock the Setter Audit report. */

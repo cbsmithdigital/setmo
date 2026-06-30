@@ -3,6 +3,7 @@ import { json, error } from "@/lib/api";
 import { isEmailConfigured, sendDigestEmail } from "@/lib/email";
 import { buildOfficeDigest, buildGroupDigest, buildSetterDigest, type DigestEmail } from "@/lib/digest";
 import { sweepAssessmentInvites } from "@/lib/assessment-invites";
+import { unsubscribeToken, unsubscribeUrl } from "@/lib/unsubscribe";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -43,13 +44,21 @@ export async function GET(req: Request) {
   const summary = { offices: { built: 0, sent: 0 }, groups: { built: 0, sent: 0 }, setters: { built: 0, sent: 0 } };
   const samples: string[] = [];
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? url.origin;
   const run = async (bucket: { built: number; sent: number }, d: DigestEmail | null) => {
     if (!d) return;
-    const to = testTo ? [testTo] : d.recipients;
-    if (to.length === 0) return;
+    const recips = testTo ? [{ email: testTo, userId: "__test__" }] : d.recipients;
+    if (recips.length === 0) return;
     bucket.built++;
-    samples.push(`${to.length}× ${d.subject}`);
-    if (!dryRun) bucket.sent += await sendDigestEmail({ to, subject: d.subject, html: d.html });
+    samples.push(`${recips.length}× ${d.subject}`);
+    if (dryRun) return;
+    // One email per recipient, each with its own unsubscribe link (footer + the
+    // RFC 8058 one-click List-Unsubscribe header → /api/digest/unsubscribe).
+    for (const r of recips) {
+      const html = d.html.replace(/__UNSUB_URL__/g, unsubscribeUrl(r.userId));
+      const oneClick = `${appUrl}/api/digest/unsubscribe?u=${encodeURIComponent(r.userId)}&t=${unsubscribeToken(r.userId)}`;
+      bucket.sent += await sendDigestEmail({ to: r.email, subject: d.subject, html, unsubscribeUrl: oneClick });
+    }
   };
 
   if (want("office")) for (const id of pick(officeIds)) await run(summary.offices, await buildOfficeDigest(id).catch(() => null));

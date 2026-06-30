@@ -271,6 +271,7 @@ model User {
   email          String     @unique
   status         UserStatus @default(INVITED)
   invitedById    String?    @map("invited_by")
+  digestOptOut   Boolean    @default(false) @map("digest_opt_out") // unsubscribed from weekly summary emails
   createdAt      DateTime   @default(now()) @map("created_at")
 
   office       Office?       @relation(fields: [officeId], references: [id])
