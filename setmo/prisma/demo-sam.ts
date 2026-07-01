@@ -7,6 +7,7 @@ config({ path: ".env.local" });
 config();
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
+import { DEMO_WINS, DEMO_MISSES, DEMO_PHRASES, DEMO_NEXT_SCENARIO, demoTranscriptPayload } from "./demo-content";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
 
@@ -89,9 +90,12 @@ async function main() {
       data: {
         sessionId: session.id, overallScore: overall.toFixed(1),
         narrative: "Solid rep — momentum building, especially on objections.",
-        wins: ["Opened warm and human", "Held composure under price pressure"],
-        misses: ["Didn't fully explore the 'why' behind the delay", "Skipped the value framing before quoting"],
-        replacementPhrases: [],
+        wins: DEMO_WINS,
+        misses: DEMO_MISSES,
+        replacementPhrases: DEMO_PHRASES,
+        recommendedNextScenario: DEMO_NEXT_SCENARIO,
+        rawPayload: demoTranscriptPayload(dur),
+        scoredAt: new Date(startedAt.getTime() + dur * 1000 + 5000),
       },
     });
     await prisma.skillScore.createMany({
