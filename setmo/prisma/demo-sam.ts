@@ -44,7 +44,10 @@ async function main() {
     include: { evaluation: true },
   });
   if (!showcase?.evaluation) return console.log("No call found for Sam to use as showcase.");
-  const anchor = showcase.startedAt;
+  // Re-date the showcase to a few hours ago so the demo stays in the CURRENT
+  // month after a month rollover (keeps its real transcript/recording).
+  const anchor = new Date(Date.now() - 3600_000);
+  const showcaseDur = showcase.durationSeconds ?? 300;
 
   // Polished current scorecard on the showcase (keep its transcript/audio/feedback).
   await prisma.skillScore.deleteMany({ where: { evaluationId: showcase.evaluation.id } });
@@ -52,7 +55,7 @@ async function main() {
     data: KEYS.map((k) => ({ evaluationId: showcase.evaluation!.id, skillKey: k, tier: tierOf(k), score: CURRENT[k].toFixed(1) })),
   });
   await prisma.evaluation.update({ where: { id: showcase.evaluation.id }, data: { overallScore: avg(CURRENT).toFixed(1) } });
-  await prisma.session.update({ where: { id: showcase.id }, data: { saved: true, savedAt: new Date(anchor.getTime() + 1000) } });
+  await prisma.session.update({ where: { id: showcase.id }, data: { saved: true, startedAt: anchor, completedAt: new Date(anchor.getTime() + showcaseDur * 1000), savedAt: new Date(anchor.getTime() + showcaseDur * 1000 + 1000) } });
 
   // Clear Sam's other practice sessions (keep the showcase + any COACH sessions).
   await prisma.session.deleteMany({ where: { setterId: sam.id, kind: "PRACTICE", id: { not: showcase.id } } });
@@ -67,7 +70,12 @@ async function main() {
       scores[k] = clamp(start + (CURRENT[k] - start) * frac);
     }
     const overall = avg(scores);
-    const startedAt = new Date(anchor.getTime() - (7 - j) * 3 * 86400_000);
+    // Keep the most recent few backfills in the current month too; spread the
+    // rest back weeks for a rising trend + prior-period deltas.
+    const fromNewest = 6 - j; // 0 = most recent backfill (showcase is newer still)
+    const startedAt = fromNewest < 3
+      ? new Date(anchor.getTime() - (fromNewest * 2 + 2) * 3600_000)
+      : new Date(anchor.getTime() - (fromNewest - 2) * 6 * 86400_000);
     const dur = 480 + j * 25;
     const session = await prisma.session.create({
       data: {
@@ -91,11 +99,17 @@ async function main() {
     });
   }
 
-  // Recommendation + memory pointed at the weakest skill.
+  // Recommendation + memory pointed at the weakest skill. Look up a real published
+  // training (ids are UUIDs from the trainings admin, not fixed "t2").
   await prisma.recommendation.deleteMany({ where: { setterId: sam.id } });
-  await prisma.recommendation.create({
-    data: { setterId: sam.id, trainingId: "t2", skillKey: "painpoint", reason: "your pain-point exploration has sat under 3.5 across your last few sessions", status: "ACTIVE" },
-  });
+  const recTraining =
+    (await prisma.training.findFirst({ where: { targetSkillKey: "painpoint", status: "PUBLISHED" } })) ??
+    (await prisma.training.findFirst({ where: { status: "PUBLISHED" } }));
+  if (recTraining) {
+    await prisma.recommendation.create({
+      data: { setterId: sam.id, trainingId: recTraining.id, skillKey: "painpoint", reason: "your pain-point exploration has sat under 3.5 across your last few sessions", status: "ACTIVE" },
+    });
+  }
   await prisma.setterMemory.upsert({
     where: { setterId: sam.id },
     update: { summary: "Sam is on a clear upward trend (overall ~3.3 → 4.1). Strong rapport, confidence, and closing. Pain-point exploration and value building still lag — escalate discovery-heavy, price-objection personas.", difficultyFloor: "WARM" },

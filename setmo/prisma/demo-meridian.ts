@@ -123,8 +123,12 @@ async function main() {
           scores[k] = clamp(start + (current[k] - start) * frac);
         }
         const overall = avg(scores);
-        // spread newest→oldest across ~40 days (most recent ~2 days ago)
-        const startedAt = new Date(now.getTime() - (SESSIONS_PER_SETTER - j) * 4.3 * 86400_000);
+        // Newest few land in the CURRENT month (healthy "this month" even on the
+        // 1st); the rest spread back ~30 days for trend + prior-period deltas.
+        const fromNewest = SESSIONS_PER_SETTER - 1 - j; // 0 = newest
+        const startedAt = fromNewest < 4
+          ? new Date(now.getTime() - (fromNewest * 2 + 1) * 3600_000)
+          : new Date(now.getTime() - (5 + (fromNewest - 4) * 6) * 86400_000);
         const dur = 360 + j * 35 + (j % 2) * 20;
         const booked = overall >= 4.0 ? j % 5 !== 0 : j % 3 === 0;
 
