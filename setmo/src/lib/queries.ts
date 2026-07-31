@@ -555,19 +555,9 @@ export async function getOfficeBilling(officeId: string) {
   // deadline label, rendered on the activation card. Null once subscribed/ended,
   // and suppressed for offices that already consumed their one-per-office grant
   // (e.g. canceled → reactivating) so we never advertise an undeliverable bonus.
-  const { promoBonusMinutes } = await import("@/lib/config");
+  const { promoInfo } = await import("@/lib/config");
   const { hasSignupBonusGrant } = await import("@/lib/usage");
-  const promoMonthlyMin = promoBonusMinutes(cfg, "monthly");
-  const promoAnnualMin = promoBonusMinutes(cfg, "annual");
-  const promo = !active && cfg.promoEndsAt && (promoMonthlyMin > 0 || promoAnnualMin > 0) && !(await hasSignupBonusGrant(officeId))
-    ? {
-        monthlyTokens: promoMonthlyMin * 10,
-        annualTokens: promoAnnualMin * 10,
-        // The cutoff is an exclusive instant (start of the day after the deadline,
-        // US Pacific) — display the last day the offer is live.
-        endsAt: new Date(cfg.promoEndsAt.getTime() - 1).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" }),
-      }
-    : null;
+  const promo = !active && !(await hasSignupBonusGrant(officeId)) ? promoInfo(cfg) : null;
 
   return {
     promo,

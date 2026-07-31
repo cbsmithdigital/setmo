@@ -71,6 +71,23 @@ export function promoBonusMinutes(cfg: PlatformConfig, plan: "monthly" | "annual
   return Math.max(0, plan === "annual" ? cfg.promoBonusAnnualMin : cfg.promoBonusMonthlyMin);
 }
 
+export type PromoInfo = { monthlyTokens: number; annualTokens: number; endsAt: string };
+
+/** Display summary of the live sign-up promo for banners (signup page, activation
+ *  card) — null when the promo is off or has ended. The stored cutoff is an
+ *  exclusive instant (start of the day after the deadline, US Pacific), so the
+ *  label shows the last day the offer is live. */
+export function promoInfo(cfg: PlatformConfig): PromoInfo | null {
+  const monthly = promoBonusMinutes(cfg, "monthly");
+  const annual = promoBonusMinutes(cfg, "annual");
+  if (!cfg.promoEndsAt || (monthly <= 0 && annual <= 0)) return null;
+  return {
+    monthlyTokens: monthly * 10,
+    annualTokens: annual * 10,
+    endsAt: new Date(cfg.promoEndsAt.getTime() - 1).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" }),
+  };
+}
+
 /** The PricingConfig slice (for pricing.ts functions + client sliders). */
 export async function getPricingConfig(): Promise<PricingConfig> {
   const c = await getPlatformConfig();
