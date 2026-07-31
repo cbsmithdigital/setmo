@@ -56,13 +56,14 @@ export function SignupClient({ promo = null }: { promo?: PromoInfo | null }) {
             <span>Set<span style={{ color: "var(--mint)" }}>Mo</span></span>
           </div>
           <h1 style={{ fontSize: 34, marginBottom: 8 }}>Get SetMo now.</h1>
-          <p className="muted" style={{ fontSize: 15.5, marginBottom: promo ? 14 : 24 }}>
+          <p className="muted" style={{ fontSize: 15.5, marginBottom: 24 }}>
             $44.95/mo per location · unlimited users · all features. Create your account free — activate access &amp; add tokens when you&apos;re ready.
           </p>
 
-          {/* sign-up promo — mirrors the activation card offer (per plan) */}
+          {/* sign-up promo, compact — only on mobile, where the right panel
+              (which carries the full offer card) is hidden */}
           {promo && (
-            <div className="banner mint" style={{ marginBottom: 22, fontSize: 13.5, lineHeight: 1.5 }}>
+            <div className="banner mint signup-promo-mobile" style={{ marginBottom: 22, fontSize: 13.5, lineHeight: 1.5 }}>
               <b>Limited-time offer:</b> activate by <b>{promo.endsAt}</b> and get{" "}
               {promo.monthlyTokens > 0 && (
                 <>
@@ -143,6 +144,31 @@ export function SignupClient({ promo = null }: { promo?: PromoInfo | null }) {
                 <li key={t} style={{ display: "flex", gap: 10, alignItems: "center" }}><Icon name="check" size={16} sw={3} /> {t}</li>
               ))}
             </ul>
+
+            {/* sign-up promo — full offer card (desktop; mobile gets the compact banner on the left) */}
+            {promo && (
+              <div style={{ marginTop: 28, padding: "20px 22px", borderRadius: 16, border: "1px solid rgba(52,211,153,.4)", background: "rgba(52,211,153,.08)", boxShadow: "0 0 46px rgba(52,211,153,.12)" }}>
+                <div className="chip mint" style={{ marginBottom: 12 }}>Limited-time offer</div>
+                <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 24, lineHeight: 1.2, marginBottom: 8 }}>
+                  {Math.round((promo.monthlyTokens > 0 ? promo.monthlyTokens : promo.annualTokens) / 600)} free hours of live AI practice
+                </div>
+                <p style={{ fontSize: 14, color: "var(--text-2)", margin: 0, lineHeight: 1.55 }}>
+                  {promo.monthlyTokens > 0 ? (
+                    <>
+                      Activate by <b>{promo.endsAt}</b> and we&apos;ll load your account with <b>{promo.monthlyTokens.toLocaleString()} free tokens</b>
+                      {promo.annualTokens > 0 && (
+                        <> — or go annual for <b>{Math.round(promo.annualTokens / 600)} free hours</b> ({promo.annualTokens.toLocaleString()} tokens) plus 2 months of access free</>
+                      )}
+                      . Free tokens never expire.
+                    </>
+                  ) : (
+                    <>
+                      Prepay annual by <b>{promo.endsAt}</b> and we&apos;ll load your account with <b>{promo.annualTokens.toLocaleString()} free tokens</b>. Free tokens never expire.
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

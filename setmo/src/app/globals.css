@@ -766,8 +766,17 @@ a {
   display: none;
 }
 
+/* signup promo: the full offer card lives in the desktop-only right panel;
+   this compact banner shows only where that panel is hidden */
+.signup-promo-mobile {
+  display: none;
+}
+
 /* responsive */
 @media (max-width: 880px) {
+  .signup-promo-mobile {
+    display: block;
+  }
   html,
   body {
     overflow-x: hidden; /* safety against any stray wide element / off-canvas drawer */
