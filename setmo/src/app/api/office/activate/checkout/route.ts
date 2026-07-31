@@ -1,11 +1,16 @@
 import { z } from "zod";
 import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
-import { createActivationCheckout, isStripeConfigured, MIN_MINUTES, MAX_MINUTES } from "@/lib/stripe";
-import { getPlatformConfig } from "@/lib/config";
+import { createActivationCheckout, createAccessCheckout, isStripeConfigured, MIN_MINUTES, MAX_MINUTES } from "@/lib/stripe";
+import { getPlatformConfig, promoBonusMinutes } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { error, json } from "@/lib/api";
 
-const Body = z.object({ minutes: z.number().int().min(MIN_MINUTES).max(MAX_MINUTES), plan: z.enum(["monthly", "annual"]).optional() });
+// minutes: 0 = access-only activation (sign-up promo — the bonus tokens are the
+// starter balance); otherwise the usual starter-token range applies.
+const Body = z.object({
+  minutes: z.number().int().min(0).max(MAX_MINUTES).refine((m) => m === 0 || m >= MIN_MINUTES, "Below the starter minimum"),
+  plan: z.enum(["monthly", "annual"]).optional(),
+});
 
 // POST /api/office/activate/checkout — first-time activation: one checkout that
 // starts access (monthly or annual prepay) AND buys the chosen starter tokens.
@@ -26,18 +31,29 @@ export async function POST(req: Request) {
   const plan = parsed.data.plan ?? "monthly";
   const cfg = await getPlatformConfig();
   const discountPct = plan === "annual" ? cfg.annualTokenDiscountPct : cfg.monthlyTokenDiscountPct;
+  // One bonus per office, ever: never promise (or print on the Stripe line item)
+  // a bonus the webhook's per-office guard would refuse to deliver — e.g. a
+  // cancel → reactivate inside the window, or a future promo run.
+  const { hasSignupBonusGrant } = await import("@/lib/usage");
+  const bonusMinutes = (await hasSignupBonusGrant(user.officeId)) ? 0 : promoBonusMinutes(cfg, plan);
+
+  // Access-only activation is a promo-window path: without bonus tokens there'd
+  // be no balance to practice on, so outside the window require starter tokens.
+  if (parsed.data.minutes === 0 && bonusMinutes <= 0) return error("Pick a starter token amount to activate.", 422);
 
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
   try {
-    const url = await createActivationCheckout({
+    const common = {
       officeId: user.officeId,
       stripeCustomerId: user.office?.stripeCustomerId,
       customerEmail: user.email,
-      minutes: parsed.data.minutes,
       plan,
-      discountPct,
       origin,
-    });
+      bonusMinutes,
+    };
+    const url = parsed.data.minutes === 0
+      ? await createAccessCheckout(common)
+      : await createActivationCheckout({ ...common, minutes: parsed.data.minutes, discountPct });
     return json({ url });
   } catch (e) {
     return error(e instanceof Error ? e.message : "Checkout failed", 502);

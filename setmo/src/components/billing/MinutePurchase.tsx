@@ -8,6 +8,8 @@ const SALES_EMAIL = "hello@growdental.ai,adam@growdental.ai";
 
 // Drag-slider token purchase. 1 min of live AI = 10 tokens. In activate mode the
 // admin also picks monthly vs annual prepay (2 months free + a bigger token discount).
+// A live sign-up promo makes activation access-only by default (the bonus tokens
+// are the starter balance) with starter tokens as an optional add-on.
 export function MinutePurchase({
   defaultPeople = 1,
   cfg = DEFAULT_PRICING,
@@ -17,6 +19,7 @@ export function MinutePurchase({
   discountPct = 0,
   monthlyDiscountPct = 0,
   annualDiscountPct = 0,
+  promo = null,
 }: {
   defaultPeople?: number;
   cfg?: PricingConfig;
@@ -26,12 +29,15 @@ export function MinutePurchase({
   discountPct?: number; // topup: the account's current token discount
   monthlyDiscountPct?: number; // activate: token discount if they pick monthly
   annualDiscountPct?: number; // activate: token discount if they pick annual
+  promo?: { monthlyTokens: number; annualTokens: number; endsAt: string } | null; // activate: sign-up bonus offer
 }) {
   const isActivate = mode === "activate";
+  const hasPromo = isActivate && !!promo;
   const [people, setPeople] = useState(String(defaultPeople));
   const recommended = useMemo(() => recommendTokens(Number(people) || 1, cfg), [people, cfg]);
   const [tokens, setTokens] = useState(recommended);
   const [plan, setPlan] = useState<"monthly" | "annual">("monthly");
+  const [withTokens, setWithTokens] = useState(!hasPromo); // promo: start access-only
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -39,8 +45,13 @@ export function MinutePurchase({
   const MAX_T = maxTokens(cfg);
   const effDiscount = isActivate ? (plan === "annual" ? annualDiscountPct : monthlyDiscountPct) : discountPct;
   const quote = tokenQuote(tokens, cfg, effDiscount);
+  const bonusTokens = hasPromo ? (plan === "annual" ? promo!.annualTokens : promo!.monthlyTokens) : 0;
+  const bonusHours = Math.round(bonusTokens / 600); // 600 tokens ≈ 1 hour of live AI
+  // Access-only checkout only exists while the SELECTED plan carries a bonus —
+  // without one there'd be no starting balance (and the server 422s minutes: 0).
+  const buyingTokens = !isActivate || withTokens || bonusTokens === 0;
   const accessCharge = plan === "annual" ? annualAccess : accessMonthly;
-  const todayTotal = quote.total + (isActivate ? accessCharge : 0);
+  const todayTotal = (buyingTokens ? quote.total : 0) + (isActivate ? accessCharge : 0);
 
   function applyRecommended() {
     setTokens(recommendTokens(Number(people) || 1, cfg));
@@ -53,7 +64,7 @@ export function MinutePurchase({
       const res = await fetch(isActivate ? "/api/office/activate/checkout" : "/api/office/minutes/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ minutes: tokensToMinutes(quote.tokens), ...(isActivate ? { plan } : {}) }),
+        body: JSON.stringify({ minutes: buyingTokens ? tokensToMinutes(quote.tokens) : 0, ...(isActivate ? { plan } : {}) }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j.url) { setErr(j.error ?? "Couldn't start checkout"); return; }
@@ -68,9 +79,29 @@ export function MinutePurchase({
       <h3 style={{ fontSize: 18, marginBottom: 4 }}>{isActivate ? "Practice Access & tokens" : "Buy tokens"}</h3>
       <p className="muted" style={{ fontSize: 12.5, marginBottom: 16 }}>
         {isActivate
-          ? "Go live today: Practice Access plus your starter tokens, in one payment. Tokens power every practice & coaching call (10 tokens ≈ 1 min of live AI), roll over, and never expire."
+          ? hasPromo
+            ? "Go live today: activate Practice Access and practice on your free sign-up tokens. Tokens power every practice & coaching call (10 tokens ≈ 1 min of live AI), roll over, and never expire."
+            : "Go live today: Practice Access plus your starter tokens, in one payment. Tokens power every practice & coaching call (10 tokens ≈ 1 min of live AI), roll over, and never expire."
           : "Tokens power every practice & coaching call (10 tokens ≈ 1 minute of live AI). They roll over and never expire. Bigger balances earn a better rate."}
       </p>
+
+      {/* sign-up promo (activation only) — list only plans that carry a bonus */}
+      {hasPromo && (
+        <div className="banner mint" style={{ marginBottom: 16, fontSize: 13 }}>
+          <b>Sign-up offer:</b> activate by <b>{promo!.endsAt}</b> and get{" "}
+          {promo!.monthlyTokens > 0 && (
+            <>
+              <b>{promo!.monthlyTokens.toLocaleString()} free tokens</b> ({Math.round(promo!.monthlyTokens / 600)} hours) on monthly
+              {promo!.annualTokens > 0 ? " — or " : "."}
+            </>
+          )}
+          {promo!.annualTokens > 0 && (
+            <>
+              <b>{promo!.annualTokens.toLocaleString()}{promo!.monthlyTokens > 0 ? "" : " free tokens"}</b> ({Math.round(promo!.annualTokens / 600)} hours) on annual.
+            </>
+          )}
+        </div>
+      )}
 
       {/* plan toggle (activation only) */}
       {isActivate && (
@@ -91,6 +122,17 @@ export function MinutePurchase({
         </div>
       )}
 
+      {/* starter tokens opt-in (promo activation starts access-only) — only when
+          the selected plan actually carries a bonus to practice on */}
+      {hasPromo && bonusTokens > 0 && (
+        <label style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16, fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>
+          <input type="checkbox" checked={withTokens} onChange={(e) => setWithTokens(e.target.checked)} style={{ width: 16, height: 16, accentColor: "var(--purple)" }} />
+          Also buy starter tokens today{effDiscount > 0 ? ` (${effDiscount}% off)` : ""}
+          <span className="muted" style={{ fontWeight: 400 }}>— optional, your free hours come either way</span>
+        </label>
+      )}
+
+      {buyingTokens && (<>
       {/* recommendation input */}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -137,11 +179,17 @@ export function MinutePurchase({
         </span>
         <span className="muted" style={{ position: "absolute", right: 0, fontSize: 11 }}>{MAX_T.toLocaleString()}</span>
       </div>
+      </>)}
 
       {isActivate && (
         <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13, padding: "12px 0", borderTop: "1px solid var(--line-soft)", marginBottom: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span className="muted">Practice Access ({plan === "annual" ? "first year" : "first month"})</span><b>${accessCharge.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}><span className="muted">{quote.tokens.toLocaleString()} starter tokens{effDiscount > 0 ? ` (${effDiscount}% off)` : ""}</span><b>${quote.total.toLocaleString()}</b></div>
+          {buyingTokens && (
+            <div style={{ display: "flex", justifyContent: "space-between" }}><span className="muted">{quote.tokens.toLocaleString()} starter tokens{effDiscount > 0 ? ` (${effDiscount}% off)` : ""}</span><b>${quote.total.toLocaleString()}</b></div>
+          )}
+          {bonusTokens > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between" }}><span className="muted">{bonusTokens.toLocaleString()} bonus tokens ({bonusHours} free hours) — sign-up offer</span><b className="mint-text">Free</b></div>
+          )}
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14.5, marginTop: 4 }}><span style={{ fontWeight: 700 }}>Due today</span><b className="mint-text" style={{ fontFamily: "var(--font-lato)" }}>${todayTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></div>
           <div className="muted" style={{ fontSize: 11.5 }}>Then {plan === "annual" ? `$${annualAccess.toLocaleString()}/year` : `$${accessMonthly.toFixed(2)}/month`} for access. Buy more tokens anytime ({effDiscount}% off). Plus tax where applicable.</div>
         </div>

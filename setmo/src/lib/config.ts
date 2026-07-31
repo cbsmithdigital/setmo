@@ -13,6 +13,9 @@ export type PlatformConfig = PricingConfig & {
   alertLowBalanceDays: number;
   alertZeroUsageDays: number;
   alertLiabilityCeiling: number; // dollars
+  promoBonusMonthlyMin: number; // sign-up promo: bonus minutes granted on monthly activation (0 = off)
+  promoBonusAnnualMin: number; // sign-up promo: bonus minutes granted on annual activation
+  promoEndsAt: Date | null; // sign-up promo cutoff — payment before this instant earns the bonus
 };
 
 export const DEFAULT_CONFIG: PlatformConfig = {
@@ -25,6 +28,9 @@ export const DEFAULT_CONFIG: PlatformConfig = {
   alertLowBalanceDays: 14,
   alertZeroUsageDays: 14,
   alertLiabilityCeiling: 10000,
+  promoBonusMonthlyMin: 180, // 3 free hours (1,800 tokens)
+  promoBonusAnnualMin: 540, // 9 free hours (5,400 tokens)
+  promoEndsAt: new Date("2026-08-16T07:00:00Z"), // end of Aug 15, US Pacific
 };
 
 // Cached per request.
@@ -47,11 +53,23 @@ export const getPlatformConfig = cache(async (): Promise<PlatformConfig> => {
       alertLowBalanceDays: row.alertLowBalanceDays,
       alertZeroUsageDays: row.alertZeroUsageDays,
       alertLiabilityCeiling: row.alertLiabilityCeilingCents / 100,
+      promoBonusMonthlyMin: row.promoBonusMonthlyMin,
+      promoBonusAnnualMin: row.promoBonusAnnualMin,
+      // No stored date falls back to the code default; end the promo early by
+      // setting the bonus minutes to 0 (or an earlier date).
+      promoEndsAt: row.promoEndsAt ?? DEFAULT_CONFIG.promoEndsAt,
     };
   } catch {
     return DEFAULT_CONFIG;
   }
 });
+
+/** Sign-up promo: bonus minutes earned by activating access (payment completed)
+ *  before `promoEndsAt`. 0 when the promo is off or has ended. */
+export function promoBonusMinutes(cfg: PlatformConfig, plan: "monthly" | "annual", at: Date = new Date()): number {
+  if (!cfg.promoEndsAt || at >= cfg.promoEndsAt) return 0;
+  return Math.max(0, plan === "annual" ? cfg.promoBonusAnnualMin : cfg.promoBonusMonthlyMin);
+}
 
 /** The PricingConfig slice (for pricing.ts functions + client sliders). */
 export async function getPricingConfig(): Promise<PricingConfig> {
@@ -74,6 +92,9 @@ export type ConfigPatch = {
   alertLowBalanceDays?: number;
   alertZeroUsageDays?: number;
   alertLiabilityCeilingCents?: number;
+  promoBonusMonthlyMin?: number;
+  promoBonusAnnualMin?: number;
+  promoEndsAt?: Date | null;
 };
 
 export async function savePlatformConfig(patch: ConfigPatch, updatedById: string) {

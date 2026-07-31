@@ -31,6 +31,32 @@ export async function addMinutes(officeId: string, minutes: number, stripePaymen
   });
 }
 
+const signupBonusRef = (officeId: string) => `promo:signup:${officeId}`;
+
+/** Whether the office already received its (one-per-office, ever) sign-up bonus. */
+export async function hasSignupBonusGrant(officeId: string): Promise<boolean> {
+  const row = await prisma.conversationBundle.findUnique({ where: { stripePaymentIntent: signupBonusRef(officeId) }, select: { id: true } });
+  return Boolean(row);
+}
+
+/** Sign-up-promo bonus minutes: a comp bundle ($0 cash, no commission) granted
+ *  when access is activated during the promo window. The fixed per-office ref
+ *  (unique column) makes it idempotent across webhook retries — including
+ *  concurrent duplicate deliveries — AND caps it at one grant per office, ever
+ *  (e.g. cancel → reactivate can't double-dip). */
+export async function grantSignupBonusMinutes(officeId: string, minutes: number) {
+  if (minutes <= 0) return null;
+  const ref = signupBonusRef(officeId);
+  try {
+    return await prisma.conversationBundle.create({
+      data: { officeId, minutesPurchased: minutes, minutesRemaining: minutes, hours: Math.round(minutes / 60), amountCents: 0, stripePaymentIntent: ref },
+    });
+  } catch (e) {
+    if ((e as { code?: string })?.code === "P2002") return null; // already granted
+    throw e;
+  }
+}
+
 /** Account's token-purchase discount tier: annual 15% / monthly 8% / none 0% (config-driven). */
 export async function accountTokenDiscountPct(officeId: string): Promise<number> {
   const { getPlatformConfig } = await import("@/lib/config");
@@ -53,9 +79,16 @@ const ALERT_100 = 100;
 const ALERT_60 = 60;
 const AUTO_TOPUP_AT = 25;
 
-/** Minutes in the office's most recent purchase — what auto top-up re-buys. */
+/** Minutes in the office's most recent PAID purchase — what auto top-up re-buys.
+ *  Comp bundles (promo bonuses, admin grants, credit payouts — amountCents 0)
+ *  are excluded so a free grant never becomes an off-session charge amount. */
 export async function lastPurchasedMinutes(officeId: string): Promise<number> {
-  const last = await prisma.conversationBundle.findFirst({ where: { officeId }, orderBy: { purchasedAt: "desc" }, select: { minutesPurchased: true } });
+  // null amountCents = legacy paid row (cashOf estimates those at list price too).
+  const last = await prisma.conversationBundle.findFirst({
+    where: { officeId, OR: [{ amountCents: null }, { amountCents: { gt: 0 } }] },
+    orderBy: { purchasedAt: "desc" },
+    select: { minutesPurchased: true },
+  });
   return last?.minutesPurchased ?? 0;
 }
 

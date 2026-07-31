@@ -1,7 +1,7 @@
 import type Stripe from "stripe";
 import { prisma } from "@/lib/db";
 import { constructWebhookEvent, getStripe } from "@/lib/stripe";
-import { addMinutes, addOrgTokens } from "@/lib/usage";
+import { addMinutes, addOrgTokens, grantSignupBonusMinutes } from "@/lib/usage";
 import { accrueCommission, markOfficeCommissionsEarned, clawbackOfficeCommissions } from "@/lib/partners";
 import { getPricingConfig } from "@/lib/config";
 import { captureError } from "@/lib/observability";
@@ -28,11 +28,16 @@ export async function POST(req: Request) {
     case "checkout.session.completed": {
       const session = event.data.object;
       const kind = session.metadata?.kind;
-      // "minutes" = standalone top-up; "activation" = combined access + starter minutes.
+      // "minutes" = standalone top-up; "activation" = combined access + starter minutes;
+      // "access" = access-only activation (sign-up promo grants ride its metadata).
       if ((kind === "minutes" || kind === "activation") && session.payment_status === "paid") {
         await applyMinutes(session);
       } else if (kind === "group_minutes" && session.payment_status === "paid") {
         await applyGroupTokens(session);
+      } else if (kind === "access" && session.payment_status === "paid") {
+        const officeId = session.metadata?.officeId;
+        const bonusMin = Number(session.metadata?.bonusMinutes ?? 0);
+        if (officeId && bonusMin > 0) await grantSignupBonusMinutes(officeId, bonusMin);
       }
       break;
     }
@@ -63,6 +68,14 @@ async function applyMinutes(session: Stripe.Checkout.Session) {
   const officeId = session.metadata?.officeId;
   const minutes = Number(session.metadata?.minutes ?? 0);
   if (!officeId || !minutes) return;
+
+  // Sign-up promo riding an activation checkout → comp bonus ($0, no commission).
+  // Granted BEFORE the paid-bundle dedupe below: the grant is idempotent on its
+  // own ref, so a Stripe retry after a partial failure still delivers it (after
+  // the paid bundle commits, retries short-circuit at the dedupe and would never
+  // reach a grant placed later).
+  const bonusMin = Number(session.metadata?.bonusMinutes ?? 0);
+  if (bonusMin > 0) await grantSignupBonusMinutes(officeId, bonusMin);
 
   const paymentRef = typeof session.payment_intent === "string" ? session.payment_intent : session.id;
   const existing = await prisma.conversationBundle.findFirst({ where: { stripePaymentIntent: paymentRef } });

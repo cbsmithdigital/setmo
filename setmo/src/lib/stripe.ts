@@ -33,18 +33,24 @@ export {
 } from "@/lib/pricing";
 export type { MinuteQuote } from "@/lib/pricing";
 
-/** Practice Access subscription — monthly ($44.95) or annual prepay (10× = 2 months free). */
+/** Practice Access subscription — monthly ($44.95) or annual prepay (10× = 2 months free).
+ *  `bonusMinutes` (sign-up promo) rides in session metadata; the webhook grants
+ *  the comp tokens once the first payment lands. */
 export async function createAccessCheckout(opts: {
   officeId: string;
   stripeCustomerId?: string | null;
   customerEmail?: string;
   origin: string;
   plan?: "monthly" | "annual";
+  bonusMinutes?: number;
 }): Promise<string> {
   const stripe = getStripe();
   const cfg = await getPricingConfig();
   const annual = opts.plan === "annual";
-  const meta = { kind: "access", officeId: opts.officeId, plan: annual ? "annual" : "monthly" };
+  const bonus = opts.bonusMinutes ?? 0;
+  const bonusNote = bonus > 0 ? ` Includes ${(bonus * 10).toLocaleString()} bonus tokens (${Math.round(bonus / 60)} free hours) — sign-up offer.` : "";
+  const subMeta = { kind: "access", officeId: opts.officeId, plan: annual ? "annual" : "monthly" };
+  const meta = bonus > 0 ? { ...subMeta, bonusMinutes: String(bonus) } : subMeta;
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     ...(opts.stripeCustomerId
@@ -64,12 +70,12 @@ export async function createAccessCheckout(opts: {
           recurring: { interval: annual ? "year" : "month" },
           tax_behavior: "exclusive",
           product_data: annual
-            ? { name: "SetMo — Practice Access (annual)", description: "Annual access per location — 2 months free. Unlimited users, all features." }
-            : { name: "SetMo — Practice Access", description: "Monthly access per location. Unlimited users, all features." },
+            ? { name: "SetMo — Practice Access (annual)", description: `Annual access per location — 2 months free. Unlimited users, all features.${bonusNote}` }
+            : { name: "SetMo — Practice Access", description: `Monthly access per location. Unlimited users, all features.${bonusNote}` },
         },
       },
     ],
-    subscription_data: { metadata: meta },
+    subscription_data: { metadata: subMeta },
     metadata: meta,
     success_url: `${opts.origin}/office/billing?access=success`,
     cancel_url: `${opts.origin}/office/billing?access=cancel`,
@@ -190,6 +196,7 @@ export async function createActivationCheckout(opts: {
   origin: string;
   plan?: "monthly" | "annual";
   discountPct?: number;
+  bonusMinutes?: number;
 }): Promise<string> {
   const stripe = getStripe();
   const cfg = await getPricingConfig();
@@ -197,8 +204,15 @@ export async function createActivationCheckout(opts: {
   const annual = opts.plan === "annual";
   const tokens = quote.minutes * 10;
   const tokenTotal = Math.round(quote.total * (1 - (opts.discountPct ?? 0) / 100));
+  const bonus = opts.bonusMinutes ?? 0;
   // session metadata drives token granting; subscription metadata drives access sync.
-  const meta = { kind: "activation", officeId: opts.officeId, minutes: String(quote.minutes), amountCents: String(tokenTotal * 100) };
+  const meta = {
+    kind: "activation",
+    officeId: opts.officeId,
+    minutes: String(quote.minutes),
+    amountCents: String(tokenTotal * 100),
+    ...(bonus > 0 ? { bonusMinutes: String(bonus) } : {}),
+  };
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     ...(opts.stripeCustomerId
@@ -230,7 +244,7 @@ export async function createActivationCheckout(opts: {
           tax_behavior: "exclusive",
           product_data: {
             name: `SetMo — ${tokens.toLocaleString()} tokens`,
-            description: `Starter token balance (≈ ${quote.minutes.toLocaleString()} min). Roll over, never expire.${opts.discountPct ? ` ${opts.discountPct}% account discount applied.` : ""}`,
+            description: `Starter token balance (≈ ${quote.minutes.toLocaleString()} min). Roll over, never expire.${opts.discountPct ? ` ${opts.discountPct}% account discount applied.` : ""}${bonus > 0 ? ` Plus ${(bonus * 10).toLocaleString()} bonus tokens (${Math.round(bonus / 60)} free hours) — sign-up offer.` : ""}`,
           },
         },
       },

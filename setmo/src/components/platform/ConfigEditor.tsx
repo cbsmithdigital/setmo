@@ -35,6 +35,10 @@ export function ConfigEditor({ config }: { config: PlatformConfig }) {
     alertLowBalanceDays: String(config.alertLowBalanceDays),
     alertZeroUsageDays: String(config.alertZeroUsageDays),
     alertLiabilityCeiling: String(config.alertLiabilityCeiling),
+    promoBonusMonthlyMin: String(config.promoBonusMonthlyMin),
+    promoBonusAnnualMin: String(config.promoBonusAnnualMin),
+    // Cutoff instant → the last live day (US Pacific) as YYYY-MM-DD for editing.
+    promoEndsAt: config.promoEndsAt ? new Date(new Date(config.promoEndsAt).getTime() - 1).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" }) : "",
   });
   const [anchors, setAnchors] = useState(config.anchors.map(([m, p]) => ({ m: String(m), p: String(p) })));
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -60,6 +64,9 @@ export function ConfigEditor({ config }: { config: PlatformConfig }) {
       alertLowBalanceDays: Math.round(Number(f.alertLowBalanceDays)),
       alertZeroUsageDays: Math.round(Number(f.alertZeroUsageDays)),
       alertLiabilityCeiling: Number(f.alertLiabilityCeiling),
+      promoBonusMonthlyMin: Math.round(Number(f.promoBonusMonthlyMin)),
+      promoBonusAnnualMin: Math.round(Number(f.promoBonusAnnualMin)),
+      promoEndsAt: f.promoEndsAt.trim() || null,
       anchors: anchors.map((r) => [Number(r.m), Number(r.p)]).filter(([m, p]) => m > 0 && p > 0),
     };
     const res = await fetch("/api/platform/config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -86,6 +93,19 @@ export function ConfigEditor({ config }: { config: PlatformConfig }) {
         <div className="grid g-2" style={{ gap: 16 }}>
           <NumField label="Monthly plan token discount" suffix="%" value={f.monthlyTokenDiscountPct} onChange={set("monthlyTokenDiscountPct")} />
           <NumField label="Annual plan token discount" suffix="%" value={f.annualTokenDiscountPct} onChange={set("annualTokenDiscountPct")} />
+        </div>
+      </div>
+
+      <div className="card card-pad">
+        <h3 style={{ fontSize: 17, marginBottom: 4 }}>Sign-up promo (free hours)</h3>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
+          Bonus tokens granted once per office when access is activated (paid) on or before the end date — 60 min = 600 tokens = 1 hour.
+          During the promo, activation works access-only (no starter-token minimum). Set both bonuses to 0 to switch the promo off.
+        </p>
+        <div className="grid g-3" style={{ gap: 16 }}>
+          <NumField label="Monthly activation bonus" suffix="min" value={f.promoBonusMonthlyMin} onChange={set("promoBonusMonthlyMin")} />
+          <NumField label="Annual activation bonus" suffix="min" value={f.promoBonusAnnualMin} onChange={set("promoBonusAnnualMin")} />
+          <NumField label="Last day (US Pacific)" suffix="YYYY-MM-DD" value={f.promoEndsAt} onChange={set("promoEndsAt")} />
         </div>
       </div>
 

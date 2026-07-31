@@ -19,7 +19,24 @@ const Body = z.object({
   alertLowBalanceDays: z.number().int().min(0).max(365).optional(),
   alertZeroUsageDays: z.number().int().min(0).max(365).optional(),
   alertLiabilityCeiling: z.number().min(0).optional(),
+  promoBonusMonthlyMin: z.number().int().min(0).max(100000).optional(),
+  promoBonusAnnualMin: z.number().int().min(0).max(100000).optional(),
+  // Last live day (US Pacific). Shape + real-calendar-day check: "2026-13-01"
+  // or "2026-02-30" would otherwise reach Prisma as Invalid/rolled-over Dates.
+  promoEndsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isCalendarDay, "Not a real calendar date").nullable().optional(),
 });
+
+function isCalendarDay(s: string): boolean {
+  const [y, m, d] = s.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+}
+
+/** "2026-08-15" → the first instant of Aug 16 in US Pacific (exclusive cutoff). */
+function nextDayPacific(day: string): Date {
+  const end = new Date(`${day}T23:59:59-07:00`); // PDT; a promo deadline doesn't need DST precision
+  return new Date(end.getTime() + 1000);
+}
 
 // POST /api/platform/config — edit platform configuration (Super-Admin only).
 export async function POST(req: Request) {
@@ -44,6 +61,12 @@ export async function POST(req: Request) {
     ...(b.alertLowBalanceDays != null ? { alertLowBalanceDays: b.alertLowBalanceDays } : {}),
     ...(b.alertZeroUsageDays != null ? { alertZeroUsageDays: b.alertZeroUsageDays } : {}),
     ...(b.alertLiabilityCeiling != null ? { alertLiabilityCeilingCents: Math.round(b.alertLiabilityCeiling * 100) } : {}),
+    ...(b.promoBonusMonthlyMin != null ? { promoBonusMonthlyMin: b.promoBonusMonthlyMin } : {}),
+    ...(b.promoBonusAnnualMin != null ? { promoBonusAnnualMin: b.promoBonusAnnualMin } : {}),
+    // The stored cutoff is exclusive: start of the day AFTER the last live day, US
+    // Pacific. Clearing the date falls back to the code default — end the promo
+    // early by zeroing the bonuses or setting a past date.
+    ...(b.promoEndsAt !== undefined ? { promoEndsAt: b.promoEndsAt ? nextDayPacific(b.promoEndsAt) : null } : {}),
   };
 
   await savePlatformConfig(patch, actor.id);

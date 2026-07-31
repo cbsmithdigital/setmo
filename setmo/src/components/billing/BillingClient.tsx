@@ -20,6 +20,7 @@ type BillingData = {
   topUpMinutes: number;
   nextInvoiceDate: string | null;
   invoices: { date: string; desc: string; amount: string; status: string; url: string | null }[];
+  promo: { monthlyTokens: number; annualTokens: number; endsAt: string } | null;
 };
 
 export function BillingClient({
@@ -107,7 +108,7 @@ export function BillingClient({
       <div className="content">
         {activateStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>You&apos;re live! Practice Access is active and your starter tokens are being added — give it a few seconds.</div>}
         {activateStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Activation cancelled — no charge was made.</div>}
-        {accessStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Practice Access is active — thanks! Manage it anytime here.</div>}
+        {accessStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Practice Access is active — thanks! Any sign-up bonus tokens land in your balance within a few seconds.</div>}
         {accessStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Checkout cancelled — no charge was made.</div>}
         {minutesStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Payment received — your tokens will be added within a few seconds.</div>}
         {minutesStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Checkout cancelled — no charge was made.</div>}
@@ -197,6 +198,7 @@ export function BillingClient({
             discountPct={data.accountDiscountPct}
             monthlyDiscountPct={data.monthlyDiscountPct}
             annualDiscountPct={data.annualDiscountPct}
+            promo={data.promo}
           />
         </div>
 
