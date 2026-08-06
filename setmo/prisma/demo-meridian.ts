@@ -8,7 +8,7 @@ config({ path: ".env.local" });
 config();
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { DEMO_WINS, DEMO_MISSES, DEMO_PHRASES, DEMO_NEXT_SCENARIO, demoTranscriptPayload } from "./demo-content";
+import { pickCall, transcriptPayload } from "./demo-content";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
 
@@ -23,11 +23,6 @@ const SHAPE: Record<string, number> = {
   rapport: 0.5, listening: 0.3, discovery: -0.1, painpoint: -0.5,
   objection: 0.0, confidence: 0.2, value: -0.7, closing: 0.3,
 };
-
-const PERSONAS = [
-  "Anxious first-timer", "Price-driven, guarded", "Warm but busy", "Skeptical comparison shopper",
-  "Spouse-needs-to-approve", "Researching for a parent", "Been putting it off for years", "Insurance-focused",
-];
 
 type SetterCfg = { email: string; first: string; last: string; target: number; improve: number };
 type OfficeCfg = {
@@ -132,24 +127,26 @@ async function main() {
           : new Date(now.getTime() - (5 + (fromNewest - 4) * 6) * 86400_000);
         const dur = 360 + j * 35 + (j % 2) * 20;
         const booked = overall >= 4.0 ? j % 5 !== 0 : j % 3 === 0;
+        // A band-appropriate real-looking call (varied transcript + coaching).
+        const call = pickCall(overall, j);
 
         const session = await prisma.session.create({
           data: {
             setterId: setter.id, officeId: office.id, serviceType: "IMPLANT", agentId: implant?.id,
             kind: "PRACTICE", status: "SCORED", difficulty: "ADAPTIVE",
-            personaSeed: { persona: PERSONAS[j % PERSONAS.length] },
+            personaSeed: { persona: call.persona },
             startedAt, completedAt: new Date(startedAt.getTime() + dur * 1000), durationSeconds: dur,
           },
         });
         const evaluation = await prisma.evaluation.create({
           data: {
             sessionId: session.id, overallScore: overall.toFixed(1),
-            narrative: "Steady rep — momentum building.",
-            wins: DEMO_WINS,
-            misses: DEMO_MISSES,
-            replacementPhrases: DEMO_PHRASES,
-            recommendedNextScenario: DEMO_NEXT_SCENARIO,
-            rawPayload: demoTranscriptPayload(dur),
+            narrative: call.narrative,
+            wins: call.wins,
+            misses: call.misses,
+            replacementPhrases: call.phrases,
+            recommendedNextScenario: call.nextScenario,
+            rawPayload: transcriptPayload(call, dur),
             booked, scoredAt: new Date(startedAt.getTime() + dur * 1000 + 5000),
           },
         });
@@ -161,6 +158,39 @@ async function main() {
       console.log(`  ${sc.first} ${sc.last} @ ${oc.office}: ${SESSIONS_PER_SETTER} sessions → current ${avg(current)}`);
     }
   }
+
+  // Closed-loop training impact: a few Brightwork setters completed a training a
+  // couple weeks ago on a lagging skill — so the office "Training impact" card
+  // (and manager coach) show measurable movement since. completedAt < the recent
+  // calls, baseline below current, so getTrainingImpact reads a positive delta.
+  // Baselines sit clearly below each setter's current skill level so the measured
+  // delta reads as a positive "the training moved it" story.
+  const impactPicks = [
+    { email: "theo@brightworkdental.com", skill: "painpoint", baseline: 2.4 },
+    { email: "priya@brightworkdental.com", skill: "value", baseline: 2.0 },
+    { email: "maya@brightworkdental.com", skill: "closing", baseline: 3.7 },
+  ];
+  const completedAt = new Date(now.getTime() - 12 * 86400_000);
+  const baselineAt = new Date(now.getTime() - 26 * 86400_000);
+  let impactCount = 0;
+  for (const p of impactPicks) {
+    const setter = await prisma.user.findFirst({ where: { email: p.email }, select: { id: true } });
+    if (!setter) continue;
+    const training =
+      (await prisma.training.findFirst({ where: { targetSkillKey: p.skill, status: "PUBLISHED" } })) ??
+      (await prisma.training.findFirst({ where: { status: "PUBLISHED" } }));
+    if (!training) continue;
+    await prisma.recommendation.deleteMany({ where: { setterId: setter.id, skillKey: p.skill } });
+    await prisma.recommendation.create({
+      data: {
+        setterId: setter.id, trainingId: training.id, skillKey: p.skill,
+        reason: `${p.skill} was lagging — assigned "${training.title}"`,
+        status: "COMPLETED", baselineScore: p.baseline, baselineAt, completedAt,
+      },
+    });
+    impactCount++;
+  }
+  console.log(`  training-impact recommendations: ${impactCount}`);
 
   // Reported outcomes for the current month — a realistic mix so the funnel shows
   // "Actual" vs "Projected" side by side. Brightwork reports leads+consults only

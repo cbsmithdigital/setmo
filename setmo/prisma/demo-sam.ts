@@ -7,7 +7,7 @@ config({ path: ".env.local" });
 config();
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { DEMO_WINS, DEMO_MISSES, DEMO_PHRASES, DEMO_NEXT_SCENARIO, demoTranscriptPayload } from "./demo-content";
+import { pickCall, transcriptPayload } from "./demo-content";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
 
@@ -27,11 +27,6 @@ const IMPROVE: Record<string, number> = {
 const KEYS = Object.keys(CURRENT);
 const avg = (m: Record<string, number>) => Number((KEYS.reduce((s, k) => s + m[k], 0) / KEYS.length).toFixed(1));
 const clamp = (n: number) => Math.max(1, Math.min(5, Number(n.toFixed(1))));
-
-const PERSONAS = [
-  "Anxious first-timer", "Price-driven, guarded", "Warm but busy", "Skeptical comparison shopper",
-  "Spouse-needs-to-approve", "Researching for a parent", "Been putting it off for years",
-];
 
 async function main() {
   const sam = await prisma.user.findFirst({ where: { email: "sam@brightworkdental.com" } });
@@ -61,40 +56,43 @@ async function main() {
   // Clear Sam's other practice sessions (keep the showcase + any COACH sessions).
   await prisma.session.deleteMany({ where: { setterId: sam.id, kind: "PRACTICE", id: { not: showcase.id } } });
 
-  // Backfill 7 rising sessions before the showcase.
+  // Backfill a rising history before the showcase (richer trend for the demo).
   const implant = await prisma.agent.findUnique({ where: { serviceType: "IMPLANT" } });
-  for (let j = 0; j < 7; j++) {
-    const frac = (j + 1) / 8;
+  const BACKFILL = 11;
+  for (let j = 0; j < BACKFILL; j++) {
+    const frac = (j + 1) / (BACKFILL + 1);
     const scores: Record<string, number> = {};
     for (const k of KEYS) {
       const start = CURRENT[k] - IMPROVE[k];
       scores[k] = clamp(start + (CURRENT[k] - start) * frac);
     }
     const overall = avg(scores);
-    // Keep the most recent few backfills in the current month too; spread the
-    // rest back weeks for a rising trend + prior-period deltas.
-    const fromNewest = 6 - j; // 0 = most recent backfill (showcase is newer still)
-    const startedAt = fromNewest < 3
+    // Keep the most recent few in the current month; spread the rest back ~35 days
+    // for a rising trend + prior-period deltas.
+    const fromNewest = BACKFILL - 1 - j; // 0 = most recent backfill (showcase is newer still)
+    const startedAt = fromNewest < 4
       ? new Date(anchor.getTime() - (fromNewest * 2 + 2) * 3600_000)
-      : new Date(anchor.getTime() - (fromNewest - 2) * 6 * 86400_000);
-    const dur = 480 + j * 25;
+      : new Date(anchor.getTime() - (fromNewest - 3) * 5 * 86400_000);
+    const dur = 360 + j * 22 + (j % 2) * 15;
+    // A band-appropriate real-looking call for this rep (varied transcript + coaching).
+    const call = pickCall(overall, j);
     const session = await prisma.session.create({
       data: {
         setterId: sam.id, officeId: sam.officeId, serviceType: "IMPLANT", agentId: implant?.id,
         kind: "PRACTICE", status: "SCORED", difficulty: "ADAPTIVE",
-        personaSeed: { persona: PERSONAS[j % PERSONAS.length] },
+        personaSeed: { persona: call.persona },
         startedAt, completedAt: new Date(startedAt.getTime() + dur * 1000), durationSeconds: dur,
       },
     });
     const evaluation = await prisma.evaluation.create({
       data: {
         sessionId: session.id, overallScore: overall.toFixed(1),
-        narrative: "Solid rep — momentum building, especially on objections.",
-        wins: DEMO_WINS,
-        misses: DEMO_MISSES,
-        replacementPhrases: DEMO_PHRASES,
-        recommendedNextScenario: DEMO_NEXT_SCENARIO,
-        rawPayload: demoTranscriptPayload(dur),
+        narrative: call.narrative,
+        wins: call.wins,
+        misses: call.misses,
+        replacementPhrases: call.phrases,
+        recommendedNextScenario: call.nextScenario,
+        rawPayload: transcriptPayload(call, dur),
         scoredAt: new Date(startedAt.getTime() + dur * 1000 + 5000),
       },
     });
