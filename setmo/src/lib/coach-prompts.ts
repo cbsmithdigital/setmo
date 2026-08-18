@@ -207,6 +207,62 @@ Start by orienting ${first} to the one or two portfolio moves that matter most r
 }
 
 // ---------------------------------------------------------------------------
+// CALL-CENTER COACH (Claude) — a coaching copilot for a call-center manager
+// (senior = whole center; floor = one pod). Agents are shared across many
+// practices, so this is AGENT-centric: who to develop, on which skill, and
+// whether a weak skill is center-wide (a training-playbook fix) or one agent.
+// ---------------------------------------------------------------------------
+
+const CALLCENTER_PERSONA = `You are Setty, SetMo's coaching copilot for a DENTAL CALL-CENTER manager whose phone agents practice appointment-setting for many client practices. Think like a sharp contact-center performance coach. Your job: develop the agents.
+
+You can:
+- DIAGNOSE: read the agent data and surface who needs coaching and on what, and whether a weak skill is center-wide (a training/playbook/QA fix) or specific to one agent or account.
+- RECOMMEND: propose concrete coaching moves — who to work with, which skill, what to drill this week, which account an agent is weak on.
+- DRAFT: write the manager's 1:1 notes, a team-huddle message, or a QA/coaching plan — lead with a genuine win, name the gap, give a concrete next step.
+
+Agents call for MULTIPLE practices, so watch for an agent strong overall but weak on a specific account. Be concise and decisive; prioritize a couple of high-leverage moves. Use the real agent names and numbers. Do NOT fabricate booking/revenue outcomes you don't have.`;
+
+export function callCenterCoachSystem(grounding: string): string {
+  return `${CALLCENTER_PERSONA}\n\n${grounding}`;
+}
+
+type CallCenterGrounding = {
+  scopeName: string; // call-center name (senior) or pod name (floor)
+  senior: boolean;
+  ccAvg: number;
+  activeAgents: number;
+  totalAgents: number;
+  agents: { name: string; podName: string; overall: number; sessions: number; officeCount: number; weakSkill: string | null; status: string }[];
+  offices: { name: string; avg: number; agents: number }[];
+  heatmap: { name: string; avg: number }[];
+  attention: string[];
+};
+
+export function coachCallCenterGrounding(first: string, g: CallCenterGrounding): string {
+  const agents = g.agents.length
+    ? g.agents.map((a) => `- ${a.name}${g.senior && a.podName ? ` [${a.podName}]` : ""}: avg ${a.overall ? a.overall.toFixed(1) : "—"}/5, ${a.sessions} reps across ${a.officeCount} office${a.officeCount === 1 ? "" : "s"}, status ${a.status}${a.weakSkill ? `, focus: ${a.weakSkill}` : ""}`).join("\n")
+    : "- No agents have practiced yet.";
+  const offices = g.offices.length ? g.offices.map((o) => `- ${o.name}: ${o.avg ? o.avg.toFixed(1) : "—"}/5 across ${o.agents} agent${o.agents === 1 ? "" : "s"}`).join("\n") : "- None yet.";
+  const heat = g.heatmap.length ? g.heatmap.map((h) => `- ${h.name}: ${h.avg.toFixed(1)}/5`).join("\n") : "- Not enough data yet.";
+
+  return `You are coaching ${first}, ${g.senior ? `who runs ${g.scopeName} (all pods)` : `a floor manager of ${g.scopeName}`}.
+
+SNAPSHOT: avg ${g.ccAvg.toFixed(1)}/5 · ${g.activeAgents}/${g.totalAgents} agents active
+
+AGENTS:
+${agents}
+
+SERVED OFFICES (how agents do per account):
+${offices}
+
+SKILL HEATMAP (low everywhere = a center-wide training/playbook gap; low for one agent = individual coaching):
+${heat}
+${g.attention.length ? `\nAGENTS NEEDING ATTENTION: ${g.attention.join(", ")}.` : ""}
+
+Start by orienting ${first} to the one or two coaching moves that matter most right now.`;
+}
+
+// ---------------------------------------------------------------------------
 // VOICE COACH (ElevenLabs — sent as a system-prompt override)
 // ---------------------------------------------------------------------------
 

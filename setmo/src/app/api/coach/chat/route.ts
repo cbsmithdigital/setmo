@@ -1,10 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
+import { getCurrentUser, getActiveRole, isManagerRole, isCallCenterRole } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
 import { getOfficeCoachContext } from "@/lib/office";
 import { getGroupCoachContext } from "@/lib/group";
+import { getCallCenterOverview, getPodOverview } from "@/lib/callcenter";
 import {
   coachChatSystem,
   coachGroundingFromCall,
@@ -13,6 +14,8 @@ import {
   coachAdminGrounding,
   groupCoachSystem,
   coachGroupGrounding,
+  callCenterCoachSystem,
+  coachCallCenterGrounding,
 } from "@/lib/coach-prompts";
 import { error, json } from "@/lib/api";
 
@@ -62,6 +65,9 @@ export async function POST(req: Request) {
         });
         return json({ reply: textOf(res), actions: [] });
       }
+    }
+    if (isCallCenterRole(activeRole) && user.organizationId) {
+      return await callCenterChat(first, activeRole, user.organizationId, user.callCenterPodId ?? null, apiMessages);
     }
     if (activeRole === "GROUP_ADMIN" && user.organizationId) {
       return await groupChat(first, user.organizationId, apiMessages);
@@ -120,6 +126,37 @@ async function groupChat(
       heatmap: g.heatmap.map((h) => ({ name: h.name, avg: h.avg })),
       topPerformers: g.topPerformers,
       attention: g.attention.map((o) => ({ name: o.name, status: o.status })),
+    })
+  );
+
+  const client = new Anthropic();
+  const res = await client.messages.create({ model: MODEL, max_tokens: 1500, system, messages: apiMessages });
+  return json({ reply: textOf(res), actions: [] });
+}
+
+// ---- Call-center coach (agent development; senior = center, floor = pod) ----
+async function callCenterChat(
+  first: string,
+  activeRole: string,
+  orgId: string,
+  podId: string | null,
+  apiMessages: { role: "user" | "assistant"; content: string }[]
+) {
+  const senior = activeRole === "CALL_CENTER_ADMIN";
+  const data = senior ? await getCallCenterOverview(orgId) : podId ? await getPodOverview(podId) : null;
+  if (!data) return json({ reply: "Your call-center account isn't set up yet.", actions: [] });
+
+  const system = callCenterCoachSystem(
+    coachCallCenterGrounding(first, {
+      scopeName: data.name,
+      senior,
+      ccAvg: data.ccAvg,
+      activeAgents: data.activeAgents,
+      totalAgents: data.totalAgents,
+      agents: data.agents.map((a) => ({ name: a.name, podName: a.podName, overall: a.overall, sessions: a.sessions, officeCount: a.officeCount, weakSkill: a.weakSkill, status: a.status })),
+      offices: data.offices.map((o) => ({ name: o.name, avg: o.avg, agents: o.agents })),
+      heatmap: data.heatmap.map((h) => ({ name: h.name, avg: h.avg })),
+      attention: data.attention,
     })
   );
 

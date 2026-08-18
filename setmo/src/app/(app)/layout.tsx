@@ -19,6 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Sidebar
           role={activeRole}
           roles={user.roles}
+          isAgent={Boolean(user.callCenterPodId) && activeRole === "SETTER"}
           name={fullName(user.firstName, user.lastName)}
           roleLabel={ROLE_LABEL[activeRole]}
           initials={initialsOf(user.firstName, user.lastName)}

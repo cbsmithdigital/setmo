@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { requireUser, getActiveRole, isManagerRole } from "@/lib/auth";
+import { requireUser, getActiveRole, isManagerRole, isCallCenterRole } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
 import { getOfficeOverview } from "@/lib/office";
 import { getGroupOverview } from "@/lib/group";
+import { getCallCenterOverview, getPodOverview } from "@/lib/callcenter";
 import { getOrgCoachBalance } from "@/lib/usage";
 import { CoachWorkspace } from "@/components/coach/CoachWorkspace";
 
@@ -47,6 +48,7 @@ export default async function CoachPage({
           </div>
           <CoachWorkspace
             sessionId={session}
+            voiceEnabled={!user.callCenterPodId}
             intro={`Let's work on ${r.isOwner ? "your" : `${r.setterName}'s`} ${r.persona} call (scored ${r.score.toFixed(1)}/5).`}
             welcome={welcome}
             starters={[
@@ -60,6 +62,39 @@ export default async function CoachPage({
       );
     }
     // call not viewable/scored yet — fall through to the role-based coach
+  }
+
+  // Call-center manager → agent-development coach (chat, agent-centric).
+  if (isCallCenterRole(activeRole) && user.organizationId) {
+    const senior = activeRole === "CALL_CENTER_ADMIN";
+    const data = senior ? await getCallCenterOverview(user.organizationId) : user.callCenterPodId ? await getPodOverview(user.callCenterPodId) : null;
+    const attn = data?.attention.slice(0, 2) ?? [];
+    const welcome = `Hey ${first} 👋 I'm Setty, your coaching copilot. ${senior ? "Across your call center" : "In your pod"}, agents are averaging ${data?.ccAvg.toFixed(1) ?? "—"}/5${
+      attn.length ? `, and ${attn.join(" & ")} could use a nudge` : ""
+    }. Want me to show where to coach this week?`;
+    return (
+      <>
+        <div className="topbar">
+          <div className="tb-greet">
+            <h1>Setty · Coaching copilot</h1>
+            <p>Develop your agents — who to coach, on which skill, and where a gap is center-wide vs. one agent.</p>
+          </div>
+          <div className="tb-right"><span className="chip purple">Setty</span></div>
+        </div>
+        <CoachWorkspace
+          variant="group"
+          voiceEnabled={false}
+          intro={`Hey ${first} — let's look at your agents.`}
+          welcome={welcome}
+          starters={[
+            "Which agents need coaching this week?",
+            "Is our weakest skill center-wide or one agent?",
+            "Any agent strong overall but weak on a specific account?",
+            "Draft a 1:1 coaching note for my lowest agent.",
+          ]}
+        />
+      </>
+    );
   }
 
   // Group / DSO leader → Portfolio strategist (chat, multi-office grounded).
@@ -150,7 +185,9 @@ export default async function CoachPage({
           <span className="chip purple">Setty</span>
         </div>
       </div>
-      <CoachWorkspace intro={`Hey ${first} — let's sharpen your next call.`} welcome={welcome} starters={GENERAL_STARTERS} />
+      {/* Call-center agents have no office pool, so voice coaching (metered on
+          the office pool) is disabled for them — chat coaching still works. */}
+      <CoachWorkspace intro={`Hey ${first} — let's sharpen your next call.`} welcome={welcome} starters={GENERAL_STARTERS} voiceEnabled={!user.callCenterPodId} />
     </>
   );
 }

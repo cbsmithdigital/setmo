@@ -62,12 +62,23 @@ const NAV_PARTNER: NavItem[] = [
   { href: "/partner/team", label: "Team & codes", icon: "team" },
 ];
 
-// Call-center managers (senior + floor). Agent-centric overview + billing.
-// (A manager-coach Setty variant lands in a later phase.)
+// Call-center managers (senior + floor). Agent-centric overview + coach + billing.
 const NAV_CALLCENTER: NavItem[] = [
   { href: "/callcenter", label: "Overview", icon: "building" },
+  { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
   { href: "/callcenter/billing", label: "Billing", icon: "card" },
   { href: "/resources", label: "Resources", icon: "book" },
+];
+
+// Call-center phone AGENTS are setters shared across offices (no single office),
+// so they get a focused nav — the office-scoped setter pages (Progress /
+// Leaderboard / Goals) don't apply to a multi-office agent.
+const NAV_AGENT: NavItem[] = [
+  { href: "/dashboard", label: "Home", icon: "home" },
+  { href: "/practice", label: "Practice", icon: "mic" },
+  { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
+  { href: "/trainings", label: "Trainings", icon: "book" },
+  { href: "/library", label: "Saved", icon: "doc" },
 ];
 
 const NAV_BY_ROLE: Record<string, NavItem[]> = {
@@ -88,16 +99,18 @@ export function Sidebar({
   roleLabel,
   initials,
   roles = [],
+  isAgent = false,
 }: {
   role: string;
   name: string;
   roleLabel: string;
   initials: string;
   roles?: string[];
+  isAgent?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const nav = NAV_BY_ROLE[role] ?? NAV_SETTER;
+  const nav = isAgent ? NAV_AGENT : NAV_BY_ROLE[role] ?? NAV_SETTER;
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
 
