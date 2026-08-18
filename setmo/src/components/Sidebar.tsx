@@ -53,6 +53,7 @@ const NAV_PLATFORM: NavItem[] = [
 // Super-Admin gets config + admin management on top of the shared platform nav.
 const NAV_PLATFORM_SUPER: NavItem[] = [
   ...NAV_PLATFORM,
+  { href: "/platform/callcenter", label: "Call centers", icon: "building" },
   { href: "/platform/config", label: "Configuration", icon: "gear" },
   { href: "/platform/admins", label: "Internal admins", icon: "team" },
 ];

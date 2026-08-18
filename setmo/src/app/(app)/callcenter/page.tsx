@@ -54,7 +54,8 @@ export default async function CallCenterHome() {
           <h1>{data.name}</h1>
           <p>{senior ? "Senior manager — all pods, agents, and served offices" : "Floor manager — your pod's agents and accounts"}</p>
         </div>
-        <div className="tb-right">
+        <div className="tb-right" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {senior && <Link className="btn btn-ghost" href="/callcenter/manage" style={{ padding: "6px 12px", fontSize: 13 }}><Icon name="team" size={14} /> Manage</Link>}
           <span className="chip" title="Pooled practice balance">
             <Icon name="card" size={13} /> {(data.pool.remainingMin * 10).toLocaleString()} tokens · ~{data.pool.remainingMin.toLocaleString()} min
           </span>

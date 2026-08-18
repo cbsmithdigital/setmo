@@ -73,6 +73,9 @@ async function main() {
   await prisma.session.deleteMany({ where: { callCenterOrgId: CC } });
   await prisma.agentOffice.deleteMany({ where: { user: { callCenterPodId: { in: [POD_N, POD_S] } } } });
   await prisma.callCenterBundle.deleteMany({ where: { organizationId: CC } });
+  // Remove orphaned DB-only rows from earlier seed revisions (fixed cc-agent-*/
+  // cc-mgr-* ids), now superseded by email-keyed login-able users.
+  await prisma.user.deleteMany({ where: { id: { startsWith: "cc-agent-" } } });
 
   await prisma.organization.upsert({ where: { id: CC }, update: { name: "BrightCall Partners", type: "CALL_CENTER" }, create: { id: CC, name: "BrightCall Partners", type: "CALL_CENTER" } });
   for (const [id, name] of [[POD_N, "Pod North"], [POD_S, "Pod South"]] as const) {
