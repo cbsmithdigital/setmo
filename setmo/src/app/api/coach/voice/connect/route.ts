@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
+import { getCurrentUser, getActiveRole, isManagerRole, isCallCenterRole } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
 import { getOfficeCoachContext } from "@/lib/office";
 import { getGroupCoachContext } from "@/lib/group";
+import { getCallCenterOverview, getPodOverview } from "@/lib/callcenter";
 import { canStartSession, canStartGroupCoach, canStartCallCenter, callCenterOrgForAgent } from "@/lib/usage";
 import { coachAgentId, managerCoachAgentId, groupCoachAgentId, getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
 import {
@@ -15,6 +16,8 @@ import {
   managerVoiceFirstMessage,
   groupVoiceSystem,
   groupVoiceFirstMessage,
+  callCenterVoiceSystem,
+  callCenterVoiceFirstMessage,
 } from "@/lib/coach-prompts";
 import { error, json } from "@/lib/api";
 
@@ -31,12 +34,20 @@ const Body = z.object({
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
-  // Agents (call-center phone agents) have no home office; they're handled in the
-  // setter path below, metered against the call-center pool.
-  if (!user.officeId && !user.callCenterPodId) return error("No office assigned", 400);
 
   const first = user.firstName ?? "there";
   const activeRole = getActiveRole(user);
+
+  // Call-center manager (senior or floor) → agent-development voice assistant,
+  // grounded in the pod (floor) or whole center (senior), metered on the pool.
+  // Checked before the office guard because a senior manager has no officeId.
+  if (isCallCenterRole(activeRole) && user.organizationId) {
+    return callCenterVoiceConnect(user.id, user.organizationId, user.callCenterPodId ?? null, activeRole, first);
+  }
+
+  // Agents (call-center phone agents) have no home office; they're handled in the
+  // setter path below, metered against the call-center pool.
+  if (!user.officeId && !user.callCenterPodId) return error("No office assigned", 400);
 
   // Group/DSO acting role → the portfolio strategist (multi-office grounded).
   // Checked before the generic manager branch since GROUP_ADMIN is a manager role.
@@ -283,6 +294,78 @@ async function managerVoiceConnect(userId: string, officeId: string, first: stri
       setterId: userId,
       focus: "team management & coaching",
     });
+  } catch (e) {
+    return error(e instanceof Error ? e.message : "Couldn't start the assistant", 502);
+  }
+}
+
+// The call-center manager's agent-development assistant — grounded in the pod
+// (floor) or the whole center (senior). Metered against the call-center POOL: a
+// COACH session carries callCenterOrgId (drawn down by the post-call webhook).
+// Session.officeId is required, so we borrow one of the served offices as the FK
+// (metering rides on callCenterOrgId, not this office). Reuses the manager agent.
+async function callCenterVoiceConnect(userId: string, orgId: string, podId: string | null, activeRole: string, first: string) {
+  const senior = activeRole === "CALL_CENTER_ADMIN";
+
+  const allowance = await canStartCallCenter(orgId);
+  if (!allowance.ok) {
+    return error("Your call center's practice balance is used up. Add a card and top up to keep coaching.", 402);
+  }
+
+  const data = senior ? await getCallCenterOverview(orgId) : podId ? await getPodOverview(podId) : null;
+  if (!data) return error("Your call-center account isn't set up yet — ask your senior manager.", 400);
+
+  const officeId = data.offices[0]?.id ?? null;
+  if (!officeId) return error("Add a served practice before coaching by voice.", 400);
+
+  const agentLines = data.agents.map(
+    (a) =>
+      `${a.name}${senior && a.podName ? ` [${a.podName}]` : ""}: avg ${a.overall ? a.overall.toFixed(1) : "—"}/5, ${a.sessions} reps across ${a.officeCount} office${a.officeCount === 1 ? "" : "s"}, status ${a.status}${a.weakSkill ? `, focus: ${a.weakSkill}` : ""}`
+  );
+  const officeLines = data.offices.map((o) => `${o.name}: ${o.avg ? o.avg.toFixed(1) : "—"}/5 across ${o.agents} agent${o.agents === 1 ? "" : "s"}`);
+  const systemicGaps = data.heatmap.filter((h) => h.avg < 3.7).map((h) => h.name);
+
+  const systemPrompt = callCenterVoiceSystem({
+    first,
+    senior,
+    scopeName: data.name,
+    ccAvg: data.ccAvg,
+    activeAgents: data.activeAgents,
+    totalAgents: data.totalAgents,
+    agentLines,
+    officeLines,
+    systemicGaps,
+    watch: data.attention,
+  });
+  const firstMessage = callCenterVoiceFirstMessage(first);
+  const agentId = managerCoachAgentId();
+
+  if (!isElevenLabsConfigured() || !agentId) {
+    return json({ configured: false, systemPrompt, firstMessage, focus: "agent coaching" });
+  }
+
+  const coachSession = await prisma.session.create({
+    data: {
+      setterId: userId,
+      officeId,
+      callCenterOrgId: orgId, // metered on the pool, kept out of the office pool
+      serviceType: "IMPLANT",
+      kind: "COACH",
+      status: "IN_PROGRESS",
+      personaSeed: { coaching: true, callCenter: true, focus: "agent coaching" },
+    },
+  });
+
+  const dynamicVariables: Record<string, string> = {
+    setter_first_name: first,
+    office_name: data.name,
+    focus: "agent coaching",
+    session_id: coachSession.id,
+  };
+
+  try {
+    const signedUrl = await getSignedUrl(agentId);
+    return json({ configured: true, signedUrl, systemPrompt, firstMessage, dynamicVariables, setterId: userId, focus: "agent coaching" });
   } catch (e) {
     return error(e instanceof Error ? e.message : "Couldn't start the assistant", 502);
   }

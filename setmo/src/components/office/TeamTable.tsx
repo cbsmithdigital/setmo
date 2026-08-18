@@ -19,17 +19,19 @@ type Row = {
   status: string;
 };
 
-const FILTERS: [string, string][] = [
-  ["all", "All setters"],
-  ["rising", "Rising"],
-  ["attention", "Needs attention"],
-];
-
 function trendColor(status: string) {
   return status === "watch" ? "#fbbf24" : status === "new" ? "#a78bfa" : "#34d399";
 }
 
-export function TeamTable({ rows }: { rows: Row[] }) {
+// Reused by the office team page (setters) and the call-center floor-manager team
+// page (agents) — `hrefBase`/`noun` retarget the row links + labels.
+export function TeamTable({ rows, hrefBase = "/office/team", noun = "setter" }: { rows: Row[]; hrefBase?: string; noun?: string }) {
+  const nounCap = noun.charAt(0).toUpperCase() + noun.slice(1);
+  const FILTERS: [string, string][] = [
+    ["all", `All ${noun}s`],
+    ["rising", "Rising"],
+    ["attention", "Needs attention"],
+  ];
   const [filter, setFilter] = useState("all");
   const filtered = rows.filter((t) =>
     filter === "all"
@@ -56,7 +58,7 @@ export function TeamTable({ rows }: { rows: Row[] }) {
         <div
           style={{ display: "grid", gridTemplateColumns: cols, gap: 16, padding: "14px 22px", borderBottom: "1px solid var(--line)", fontSize: 11.5, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)" }}
         >
-          <div>Setter</div>
+          <div>{nounCap}</div>
           <div>Usage</div>
           <div>Sessions</div>
           <div>Avg score</div>
@@ -64,12 +66,12 @@ export function TeamTable({ rows }: { rows: Row[] }) {
           <div />
         </div>
 
-        {filtered.length === 0 && <div className="card-pad muted" style={{ fontSize: 14 }}>No setters in this view.</div>}
+        {filtered.length === 0 && <div className="card-pad muted" style={{ fontSize: 14 }}>No {noun}s in this view.</div>}
 
         {filtered.map((t, i) => (
           <Link
             key={t.id}
-            href={`/office/team/${t.id}`}
+            href={`${hrefBase}/${t.id}`}
             style={{ display: "grid", gridTemplateColumns: cols, gap: 16, alignItems: "center", padding: "15px 22px", borderTop: i ? "1px solid var(--line-soft)" : "none" }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>

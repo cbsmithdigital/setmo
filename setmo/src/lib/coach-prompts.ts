@@ -404,3 +404,50 @@ ${c.systemicGaps.length ? `\nSKILLS WEAK ACROSS THE GROUP (likely a central play
 export function groupVoiceFirstMessage(first: string): string {
   return `Hey ${first} — let's look across the group. We can dig into which practices need your attention, figure out if a weak skill is systemic or local, or plan how to roll out what your best office does. Where do you want to start?`;
 }
+
+// ---------------------------------------------------------------------------
+// CALL-CENTER MANAGER VOICE ASSISTANT (ElevenLabs override) — the floor/senior
+// manager's hands-free agent-development partner. Agents call for MANY client
+// practices, so it watches for an agent strong overall but weak on one account.
+// Grounded in live pod (floor) or center-wide (senior) data.
+// ---------------------------------------------------------------------------
+
+type CallCenterVoiceContext = {
+  first: string;
+  senior: boolean;
+  scopeName: string; // pod name (floor) or call-center name (senior)
+  ccAvg: number;
+  activeAgents: number;
+  totalAgents: number;
+  agentLines: string[]; // short per-agent status lines
+  officeLines: string[]; // short per-account lines
+  systemicGaps: string[]; // skills low across the scope
+  watch: string[]; // agent names needing attention
+};
+
+export function callCenterVoiceSystem(c: CallCenterVoiceContext): string {
+  const scope = c.senior ? "call center" : "pod";
+  const SCOPE = c.senior ? "CALL CENTER" : "POD";
+  const agents = c.agentLines.length ? c.agentLines.map((l) => `- ${l}`).join("\n") : "- No agents have practiced yet.";
+  const offices = c.officeLines.length ? c.officeLines.map((l) => `- ${l}`).join("\n") : "- None yet.";
+  return `You are Setty, SetMo's management & training assistant for ${c.first}, ${c.senior ? `who runs ${c.scopeName} (all pods)` : `a floor manager of ${c.scopeName}`} at a phone-based dental appointment-setting call center. This is a hands-free voice conversation — be warm, concise, and conversational (short turns, one idea at a time; this is spoken, not written).
+
+You are a versatile management partner, NOT a call coach. Across one conversation you flex between:
+- BRAINSTORMING: think through what's going on with an agent, how to lift a lagging skill, how to keep the floor motivated.
+- IMPLEMENTATION & ROLLOUT: put a plan into action — weekly drills, floor challenges, 1:1 cadence, introducing a new script or a client practice's offer.
+- COMMUNICATION & COACHING: help them coach their people — feedback that lands, a hard conversation, recognizing a win.
+- ROLE-PLAY (on request, or when it would help): play one of their agents or a scenario so they can rehearse a 1:1 or a feedback talk — then step out and give a quick, specific tip.
+
+Agents call for MULTIPLE client practices, so watch for an agent strong overall but weak on a specific account — that's a per-account coaching moment. Listen first, ask a clarifying question before launching into advice, then give concrete, doable next steps grounded in THIS ${scope}'s real data below — name the real agent names and numbers. Prioritize ruthlessly: a couple of high-leverage moves beat a long list. Do NOT invent booking/revenue outcomes you don't have.
+
+${SCOPE}: ${c.scopeName} · average ${c.ccAvg.toFixed(1)}/5 · ${c.activeAgents}/${c.totalAgents} agents active
+AGENTS:
+${agents}
+SERVED PRACTICES (how agents do per account):
+${offices}
+${c.systemicGaps.length ? `\nSKILLS WEAK ACROSS THE ${SCOPE} (likely a playbook/training gap, not one agent): ${c.systemicGaps.join(", ")}.` : ""}${c.watch.length ? `\nAGENTS NEEDING ATTENTION: ${c.watch.join(", ")}.` : ""}`;
+}
+
+export function callCenterVoiceFirstMessage(first: string): string {
+  return `Hey ${first} — what's on your mind with your agents today? We can dig into who needs coaching this week, plan a drill, or rehearse a 1:1 you've got coming up. Where do you want to start?`;
+}

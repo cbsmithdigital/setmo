@@ -5,7 +5,7 @@ import { fullName, initialsOf } from "@/lib/format";
 
 // The default analytics window for office views — this calendar month, matching
 // the setter dashboard + the team-member detail page so numbers agree.
-function thisMonthRange(): AnalyticsRange {
+export function thisMonthRange(): AnalyticsRange {
   const n = new Date();
   return { from: new Date(n.getFullYear(), n.getMonth(), 1), to: n };
 }
@@ -40,7 +40,7 @@ export async function skillAveragesOverSessions(officeIds: string[], range: Anal
 
 export type SetterStatus = "top" | "rising" | "steady" | "watch" | "new";
 
-function computeStatus(avg: number, delta: number, count: number): SetterStatus {
+export function computeStatus(avg: number, delta: number, count: number): SetterStatus {
   if (count < 3) return "new";
   if (avg < 3.8) return "watch";
   if (avg >= 4.6) return "top";

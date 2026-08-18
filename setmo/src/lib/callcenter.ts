@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/db";
 import { fullName, initialsOf } from "@/lib/format";
-import { skillName } from "@/lib/skills";
+import { skillName, skillShort, rubricFor } from "@/lib/skills";
 import { getCallCenterBalance } from "@/lib/usage";
-import { getSetterAnalytics } from "@/lib/queries";
+import { getSetterAnalytics, getOfficeCatalog, type AnalyticsRange } from "@/lib/queries";
+import { computeStatus, thisMonthRange, type TeamRow } from "@/lib/office";
 
 // Agent-centric rollups for the call-center tenant: phone agents shared across
 // many served offices, organized into floor-manager pods. Everything is scoped by
@@ -236,14 +237,172 @@ export async function getAgentHome(userId: string) {
 type LbRow = { rank: number; name: string; sub?: string; initials: string; score: number; movement: number; me: boolean; top: boolean };
 
 /** Agent leaderboards: their pod + the whole call center, ranked by avg score.
- *  Reuses the sorted rollups (buildRollup already orders agents by overall). */
+ *  Reuses the sorted rollups (buildRollup already orders agents by overall).
+ *  Works for a phone agent (ranks with "You" highlighted) AND a floor manager
+ *  (same pod boards, no self-highlight) — anyone with a callCenterPodId. */
 export async function getAgentLeaderboards(userId: string) {
-  const agent = await prisma.user.findFirst({ where: { id: userId, role: "SETTER" }, select: { callCenterPodId: true, pod: { select: { organizationId: true, name: true } } } });
+  const agent = await prisma.user.findFirst({ where: { id: userId }, select: { callCenterPodId: true, pod: { select: { organizationId: true, name: true } } } });
   if (!agent?.callCenterPodId || !agent.pod) return null;
   const [center, pod] = await Promise.all([getCallCenterOverview(agent.pod.organizationId), getPodOverview(agent.callCenterPodId)]);
   const toRows = (agents: { id: string; name: string; overall: number; sessions: number; podName: string }[], withPod: boolean): LbRow[] =>
     agents.filter((a) => a.sessions > 0).map((a, i) => ({ rank: i + 1, name: a.name, sub: withPod ? a.podName : undefined, initials: initialsFrom(a.name), score: a.overall, movement: 0, me: a.id === userId, top: i === 0 }));
   return { pod: toRows(pod?.agents ?? [], false), center: toRows(center.agents, true), podName: agent.pod.name };
+}
+
+// ---------------------------------------------------------------------------
+// FLOOR-MANAGER PARITY (mirrors the office-admin layer, pool-/pod-scoped).
+// getPodTeam / getPodSkillMatrix return the SAME shapes as getOfficeTeam /
+// getOfficeSkillMatrix so the office <TeamTable>/<SkillMatrix> components render
+// them unchanged. Scoped by session.callCenterOrgId (the pool) + the pod's agents.
+// ---------------------------------------------------------------------------
+
+/** Per-agent aggregates for one pod over a window (default: this month) — the
+ *  call-center analog of getOfficeTeam, returning office-compatible TeamRow[]. */
+export async function getPodTeam(podId: string, range: AnalyticsRange = thisMonthRange()): Promise<TeamRow[]> {
+  const pod = await prisma.pod.findUnique({ where: { id: podId }, select: { organizationId: true } });
+  if (!pod) return [];
+  const orgId = pod.organizationId;
+  const [agents, sessions, recs] = await Promise.all([
+    prisma.user.findMany({ where: { role: "SETTER", status: "ACTIVE", callCenterPodId: podId }, select: { id: true, firstName: true, lastName: true } }),
+    prisma.session.findMany({
+      where: { callCenterOrgId: orgId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, setter: { callCenterPodId: podId } },
+      orderBy: { startedAt: "asc" },
+      include: { evaluation: { select: { overallScore: true } } },
+    }),
+    prisma.recommendation.findMany({ where: { status: "ACTIVE", setter: { callCenterPodId: podId } }, orderBy: { createdAt: "desc" } }),
+  ]);
+
+  const byUser = new Map<string, { overalls: number[]; durations: number[]; last: Date | null }>();
+  for (const s of sessions) {
+    const u = getOr(byUser, s.setterId, () => ({ overalls: [] as number[], durations: [] as number[], last: null as Date | null }));
+    if (s.evaluation?.overallScore != null) u.overalls.push(Number(s.evaluation.overallScore));
+    u.durations.push(s.durationSeconds ?? 0);
+    if (!u.last || s.startedAt > u.last) u.last = s.startedAt;
+  }
+  const recByUser = new Map<string, { skillKey: string; reason: string }>();
+  for (const r of recs) if (!recByUser.has(r.setterId)) recByUser.set(r.setterId, { skillKey: r.skillKey, reason: r.reason });
+
+  return agents
+    .map((u) => {
+      const agg = byUser.get(u.id) ?? { overalls: [], durations: [], last: null };
+      const count = agg.overalls.length;
+      const avg = count ? mean(agg.overalls) : 0;
+      const delta = count > 1 ? agg.overalls[count - 1] - agg.overalls[count - 2] : 0;
+      const rec = recByUser.get(u.id);
+      return {
+        id: u.id,
+        name: fullName(u.firstName, u.lastName),
+        initials: initialsOf(u.firstName, u.lastName),
+        avg,
+        delta: Number(delta.toFixed(1)),
+        usageHours: agg.durations.reduce((a, b) => a + b, 0) / 3600,
+        sessions: count,
+        lastActive: agg.last,
+        trend: agg.overalls.slice(-7),
+        recSkill: rec ? skillName(rec.skillKey) : null,
+        rec: rec?.reason ?? null,
+        status: computeStatus(avg, delta, count),
+      };
+    })
+    .sort((a, b) => b.avg - a.avg);
+}
+
+/** Agent × skill matrix for one pod over a window — office-compatible shape for
+ *  the shared <SkillMatrix> component. */
+export async function getPodSkillMatrix(podId: string, range: AnalyticsRange = thisMonthRange()) {
+  const pod = await prisma.pod.findUnique({ where: { id: podId }, select: { organizationId: true } });
+  if (!pod) return { skills: [] as { key: string; short: string }[], rows: [] as { id: string; name: string; avg: number; cells: { key: string; score: number | null }[] }[] };
+  const orgId = pod.organizationId;
+  const [agents, sessions] = await Promise.all([
+    prisma.user.findMany({ where: { role: "SETTER", callCenterPodId: podId }, select: { id: true, firstName: true, lastName: true } }),
+    prisma.session.findMany({
+      where: { callCenterOrgId: orgId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null }, setter: { callCenterPodId: podId } },
+      include: { evaluation: { include: { skills: true } } },
+    }),
+  ]);
+  const order = rubricFor("IMPLANT").map((s) => s.key);
+  const r1 = (n: number) => Number(n.toFixed(1));
+
+  const acc = new Map<string, { overalls: number[]; sums: Map<string, { t: number; n: number }> }>();
+  for (const s of sessions) {
+    if (s.evaluation!.skills.length === 0 || s.evaluation!.overallScore == null) continue;
+    const a = getOr(acc, s.setterId, () => ({ overalls: [] as number[], sums: new Map<string, { t: number; n: number }>() }));
+    a.overalls.push(Number(s.evaluation!.overallScore));
+    for (const k of s.evaluation!.skills) {
+      const c = getOr(a.sums, k.skillKey, () => ({ t: 0, n: 0 }));
+      c.t += Number(k.score); c.n++;
+    }
+  }
+  const nameById = new Map(agents.map((u) => [u.id, fullName(u.firstName, u.lastName)]));
+  const rows = [...acc.entries()]
+    .map(([id, a]) => ({
+      id,
+      name: nameById.get(id) ?? "Agent",
+      avg: r1(mean(a.overalls)),
+      cells: order.map((k) => { const c = a.sums.get(k); return { key: k, score: c ? r1(c.t / c.n) : null }; }),
+    }))
+    .sort((a, b) => b.avg - a.avg);
+  return { skills: order.map((k) => ({ key: k, short: skillShort(k) })), rows };
+}
+
+/** Rich floor-manager overview — the pod analog of getOfficeOverview. Composes
+ *  the pod rollup (pool, served offices, skill heatmap, sessions/week) with the
+ *  windowed team rows (for team-at-a-glance, needs-a-nudge, and strong/gap). */
+export async function getFloorOverview(podId: string, range: AnalyticsRange = thisMonthRange()) {
+  const [base, team] = await Promise.all([getPodOverview(podId), getPodTeam(podId, range)]);
+  if (!base) return null;
+  const withSessions = team.filter((t) => t.sessions > 0);
+  const teamAvg = withSessions.length ? mean(withSessions.map((t) => t.avg)) : 0;
+  const ranked = [...base.heatmap].sort((a, b) => b.avg - a.avg);
+  return {
+    podName: base.name,
+    pool: base.pool,
+    offices: base.offices,
+    heatmap: base.heatmap,
+    topSkills: ranked.slice(0, 2),
+    gapSkills: ranked.slice(-2).reverse(),
+    teamAvg,
+    activeAgents: withSessions.length,
+    totalAgents: team.length,
+    sessionsThisWeek: base.sessionsThisWeek,
+    team,
+    attention: team.filter((t) => t.status === "watch" || t.status === "new"),
+  };
+}
+
+export type PodAccount = {
+  id: string; name: string; city: string | null;
+  offerFraming: string; appointmentFraming: string; depositPolicy: string;
+  services: { key: string; name: string; live: boolean }[];
+  avg: number; agents: number; sessions: number;
+};
+
+/** Read-only "Accounts" view for a floor manager: each practice the pod calls
+ *  for, with its offer framing + the services agents train on + per-account
+ *  stats. The served practice still OWNS its catalog — this is view-only. */
+export async function getPodAccounts(podId: string): Promise<PodAccount[]> {
+  const [offices, base] = await Promise.all([
+    prisma.office.findMany({ where: { servedByPodId: podId }, select: { id: true }, orderBy: { name: "asc" } }),
+    getPodOverview(podId),
+  ]);
+  const statBy = new Map((base?.offices ?? []).map((o) => [o.id, o]));
+  const cats = await Promise.all(offices.map((o) => getOfficeCatalog(o.id)));
+  return offices.map((o, i) => {
+    const c = cats[i];
+    const st = statBy.get(o.id);
+    return {
+      id: o.id,
+      name: c.profile.name,
+      city: c.profile.city || null,
+      offerFraming: c.profile.offerFraming,
+      appointmentFraming: c.profile.appointmentFraming,
+      depositPolicy: c.profile.depositPolicy,
+      services: c.services.filter((s) => s.enabled).map((s) => ({ key: s.key, name: s.name, live: s.live })),
+      avg: st?.avg ?? 0,
+      agents: st?.agents ?? 0,
+      sessions: st?.sessions ?? 0,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------

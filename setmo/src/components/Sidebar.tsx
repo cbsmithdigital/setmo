@@ -63,12 +63,24 @@ const NAV_PARTNER: NavItem[] = [
   { href: "/partner/team", label: "Team & codes", icon: "team" },
 ];
 
-// Call-center managers (senior + floor). Agent-centric overview + coach + billing.
+// Senior call-center manager (CALL_CENTER_ADMIN) — whole-center overview + pool.
 const NAV_CALLCENTER: NavItem[] = [
   { href: "/callcenter", label: "Overview", icon: "building" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
   { href: "/callcenter/billing", label: "Billing", icon: "card" },
   { href: "/resources", label: "Resources", icon: "book" },
+];
+
+// Floor call-center manager (CALL_CENTER_MANAGER) — office-admin parity for their
+// pod: team, accounts (served practices, read-only), leaderboard, voice coach.
+const NAV_CALLCENTER_FLOOR: NavItem[] = [
+  { href: "/callcenter", label: "Overview", icon: "building" },
+  { href: "/callcenter/team", label: "Team", icon: "team" },
+  { href: "/callcenter/accounts", label: "Accounts", icon: "target" },
+  { href: "/callcenter/leaderboard", label: "Leaderboard", icon: "trophy" },
+  { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
+  { href: "/resources", label: "Resources", icon: "book" },
+  { href: "/callcenter/billing", label: "Billing", icon: "card" },
 ];
 
 // Call-center phone AGENTS are setters shared across offices (no single office).
@@ -94,7 +106,7 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
   PARTNER_ADMIN: NAV_PARTNER,
   PARTNER_MEMBER: [{ href: "/partner", label: "Dashboard", icon: "home" }],
   CALL_CENTER_ADMIN: NAV_CALLCENTER,
-  CALL_CENTER_MANAGER: NAV_CALLCENTER,
+  CALL_CENTER_MANAGER: NAV_CALLCENTER_FLOOR,
 };
 
 export function Sidebar({

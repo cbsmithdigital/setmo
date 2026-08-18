@@ -82,7 +82,6 @@ export default async function CoachPage({
         </div>
         <CoachWorkspace
           variant="group"
-          voiceEnabled={false}
           intro={`Hey ${first} — let's look at your agents.`}
           welcome={welcome}
           starters={[
