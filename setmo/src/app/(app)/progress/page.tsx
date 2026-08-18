@@ -17,7 +17,7 @@ export default async function ProgressPage({
   const user = await requireUser();
   const sp = await searchParams;
   const { key, range, label } = resolveAnalyticsRange(sp);
-  const d = await getSetterProgress(user.id, user.officeId!, range);
+  const d = await getSetterProgress(user.id, user.officeId, range);
   const { stats } = d;
 
   return (

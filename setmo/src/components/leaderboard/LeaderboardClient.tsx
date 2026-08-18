@@ -28,14 +28,34 @@ export function LeaderboardClient({
   officeRows,
   globalRows,
   officeName,
+  variant = "setter",
 }: {
   officeRows: Row[];
   globalRows: Row[];
   officeName: string;
+  variant?: "setter" | "agent";
 }) {
+  const isAgent = variant === "agent";
   const [scope, setScope] = useState<"office" | "global">("office");
   const rows = scope === "office" ? officeRows : globalRows;
-  const subFor = (p: Row) => (scope === "office" ? officeName : p.sub ?? "");
+  // Agents rank as individuals on BOTH boards (their pod + the whole call
+  // center), so "You" applies everywhere. Setters only appear by name on the
+  // office board — the global board shows practice standings, not people.
+  const showMe = (p: Row) => Boolean(p.me) && (isAgent || scope === "office");
+  const subFor = (p: Row) => (scope === "office" && !isAgent ? officeName : p.sub ?? (scope === "office" ? officeName : ""));
+
+  // Tab + copy differ for call-center agents.
+  const primaryLabel = isAgent ? "My pod" : "My office";
+  const primaryIcon = "team" as const;
+  const secondaryLabel = isAgent ? "Whole call center" : "Global · practices";
+  const secondaryIcon = "shield" as const;
+  const emptyNoun = scope === "office" ? (isAgent ? "agents" : "setters") : isAgent ? "agents" : "practices";
+  const footer =
+    scope === "global"
+      ? isAgent
+        ? "Center-wide rankings across every pod — climb by improving your average, not by taking more calls."
+        : "Global rankings show practice-level standings only — individual names stay inside each office."
+      : "Rankings update after each scored session. Climb by improving, not by grinding volume.";
 
   // Podium order: 2nd, 1st, 3rd.
   const podium = [rows[1], rows[0], rows[2]].filter(Boolean) as Row[];
@@ -55,10 +75,10 @@ export function LeaderboardClient({
       <div className="content">
         <div style={{ display: "flex", gap: 8, marginBottom: 22, flexWrap: "wrap" }}>
           <button className={"btn " + (scope === "office" ? "btn-primary" : "btn-ghost")} onClick={() => setScope("office")}>
-            <Icon name="team" size={16} /> My office
+            <Icon name={primaryIcon} size={16} /> {primaryLabel}
           </button>
           <button className={"btn " + (scope === "global" ? "btn-primary" : "btn-ghost")} onClick={() => setScope("global")}>
-            <Icon name="shield" size={16} /> Global · practices
+            <Icon name={secondaryIcon} size={16} /> {secondaryLabel}
           </button>
           <div style={{ marginLeft: "auto", alignSelf: "center" }} className="chip">
             <Icon name="shield" size={13} /> Fairness-weighted
@@ -67,7 +87,7 @@ export function LeaderboardClient({
 
         {rows.length === 0 ? (
           <div className="card card-pad muted" style={{ fontSize: 14 }}>
-            No ranked {scope === "office" ? "setters" : "practices"} yet — scores appear here after sessions are graded.
+            No ranked {emptyNoun} yet — scores appear here after sessions are graded.
           </div>
         ) : (
           <>
@@ -99,7 +119,7 @@ export function LeaderboardClient({
                       >
                         {p.initials}
                       </div>
-                      <div style={{ fontWeight: 700, fontSize: tall ? 16 : 14.5 }}>{p.me && scope === "office" ? "You" : p.name}</div>
+                      <div style={{ fontWeight: 700, fontSize: tall ? 16 : 14.5 }}>{showMe(p) ? "You" : p.name}</div>
                       <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>{subFor(p)}</div>
                       <div className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: tall ? 38 : 30 }}>
                         {p.score.toFixed(1)}
@@ -118,7 +138,7 @@ export function LeaderboardClient({
                     <div className="lb-rank">{p.rank}</div>
                     <div className="lb-av">{p.initials}</div>
                     <div className="lb-nm">
-                      {p.me && scope === "office" ? "You" : p.name}
+                      {showMe(p) ? "You" : p.name}
                       <small>{subFor(p)}</small>
                     </div>
                     <div className="lb-sc mint-text">{p.score.toFixed(1)}</div>
@@ -133,10 +153,7 @@ export function LeaderboardClient({
         )}
 
         <p className="muted" style={{ fontSize: 13, marginTop: 16, textAlign: "center", display: "flex", gap: 8, justifyContent: "center", alignItems: "center" }}>
-          <Icon name="shield" size={14} />{" "}
-          {scope === "global"
-            ? "Global rankings show practice-level standings only — individual names stay inside each office."
-            : "Rankings update after each scored session. Climb by improving, not by grinding volume."}
+          <Icon name="shield" size={14} /> {footer}
         </p>
       </div>
     </>

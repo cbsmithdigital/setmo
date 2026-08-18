@@ -71,15 +71,18 @@ const NAV_CALLCENTER: NavItem[] = [
   { href: "/resources", label: "Resources", icon: "book" },
 ];
 
-// Call-center phone AGENTS are setters shared across offices (no single office),
-// so they get a focused nav — the office-scoped setter pages (Progress /
-// Leaderboard / Goals) don't apply to a multi-office agent.
+// Call-center phone AGENTS are setters shared across offices (no single office).
+// They get the full setter experience — Progress aggregates across every office
+// they call for, and Leaderboard ranks them within their pod + the whole call
+// center. (Goals stay off — those are office-scoped rewards.)
 const NAV_AGENT: NavItem[] = [
   { href: "/dashboard", label: "Home", icon: "home" },
   { href: "/practice", label: "Practice", icon: "mic" },
+  { href: "/progress", label: "Progress", icon: "chart" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
   { href: "/trainings", label: "Trainings", icon: "book" },
   { href: "/library", label: "Saved", icon: "doc" },
+  { href: "/leaderboard", label: "Leaderboard", icon: "trophy" },
 ];
 
 const NAV_BY_ROLE: Record<string, NavItem[]> = {

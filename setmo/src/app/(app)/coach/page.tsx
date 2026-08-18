@@ -48,7 +48,6 @@ export default async function CoachPage({
           </div>
           <CoachWorkspace
             sessionId={session}
-            voiceEnabled={!user.callCenterPodId}
             intro={`Let's work on ${r.isOwner ? "your" : `${r.setterName}'s`} ${r.persona} call (scored ${r.score.toFixed(1)}/5).`}
             welcome={welcome}
             starters={[
@@ -185,9 +184,7 @@ export default async function CoachPage({
           <span className="chip purple">Setty</span>
         </div>
       </div>
-      {/* Call-center agents have no office pool, so voice coaching (metered on
-          the office pool) is disabled for them — chat coaching still works. */}
-      <CoachWorkspace intro={`Hey ${first} — let's sharpen your next call.`} welcome={welcome} starters={GENERAL_STARTERS} voiceEnabled={!user.callCenterPodId} />
+      <CoachWorkspace intro={`Hey ${first} — let's sharpen your next call.`} welcome={welcome} starters={GENERAL_STARTERS} />
     </>
   );
 }

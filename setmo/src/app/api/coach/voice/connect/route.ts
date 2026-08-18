@@ -4,7 +4,7 @@ import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
 import { getOfficeCoachContext } from "@/lib/office";
 import { getGroupCoachContext } from "@/lib/group";
-import { canStartSession, canStartGroupCoach } from "@/lib/usage";
+import { canStartSession, canStartGroupCoach, canStartCallCenter, callCenterOrgForAgent } from "@/lib/usage";
 import { coachAgentId, managerCoachAgentId, groupCoachAgentId, getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
 import {
   voiceCoachSystem,
@@ -31,7 +31,9 @@ const Body = z.object({
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
-  if (!user.officeId) return error("No office assigned", 400);
+  // Agents (call-center phone agents) have no home office; they're handled in the
+  // setter path below, metered against the call-center pool.
+  if (!user.officeId && !user.callCenterPodId) return error("No office assigned", 400);
 
   const first = user.firstName ?? "there";
   const activeRole = getActiveRole(user);
@@ -39,25 +41,42 @@ export async function POST(req: Request) {
   // Group/DSO acting role → the portfolio strategist (multi-office grounded).
   // Checked before the generic manager branch since GROUP_ADMIN is a manager role.
   if (activeRole === "GROUP_ADMIN" && user.organizationId) {
-    return groupVoiceConnect(user.id, user.organizationId, user.officeId, first);
+    return groupVoiceConnect(user.id, user.organizationId, user.officeId!, first);
   }
 
   // Manager acting role → the management & training assistant (team-grounded),
-  // not the setter call role-play.
+  // not the setter call role-play. (Managers always have an office.)
   if (isManagerRole(activeRole)) {
-    return managerVoiceConnect(user.id, user.officeId, first);
+    return managerVoiceConnect(user.id, user.officeId!, first);
   }
 
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
   const callSessionId = parsed.success ? parsed.data.sessionId : undefined;
   const rawFocus = parsed.success ? parsed.data.focus : undefined;
 
-  const office = user.office;
-  let persona: string | null = null;
-  let focus = (rawFocus && rawFocus.trim()) || "";
-
   // "Coach me from this call" → load the call so voice Setty can discuss it.
   const call = callSessionId ? await getSessionResult(callSessionId, user) : null;
+
+  // Resolve office context + metering. A normal setter uses their own office and
+  // the office pool. A call-center AGENT (no home office) coaches with the office
+  // they practiced for (the coached call's office, else their first assigned
+  // office) and meters the pooled CALL-CENTER balance.
+  const isAgent = Boolean(user.callCenterPodId);
+  let officeId: string | null = user.officeId;
+  let callCenterOrgId: string | null = null;
+  let office: { name: string | null; city: string | null; offerFraming: string | null } | null =
+    user.office ? { name: user.office.name, city: user.office.city, offerFraming: user.office.offerFraming } : null;
+
+  if (isAgent) {
+    callCenterOrgId = await callCenterOrgForAgent(user.id);
+    const callOfficeId = callSessionId ? (await prisma.session.findUnique({ where: { id: callSessionId }, select: { officeId: true } }))?.officeId ?? null : null;
+    officeId = callOfficeId ?? (await prisma.agentOffice.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" }, select: { officeId: true } }))?.officeId ?? null;
+    if (!callCenterOrgId || !officeId) return error("You're not set up for coaching yet — ask your manager.", 400);
+    office = await prisma.office.findUnique({ where: { id: officeId }, select: { name: true, city: true, offerFraming: true } });
+  }
+
+  let persona: string | null = null;
+  let focus = (rawFocus && rawFocus.trim()) || "";
   if (call) {
     persona = call.persona;
     if (!focus) {
@@ -67,10 +86,10 @@ export async function POST(req: Request) {
   }
   if (!focus) focus = "high-ticket appointment-setting fundamentals";
 
-  // Coaching draws from the pool — block when it's empty (no free overage).
-  const allowance = await canStartSession(user.officeId);
+  // Coaching draws from a pool — block when it's empty (no free overage).
+  const allowance = isAgent ? await canStartCallCenter(callCenterOrgId!) : await canStartSession(user.officeId!);
   if (!allowance.ok) {
-    return error("Your practice pool is used up. Buy a bundle or wait for the reset.", 402);
+    return error(isAgent ? "Your call center's practice balance is used up." : "Your practice pool is used up. Buy a bundle or wait for the reset.", 402);
   }
 
   // Call-grounded coaching when launched from a specific call; otherwise a fresh rep.
@@ -91,11 +110,13 @@ export async function POST(req: Request) {
   }
 
   // Create the metered coach session; its id rides as a dynamic variable so the
-  // post-call webhook can match it and draw the duration down from the pool.
+  // post-call webhook can match it and draw the duration down from the pool. For
+  // an agent, callCenterOrgId meters the pool (and keeps it out of the office pool).
   const coachSession = await prisma.session.create({
     data: {
       setterId: user.id,
-      officeId: user.officeId,
+      officeId: officeId!,
+      callCenterOrgId,
       serviceType: "IMPLANT",
       kind: "COACH",
       status: "IN_PROGRESS",

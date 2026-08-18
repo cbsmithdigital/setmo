@@ -345,7 +345,10 @@ export async function getSetterHome(user: {
 // ---------- setter progress ----------
 // `range` is the selected window; we always compare to the immediately-preceding
 // equal-length window (so "this month vs last month" etc. just works).
-export async function getSetterProgress(userId: string, officeId: string, range?: AnalyticsRange) {
+// officeId is nullable: a call-center agent has no home office, and their
+// progress (analytics + sessions) is entirely setterId-scoped. The allowance is
+// office-only (and unused by the progress page), so it's zero for agents.
+export async function getSetterProgress(userId: string, officeId: string | null, range?: AnalyticsRange) {
   const now = new Date();
   const current: AnalyticsRange = range ?? { from: new Date(now.getTime() - 30 * 86400_000), to: now };
   const len = current.to.getTime() - current.from.getTime();
@@ -353,7 +356,7 @@ export async function getSetterProgress(userId: string, officeId: string, range?
 
   const [a, allowance, periodSessions] = await Promise.all([
     getSetterAnalytics(userId, current, prior, { allSkills: true }),
-    getAllowance(officeId),
+    officeId ? getAllowance(officeId) : Promise.resolve({ purchasedMin: 0, usedMin: 0, remainingMin: 0, remainingSeconds: 0 }),
     prisma.session.findMany({
       where: { setterId: userId, status: "SCORED", startedAt: { gte: current.from, lte: current.to } },
       orderBy: { startedAt: "desc" },

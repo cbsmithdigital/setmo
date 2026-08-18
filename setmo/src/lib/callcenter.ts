@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
-import { fullName } from "@/lib/format";
+import { fullName, initialsOf } from "@/lib/format";
 import { skillName } from "@/lib/skills";
 import { getCallCenterBalance } from "@/lib/usage";
+import { getSetterAnalytics } from "@/lib/queries";
 
 // Agent-centric rollups for the call-center tenant: phone agents shared across
 // many served offices, organized into floor-manager pods. Everything is scoped by
@@ -170,6 +171,79 @@ export async function getPodOverview(podId: string) {
   const rollup = await buildRollup(pod.organizationId, [podId]);
   const pool = await getCallCenterBalance(pod.organizationId);
   return { name: pod.name, orgId: pod.organizationId, pool, ...rollup };
+}
+
+const initialsFrom = (name: string) => {
+  const [a, ...rest] = name.trim().split(/\s+/);
+  return initialsOf(a, rest.join(" "));
+};
+
+/** Rich agent home — the phone-agent analog of getSetterHome: pooled allowance,
+ *  month score + delta, best/focus skills, sessions this week, recent calls,
+ *  a POD leaderboard peek + rank, and a recommendation. Reuses getSetterAnalytics
+ *  (already setterId-scoped) and the call-center pool/pod rollups. */
+export async function getAgentHome(userId: string) {
+  const agent = await prisma.user.findFirst({ where: { id: userId, role: "SETTER" }, select: { firstName: true, callCenterPodId: true, pod: { select: { organizationId: true, name: true } } } });
+  if (!agent?.callCenterPodId || !agent.pod) return null;
+  const orgId = agent.pod.organizationId;
+  const now = new Date();
+  const current = { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now };
+  const prior = { from: new Date(now.getFullYear(), now.getMonth() - 1, 1), to: new Date(now.getFullYear(), now.getMonth(), 1) };
+
+  const [analytics, pool, pod, recentRows, rec] = await Promise.all([
+    getSetterAnalytics(userId, current, prior, { allSkills: true }),
+    getCallCenterBalance(orgId),
+    getPodOverview(agent.callCenterPodId),
+    prisma.session.findMany({ where: { setterId: userId, callCenterOrgId: orgId, status: "SCORED", evaluation: { isNot: null } }, orderBy: { startedAt: "desc" }, take: 7, select: { id: true, startedAt: true, durationSeconds: true, officeId: true, personaSeed: true, evaluation: { select: { overallScore: true } } } }),
+    prisma.recommendation.findFirst({ where: { setterId: userId, status: "ACTIVE" }, orderBy: { createdAt: "desc" }, include: { training: { select: { title: true, length: true } } } }),
+  ]);
+
+  const officeIds = [...new Set(recentRows.map((r) => r.officeId))];
+  const offices = await prisma.office.findMany({ where: { id: { in: officeIds } }, select: { id: true, name: true } });
+  const officeName = new Map(offices.map((o) => [o.id, o.name]));
+  const scores = recentRows.map((r) => (r.evaluation?.overallScore != null ? Number(r.evaluation.overallScore) : 0));
+  const recent = recentRows.slice(0, 6).map((r, i) => ({
+    id: r.id,
+    persona: (r.personaSeed as { persona?: string } | null)?.persona ?? "Practice lead",
+    officeName: officeName.get(r.officeId) ?? "",
+    when: r.startedAt,
+    durationSeconds: r.durationSeconds ?? 0,
+    score: scores[i],
+    delta: Number((scores[i] - (scores[i + 1] ?? scores[i])).toFixed(1)),
+  }));
+
+  const podAgents = pod?.agents ?? [];
+  const rankIdx = podAgents.findIndex((a) => a.id === userId);
+  const leaderboard = podAgents.slice(0, 3).map((a, i) => ({ rank: i + 1, name: a.name, initials: initialsFrom(a.name), score: a.overall, me: a.id === userId, top: i === 0 }));
+
+  return {
+    firstName: agent.firstName ?? "there",
+    podName: agent.pod.name,
+    allowance: { purchasedMin: pool.purchasedMin, usedMin: pool.usedMin, remainingMin: pool.remainingMin },
+    avg: analytics.overallAvg,
+    avgDelta: analytics.overallDelta,
+    best: analytics.best,
+    focus: analytics.focus,
+    sessionsThisWeek: analytics.repsThisWeek,
+    recent,
+    leaderboard,
+    myRank: rankIdx >= 0 ? rankIdx + 1 : null,
+    podCount: podAgents.length,
+    recommendation: rec ? { training: rec.training.title, mins: rec.training.length ?? 0, why: rec.reason } : null,
+  };
+}
+
+type LbRow = { rank: number; name: string; sub?: string; initials: string; score: number; movement: number; me: boolean; top: boolean };
+
+/** Agent leaderboards: their pod + the whole call center, ranked by avg score.
+ *  Reuses the sorted rollups (buildRollup already orders agents by overall). */
+export async function getAgentLeaderboards(userId: string) {
+  const agent = await prisma.user.findFirst({ where: { id: userId, role: "SETTER" }, select: { callCenterPodId: true, pod: { select: { organizationId: true, name: true } } } });
+  if (!agent?.callCenterPodId || !agent.pod) return null;
+  const [center, pod] = await Promise.all([getCallCenterOverview(agent.pod.organizationId), getPodOverview(agent.callCenterPodId)]);
+  const toRows = (agents: { id: string; name: string; overall: number; sessions: number; podName: string }[], withPod: boolean): LbRow[] =>
+    agents.filter((a) => a.sessions > 0).map((a, i) => ({ rank: i + 1, name: a.name, sub: withPod ? a.podName : undefined, initials: initialsFrom(a.name), score: a.overall, movement: 0, me: a.id === userId, top: i === 0 }));
+  return { pod: toRows(pod?.agents ?? [], false), center: toRows(center.agents, true), podName: agent.pod.name };
 }
 
 // ---------------------------------------------------------------------------
