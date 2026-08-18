@@ -21,7 +21,10 @@ export async function POST(
   });
   if (!session) return error("Session not found", 404);
 
-  const office = user.office;
+  // The office is the one this call is FOR (session.officeId) — for a normal
+  // setter that's their own office; for a call-center agent it's the chosen
+  // served practice, so they role-play with THAT account's offer/script.
+  const office = await prisma.office.findUnique({ where: { id: session.officeId }, include: { services: true } });
   const memory = await prisma.setterMemory.findUnique({ where: { setterId: user.id } });
   const enabledServices = (office?.services ?? [])
     .filter((s) => s.enabled)

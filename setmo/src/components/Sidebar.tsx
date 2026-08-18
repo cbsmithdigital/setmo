@@ -62,11 +62,12 @@ const NAV_PARTNER: NavItem[] = [
   { href: "/partner/team", label: "Team & codes", icon: "team" },
 ];
 
-// Call center (P1 stub — full agent-centric dashboards land in P2).
+// Call-center managers (senior + floor). Agent-centric overview + billing.
+// (A manager-coach Setty variant lands in a later phase.)
 const NAV_CALLCENTER: NavItem[] = [
   { href: "/callcenter", label: "Overview", icon: "building" },
+  { href: "/callcenter/billing", label: "Billing", icon: "card" },
   { href: "/resources", label: "Resources", icon: "book" },
-  { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
 ];
 
 const NAV_BY_ROLE: Record<string, NavItem[]> = {

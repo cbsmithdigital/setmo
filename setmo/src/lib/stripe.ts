@@ -184,6 +184,56 @@ export async function createGroupTokenCheckout(opts: {
 }
 
 /**
+ * Call-center pool top-up — funds the pooled practice balance all the call
+ * center's agents draw from. Saves the card to a call-center Stripe customer.
+ */
+export async function createCallCenterTokenCheckout(opts: {
+  organizationId: string;
+  minutes: number;
+  stripeCustomerId?: string | null;
+  customerEmail?: string;
+  origin: string;
+  discountPct?: number;
+}): Promise<string> {
+  const stripe = getStripe();
+  const quote = minuteQuote(opts.minutes, await getPricingConfig());
+  const tokens = quote.minutes * 10;
+  const total = Math.round(quote.total * (1 - (opts.discountPct ?? 0) / 100));
+  const meta = { kind: "callcenter_minutes", organizationId: opts.organizationId, minutes: String(quote.minutes), amountCents: String(total * 100) };
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    ...(opts.stripeCustomerId
+      ? { customer: opts.stripeCustomerId, customer_update: { address: "auto" as const } }
+      : opts.customerEmail
+        ? { customer_email: opts.customerEmail }
+        : {}),
+    payment_intent_data: { setup_future_usage: "off_session" },
+    billing_address_collection: "required",
+    automatic_tax: { enabled: true },
+    allow_promotion_codes: true,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: total * 100,
+          tax_behavior: "exclusive",
+          product_data: {
+            name: `SetMo — ${tokens.toLocaleString()} call-center tokens`,
+            description: `Pooled agent-practice tokens (≈ ${quote.minutes.toLocaleString()} min). Shared across all your agents & offices. Roll over, never expire.${opts.discountPct ? ` ${opts.discountPct}% off applied.` : ""}`,
+          },
+        },
+      },
+    ],
+    metadata: meta,
+    success_url: `${opts.origin}/callcenter/billing?tokens=success`,
+    cancel_url: `${opts.origin}/callcenter/billing?tokens=cancel`,
+  });
+  if (!session.url) throw new Error("Stripe did not return a checkout URL");
+  return session.url;
+}
+
+/**
  * First-time activation: one Checkout session that starts the $44.95/mo access
  * subscription AND charges the chosen minutes once on the first invoice. Months
  * 2+ bill access only.

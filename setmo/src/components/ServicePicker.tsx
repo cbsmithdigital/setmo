@@ -19,15 +19,22 @@ const DIFFICULTIES: [string, string, string][] = [
   ["TOUGH", "Tough lead", "Guarded & skeptical"],
 ];
 
-export function ServicePicker({ services }: { services: ServiceOption[] }) {
+// A call-center AGENT picks which served office (account) they're calling for;
+// the session is created for that office and metered to the call-center pool.
+type Account = { officeId: string; officeName: string; services: ServiceOption[] };
+
+export function ServicePicker({ services = [], accounts }: { services?: ServiceOption[]; accounts?: Account[] }) {
   const router = useRouter();
-  const firstLive = services.find((s) => s.live)?.key ?? services[0]?.key ?? "IMPLANT";
+  const isAgent = Boolean(accounts && accounts.length);
+  const [officeId, setOfficeId] = useState(accounts?.[0]?.officeId ?? "");
+  const svc = isAgent ? (accounts!.find((a) => a.officeId === officeId)?.services ?? []) : services;
+  const firstLive = svc.find((s) => s.live)?.key ?? svc[0]?.key ?? "IMPLANT";
   const [sel, setSel] = useState(firstLive);
   const [diff, setDiff] = useState("ADAPTIVE");
   const [starting, setStarting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const chosen = services.find((s) => s.key === sel);
+  const chosen = svc.find((s) => s.key === sel) ?? svc.find((s) => s.live);
 
   async function start() {
     setErr(null);
@@ -36,7 +43,7 @@ export function ServicePicker({ services }: { services: ServiceOption[] }) {
       const res = await fetch("/api/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ serviceType: sel, difficulty: diff }),
+        body: JSON.stringify({ serviceType: chosen?.key ?? sel, difficulty: diff, ...(isAgent ? { officeId } : {}) }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -59,11 +66,35 @@ export function ServicePicker({ services }: { services: ServiceOption[] }) {
         </div>
       )}
 
+      {isAgent && (
+        <>
+          <div className="eyebrow" style={{ marginBottom: 14 }}>1 · Choose the account you&apos;re calling for</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 30 }}>
+            {accounts!.map((a) => {
+              const active = a.officeId === officeId;
+              return (
+                <button
+                  key={a.officeId}
+                  onClick={() => { setOfficeId(a.officeId); const fl = a.services.find((s) => s.live)?.key; if (fl) setSel(fl); }}
+                  className="card card-pad"
+                  style={{ padding: "12px 16px", textAlign: "left", borderColor: active ? "var(--purple)" : "var(--line)", boxShadow: active ? "0 0 0 1px var(--purple)" : "var(--shadow-card)" }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 14.5, display: "flex", alignItems: "center", gap: 7 }}>
+                    {active && <span style={{ width: 7, height: 7, borderRadius: 9, background: "var(--purple-2)" }} />}
+                    {a.officeName}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
       <div className="eyebrow" style={{ marginBottom: 14 }}>
-        1 · Choose a call type
+        {isAgent ? "2 · Choose a call type" : "1 · Choose a call type"}
       </div>
       <div className="grid g-3" style={{ marginBottom: 30 }}>
-        {services.map((s) => {
+        {svc.map((s) => {
           const active = sel === s.key;
           return (
             <button
@@ -125,7 +156,7 @@ export function ServicePicker({ services }: { services: ServiceOption[] }) {
       </div>
 
       <div className="eyebrow" style={{ marginBottom: 14 }}>
-        2 · Set the challenge
+        {isAgent ? "3 · Set the challenge" : "2 · Set the challenge"}
       </div>
       <div className="card card-pad" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -157,7 +188,8 @@ export function ServicePicker({ services }: { services: ServiceOption[] }) {
         </div>
         <div style={{ textAlign: "right" }}>
           <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
-            Practicing <b style={{ color: "var(--text-2)" }}>{chosen?.name}</b> · ~8 min · draws from your pool
+            Practicing <b style={{ color: "var(--text-2)" }}>{chosen?.name}</b>
+            {isAgent ? <> for <b style={{ color: "var(--text-2)" }}>{accounts!.find((a) => a.officeId === officeId)?.officeName}</b> · draws the call-center pool</> : <> · ~8 min · draws from your pool</>}
           </div>
           <button className="btn btn-primary btn-lg" onClick={start} disabled={starting || !chosen?.live}>
             <Icon name="mic" /> {starting ? "Starting…" : "Start call"}

@@ -1,7 +1,7 @@
 import type Stripe from "stripe";
 import { prisma } from "@/lib/db";
 import { constructWebhookEvent, getStripe } from "@/lib/stripe";
-import { addMinutes, addOrgTokens, grantSignupBonusMinutes } from "@/lib/usage";
+import { addMinutes, addOrgTokens, addCallCenterMinutes, grantSignupBonusMinutes } from "@/lib/usage";
 import { accrueCommission, markOfficeCommissionsEarned, clawbackOfficeCommissions } from "@/lib/partners";
 import { getPricingConfig } from "@/lib/config";
 import { captureError } from "@/lib/observability";
@@ -34,6 +34,8 @@ export async function POST(req: Request) {
         await applyMinutes(session);
       } else if (kind === "group_minutes" && session.payment_status === "paid") {
         await applyGroupTokens(session);
+      } else if (kind === "callcenter_minutes" && session.payment_status === "paid") {
+        await applyCallCenterTokens(session);
       } else if (kind === "access" && session.payment_status === "paid") {
         const officeId = session.metadata?.officeId;
         const bonusMin = Number(session.metadata?.bonusMinutes ?? 0);
@@ -142,6 +144,24 @@ async function applyGroupTokens(session: Stripe.Checkout.Session) {
   await addOrgTokens(organizationId, minutes, paymentRef, cashCents || undefined);
 
   // Persist the Stripe customer (a card is now on file for next time).
+  const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
+  if (customerId) await prisma.organization.update({ where: { id: organizationId }, data: { stripeCustomerId: customerId } }).catch(() => {});
+}
+
+// Call-center pool top-up → append to the pooled practice balance + save the card.
+async function applyCallCenterTokens(session: Stripe.Checkout.Session) {
+  const organizationId = session.metadata?.organizationId;
+  const minutes = Number(session.metadata?.minutes ?? 0);
+  if (!organizationId || !minutes) return;
+
+  const paymentRef = typeof session.payment_intent === "string" ? session.payment_intent : session.id;
+  const existing = await prisma.callCenterBundle.findFirst({ where: { stripePaymentIntent: paymentRef } });
+  if (existing) return; // idempotent
+
+  const subtotal = typeof session.amount_subtotal === "number" ? session.amount_subtotal : null;
+  const cashCents = subtotal ?? Number(session.metadata?.amountCents ?? session.amount_total ?? 0);
+  await addCallCenterMinutes(organizationId, minutes, paymentRef, cashCents || undefined);
+
   const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
   if (customerId) await prisma.organization.update({ where: { id: organizationId }, data: { stripeCustomerId: customerId } }).catch(() => {});
 }

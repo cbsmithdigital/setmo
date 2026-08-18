@@ -9,6 +9,7 @@ import { getInsight } from "@/lib/insights";
 import { SettyInsight } from "@/components/coach/SettyInsight";
 import { listGoalsForSetter } from "@/lib/goals";
 import { SetterGoals } from "@/components/goals/SetterGoals";
+import { AgentHome } from "@/components/callcenter/AgentHome";
 
 function StatTile({
   lab,
@@ -43,6 +44,9 @@ function StatTile({
 
 export default async function DashboardPage() {
   const user = await requireUser();
+  // Call-center phone agents span many offices (no single officeId) — show their
+  // aggregate agent home instead of the single-office setter dashboard.
+  if (user.callCenterPodId) return <AgentHome userId={user.id} first={user.firstName ?? "there"} />;
   const [d, insight, goals, onboarding] = await Promise.all([getSetterHome(user), getInsight("SETTER", user.id), listGoalsForSetter(user.id), getSetterOnboarding(user.id)]);
 
   return (
