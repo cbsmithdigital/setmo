@@ -170,8 +170,10 @@ export async function scoreSession(
   await recomputeLeaderboards(session.officeId);
   // refresh any active goals this call could move (the setter's + their team's)
   await evaluateGoalsForSetter(session.setterId).catch(() => {});
-  // this call drew down minutes — fire low-balance alerts / auto top-up if needed
-  await evaluateMinuteThresholds(session.officeId).catch(() => {});
+  // This call drew down a pool → low-balance alerts / auto top-up. A call-center
+  // agent's call draws the CALL-CENTER pool, not the served office, so skip the
+  // office evaluator here (pool alerts/top-up are a later phase).
+  if (!session.callCenterOrgId) await evaluateMinuteThresholds(session.officeId).catch(() => {});
 
   return { ok: true, source };
 }

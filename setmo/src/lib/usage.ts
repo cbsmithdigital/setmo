@@ -11,9 +11,10 @@ const MIN_START_SECONDS = 60;
 export async function getMinuteBalance(officeId: string): Promise<{ purchasedMin: number; usedMin: number; remainingMin: number; remainingSeconds: number }> {
   const [purchases, used] = await Promise.all([
     prisma.conversationBundle.aggregate({ where: { officeId }, _sum: { minutesPurchased: true } }),
-    // Exclude group/DSO coach sessions (organizationId set) — those meter against
-    // the org wallet, not this office's pool.
-    prisma.session.aggregate({ where: { officeId, organizationId: null, isAudit: false, durationSeconds: { not: null } }, _sum: { durationSeconds: true } }),
+    // Exclude sessions metered against another pool: group/DSO coach (organizationId)
+    // and call-center agents' practice calls (callCenterOrgId) — neither draws this
+    // office's balance, so a served office is never billed for a call center's agents.
+    prisma.session.aggregate({ where: { officeId, organizationId: null, callCenterOrgId: null, isAudit: false, durationSeconds: { not: null } }, _sum: { durationSeconds: true } }),
   ]);
   const purchasedMin = purchases._sum.minutesPurchased ?? 0;
   const usedMin = Math.round((used._sum.durationSeconds ?? 0) / 60);
@@ -286,4 +287,47 @@ export async function sweepOrgCoachThresholds(): Promise<{ checked: number }> {
   const orgs = await prisma.organization.findMany({ select: { id: true } });
   for (const o of orgs) await evaluateOrgCoachThreshold(o.id).catch(() => {});
   return { checked: orgs.length };
+}
+
+// ===========================================================================
+// CALL-CENTER POOL — a call center's phone agents (setters shared across many
+// served offices) all draw practice time from ONE pooled balance the call
+// center funds (CallCenterBundle), NOT the served office's pool. Agent practice
+// sessions carry `callCenterOrgId` (the call-center org), which excludes them
+// from every office-pool query (see getMinuteBalance / platform officeStats).
+// Purchased tokens roll over. (Auto top-up + low-balance alerts for the pool
+// land in a later phase — the office machinery doesn't apply to it.)
+// ===========================================================================
+
+/** The call-center pooled practice balance: purchased CallCenterBundle minutes
+ *  minus all its agents' practice-call consumption (across every served office). */
+export async function getCallCenterBalance(orgId: string): Promise<{ purchasedMin: number; usedMin: number; remainingMin: number; remainingSeconds: number }> {
+  const [purchases, used] = await Promise.all([
+    prisma.callCenterBundle.aggregate({ where: { organizationId: orgId }, _sum: { minutesPurchased: true } }),
+    prisma.session.aggregate({ where: { callCenterOrgId: orgId, isAudit: false, durationSeconds: { not: null } }, _sum: { durationSeconds: true } }),
+  ]);
+  const purchasedMin = purchases._sum.minutesPurchased ?? 0;
+  const usedMin = Math.round((used._sum.durationSeconds ?? 0) / 60);
+  const remainingMin = purchasedMin - usedMin;
+  return { purchasedMin, usedMin, remainingMin, remainingSeconds: Math.max(0, remainingMin * 60) };
+}
+
+/** Pre-session gate for a call-center agent's practice call (checks the pool). */
+export async function canStartCallCenter(orgId: string): Promise<{ ok: boolean; remainingSeconds: number }> {
+  const b = await getCallCenterBalance(orgId);
+  return { ok: b.remainingSeconds > MIN_START_SECONDS, remainingSeconds: b.remainingSeconds };
+}
+
+/** Append purchased minutes to a call-center's pooled balance (one row per purchase). */
+export async function addCallCenterMinutes(orgId: string, minutes: number, stripePaymentIntent?: string | null, amountCents?: number) {
+  const cents = amountCents ?? Math.round(minuteQuote(minutes, await getPricingConfig()).total * 100);
+  return prisma.callCenterBundle.create({
+    data: { organizationId: orgId, minutesPurchased: minutes, amountCents: cents, stripePaymentIntent: stripePaymentIntent ?? null },
+  });
+}
+
+/** The call-center org a phone agent belongs to (via their pod), or null. */
+export async function callCenterOrgForAgent(userId: string): Promise<string | null> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { pod: { select: { organizationId: true } } } });
+  return u?.pod?.organizationId ?? null;
 }
