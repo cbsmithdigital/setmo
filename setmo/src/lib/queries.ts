@@ -704,7 +704,7 @@ export async function getSavedRecordings(user: { id: string; role: string; offic
 }
 
 // ---------- session result ----------
-type ResultViewer = { id: string; role: string; officeId: string | null };
+type ResultViewer = { id: string; role: string; officeId: string | null; organizationId?: string | null; callCenterPodId?: string | null };
 
 export async function getSessionResult(sessionId: string, viewer: ResultViewer) {
   const session = await prisma.session.findUnique({
@@ -719,7 +719,16 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer) 
   // in their office (read-only — setter-only actions are hidden in the UI).
   const isOwner = session.setterId === viewer.id;
   const isManager = ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(viewer.role);
-  const canView = isOwner || (isManager && session.officeId === viewer.officeId);
+  // A call-center senior manager can view any of the call center's agent calls; a
+  // floor manager only their own pod's agents.
+  const isCallCenterView = Boolean(
+    session.callCenterOrgId &&
+    viewer.organizationId &&
+    viewer.organizationId === session.callCenterOrgId &&
+    (viewer.role === "CALL_CENTER_ADMIN" ||
+      (viewer.role === "CALL_CENTER_MANAGER" && viewer.callCenterPodId != null && viewer.callCenterPodId === session.setter?.callCenterPodId))
+  );
+  const canView = isOwner || (isManager && session.officeId === viewer.officeId) || isCallCenterView;
   if (!canView) return null;
 
   const e = session.evaluation;
