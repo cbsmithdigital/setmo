@@ -22,9 +22,11 @@ enum Role {
   CONSULTANT
   PARTNER_ADMIN // partner org owner/manager (portal)
   PARTNER_MEMBER // individual rep under a partner org (portal)
+  CALL_CENTER_ADMIN // call-center senior manager — oversees all: billing, client offices, cross-floor
+  CALL_CENTER_MANAGER // call-center floor manager — owns a pod (its agents + served offices)
   GROUP_ADMIN
   OFFICE_ADMIN
-  SETTER
+  SETTER // dental-practice setter OR call-center phone agent (agent = setter shared across offices)
 }
 
 enum UserStatus {
@@ -36,6 +38,7 @@ enum UserStatus {
 enum OrganizationType {
   GROUP
   INDEPENDENT
+  CALL_CENTER // a call center: phone agents shared across many served offices, organized into pods
 }
 
 enum PartnerType {
@@ -184,12 +187,63 @@ model Organization {
   referredByPartnerId String? @map("referred_by_partner_id")
   referralCode        String? @map("referral_code")
 
-  offices      Office[]
-  users        User[]
-  goals        Goal[]
-  tokenBundles OrgTokenBundle[]
+  offices           Office[]
+  users             User[]
+  goals             Goal[]
+  tokenBundles      OrgTokenBundle[]
+  pods              Pod[] // call-center only: floor-manager teams
+  callCenterBundles CallCenterBundle[] // call-center only: pooled agent-practice balance
 
   @@map("organization")
+}
+
+// A call-center pod: a floor manager's team (a subset of agents + the offices
+// they serve). Belongs to a CALL_CENTER organization.
+model Pod {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id") // the call-center org
+  name           String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agents       User[]       @relation("PodAgents") // agents whose callCenterPodId = this pod
+  offices      Office[]     @relation("PodOffices") // offices served by this pod
+
+  @@index([organizationId])
+  @@map("pod")
+}
+
+// Which offices a call-center AGENT is assigned to call for (agent ↔ office
+// many-to-many). An agent practices/reports per assigned office.
+model AgentOffice {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id") // the agent (User, role SETTER, in a call-center pod)
+  officeId  String   @map("office_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, officeId])
+  @@index([officeId])
+  @@map("agent_office")
+}
+
+// Call-center pooled practice balance (rolling). All the call center's agents
+// draw from this ONE pool — distinct from per-office ConversationBundle and the
+// DSO OrgTokenBundle coach wallet.
+model CallCenterBundle {
+  id                  String   @id @default(uuid())
+  organizationId      String   @map("organization_id") // the call-center org
+  minutesPurchased    Int      @map("minutes_purchased")
+  amountCents         Int?     @map("amount_cents")
+  stripePaymentIntent String?  @map("stripe_payment_intent")
+  purchasedAt         DateTime @default(now()) @map("purchased_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("call_center_bundle")
 }
 
 // Group/DSO coach token purchases (rolling, never reset). Distinct from office
@@ -225,9 +279,13 @@ model Office {
   autoTopUp        Boolean  @default(false) @map("auto_top_up") // auto-buy minutes when the balance dips below 25
   minuteAlertStage Int      @default(0) @map("minute_alert_stage") // 0 healthy · 1 sent 100-min alert · 2 sent 60-min alert
   lastAutoTopUpAt  DateTime? @map("last_auto_top_up_at")
+  // Call-center pod that serves this office (its account owner). SEPARATE from
+  // organizationId (the office's owning DSO) — an office may have both, one, or neither.
+  servedByPodId    String?  @map("served_by_pod_id")
   createdAt        DateTime @default(now()) @map("created_at")
 
   organization Organization?       @relation(fields: [organizationId], references: [id])
+  servedByPod  Pod?                @relation("PodOffices", fields: [servedByPodId], references: [id])
   users        User[]
   services     OfficeService[]
   sessions     Session[]
@@ -236,8 +294,10 @@ model Office {
   outcomes     OfficeOutcome[]
   audits       SetterAudit[]
   goals        Goal[]
+  agentAssignments AgentOffice[] // call-center agents assigned to this office
 
   @@index([organizationId])
+  @@index([servedByPodId])
   @@map("office")
 }
 
@@ -276,11 +336,15 @@ model User {
   status         UserStatus @default(INVITED)
   invitedById    String?    @map("invited_by")
   digestOptOut   Boolean    @default(false) @map("digest_opt_out") // unsubscribed from weekly summary emails
+  // Set for a call-center AGENT: the pod (floor-manager team) they belong to.
+  // Their served offices are AgentOffice rows; their sessions carry callCenterOrgId.
+  callCenterPodId String?   @map("call_center_pod_id")
   createdAt      DateTime   @default(now()) @map("created_at")
 
   office       Office?       @relation(fields: [officeId], references: [id])
   organization Organization? @relation(fields: [organizationId], references: [id])
   partner      Partner?      @relation(fields: [partnerId], references: [id])
+  pod          Pod?          @relation("PodAgents", fields: [callCenterPodId], references: [id])
   invitedBy    User?         @relation("Invites", fields: [invitedById], references: [id])
   invitees     User[]        @relation("Invites")
 
@@ -290,10 +354,12 @@ model User {
   managedAccounts ManagedAccount[] @relation("ConsultantManaged")
   memberships     Membership[]
   goalParticipations GoalParticipant[]
+  agentOffices    AgentOffice[] // call-center agent → assigned offices
 
   @@index([officeId])
   @@index([organizationId])
   @@index([partnerId])
+  @@index([callCenterPodId])
   @@map("user")
 }
 
@@ -302,6 +368,8 @@ enum MembershipScope {
   GROUP
   PLATFORM
   PARTNER
+  CALL_CENTER // scopeId = call-center organizationId (senior manager)
+  POD // scopeId = podId (floor manager)
 }
 
 // Roles a user holds. A user may hold several (e.g. a manager who also takes
@@ -458,8 +526,9 @@ model OfficeService {
 model Session {
   id                     String        @id @default(uuid())
   setterId               String        @map("setter_id")
-  officeId               String        @map("office_id") // denormalized for scoping/leaderboards
+  officeId               String        @map("office_id") // the practice this call is FOR (denormalized for scoping/leaderboards). For a call-center agent this is the CHOSEN target office, not the agent's home.
   organizationId         String?       @map("organization_id") // set for group/DSO coach sessions → metered against the org wallet, NOT the office pool
+  callCenterOrgId        String?       @map("call_center_org_id") // set for a call-center AGENT's practice call → metered against the call-center pool, NOT the office pool
   serviceType            ServiceKey    @map("service_type")
   kind                   SessionKind   @default(PRACTICE) // PRACTICE (scored) | COACH (voice coaching, metered only)
   agentId                String?       @map("agent_id")
@@ -488,6 +557,7 @@ model Session {
   @@index([setterId])
   @@index([officeId])
   @@index([organizationId])
+  @@index([callCenterOrgId])
   @@index([serviceType])
   @@index([auditId])
   @@map("session")

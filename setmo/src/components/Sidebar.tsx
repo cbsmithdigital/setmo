@@ -62,6 +62,13 @@ const NAV_PARTNER: NavItem[] = [
   { href: "/partner/team", label: "Team & codes", icon: "team" },
 ];
 
+// Call center (P1 stub — full agent-centric dashboards land in P2).
+const NAV_CALLCENTER: NavItem[] = [
+  { href: "/callcenter", label: "Overview", icon: "building" },
+  { href: "/resources", label: "Resources", icon: "book" },
+  { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
+];
+
 const NAV_BY_ROLE: Record<string, NavItem[]> = {
   SETTER: NAV_SETTER,
   OFFICE_ADMIN: NAV_OFFICE,
@@ -70,6 +77,8 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
   SUPPORT: NAV_PLATFORM,
   PARTNER_ADMIN: NAV_PARTNER,
   PARTNER_MEMBER: [{ href: "/partner", label: "Dashboard", icon: "home" }],
+  CALL_CENTER_ADMIN: NAV_CALLCENTER,
+  CALL_CENTER_MANAGER: NAV_CALLCENTER,
 };
 
 export function Sidebar({

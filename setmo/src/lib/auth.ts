@@ -130,6 +130,10 @@ export function isManagerRole(role: Role): boolean {
 export function isPlatformRole(role: Role): boolean {
   return role === "PLATFORM_ADMIN" || role === "SUPPORT";
 }
+/** Call-center roles: senior (admin) + floor/pod manager. Their agents are setters. */
+export function isCallCenterRole(role: Role): boolean {
+  return role === "CALL_CENTER_ADMIN" || role === "CALL_CENTER_MANAGER";
+}
 /** Super Admin — config + managing admins + destructive actions. */
 export function isSuperAdmin(role: Role): boolean {
   return role === "PLATFORM_ADMIN";
@@ -150,6 +154,9 @@ export function homeForRole(role: Role): string {
     case "PARTNER_ADMIN":
     case "PARTNER_MEMBER":
       return "/partner";
+    case "CALL_CENTER_ADMIN":
+    case "CALL_CENTER_MANAGER":
+      return "/callcenter";
     case "GROUP_ADMIN":
       return "/group";
     case "OFFICE_ADMIN":
