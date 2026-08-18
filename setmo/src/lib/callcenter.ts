@@ -172,6 +172,70 @@ export async function getPodOverview(podId: string) {
   return { name: pod.name, orgId: pod.organizationId, pool, ...rollup };
 }
 
+// ---------------------------------------------------------------------------
+// SERVED-PRACTICE REPORTING (P3): a practice sees the CUMULATIVE stats of the
+// call-center agents calling FOR them — scoped to THIS office's calls only
+// (read-only; they can't see the agent's work for other practices).
+// ---------------------------------------------------------------------------
+
+/** The call-center agents who ran calls for `officeId`, with this-office stats. */
+export async function getServedOfficeAgents(officeId: string) {
+  const sessions = await prisma.session.findMany({
+    where: { officeId, callCenterOrgId: { not: null }, status: "SCORED", evaluation: { isNot: null } },
+    orderBy: { startedAt: "desc" },
+    select: { setterId: true, startedAt: true, durationSeconds: true, setter: { select: { firstName: true, lastName: true } }, evaluation: { select: { overallScore: true, skills: { select: { skillKey: true, score: true } } } } },
+  });
+  if (!sessions.length) return { callCenterName: null as string | null, agents: [] as ServedAgentRow[] };
+
+  const office = await prisma.office.findUnique({ where: { id: officeId }, select: { servedByPod: { select: { organization: { select: { name: true } } } } } });
+  type Agg = { name: string; overalls: number[]; skill: Map<string, { sum: number; n: number }>; sec: number; last: Date | null };
+  const byAgent = new Map<string, Agg>();
+  for (const s of sessions) {
+    const a = getOr(byAgent, s.setterId, () => ({ name: fullName(s.setter?.firstName, s.setter?.lastName), overalls: [], skill: new Map<string, { sum: number; n: number }>(), sec: 0, last: null as Date | null }));
+    if (s.evaluation?.overallScore != null) a.overalls.push(Number(s.evaluation.overallScore));
+    a.sec += s.durationSeconds ?? 0;
+    if (!a.last || s.startedAt > a.last) a.last = s.startedAt;
+    for (const k of s.evaluation?.skills ?? []) { const t = getOr(a.skill, k.skillKey, () => ({ sum: 0, n: 0 })); t.sum += Number(k.score); t.n++; }
+  }
+  const agents: ServedAgentRow[] = [...byAgent.entries()].map(([id, a]) => {
+    const overall = Number(mean(a.overalls).toFixed(1));
+    const { top, weak } = topWeak(a.skill);
+    return { id, name: a.name, overall, sessions: a.overalls.length, trainingMin: Math.round(a.sec / 60), topSkill: top ? skillName(top) : null, weakSkill: weak ? skillName(weak) : null, last: a.last, status: ccStatus(overall, a.overalls.length) };
+  }).sort((x, y) => y.overall - x.overall);
+
+  return { callCenterName: office?.servedByPod?.organization?.name ?? null, agents };
+}
+type ServedAgentRow = { id: string; name: string; overall: number; sessions: number; trainingMin: number; topSkill: string | null; weakSkill: string | null; last: Date | null; status: ReturnType<typeof ccStatus> };
+
+/** One call-center agent's stats + calls FOR a specific served office only. */
+export async function getServedOfficeAgentDetail(officeId: string, agentId: string) {
+  const sessions = await prisma.session.findMany({
+    where: { officeId, setterId: agentId, callCenterOrgId: { not: null }, status: "SCORED", evaluation: { isNot: null } },
+    orderBy: { startedAt: "desc" },
+    select: { id: true, startedAt: true, durationSeconds: true, personaSeed: true, evaluation: { select: { overallScore: true, skills: { select: { skillKey: true, score: true } } } } },
+  });
+  if (!sessions.length) return null;
+  const agent = await prisma.user.findUnique({ where: { id: agentId }, select: { firstName: true, lastName: true } });
+
+  const overalls: number[] = [];
+  const skill = new Map<string, { sum: number; n: number }>();
+  let sec = 0;
+  for (const s of sessions) {
+    if (s.evaluation?.overallScore != null) overalls.push(Number(s.evaluation.overallScore));
+    sec += s.durationSeconds ?? 0;
+    for (const k of s.evaluation?.skills ?? []) { const t = getOr(skill, k.skillKey, () => ({ sum: 0, n: 0 })); t.sum += Number(k.score); t.n++; }
+  }
+  return {
+    id: agentId,
+    name: fullName(agent?.firstName, agent?.lastName),
+    overall: Number(mean(overalls).toFixed(1)),
+    sessions: overalls.length,
+    trainingMin: Math.round(sec / 60),
+    skills: [...skill.entries()].map(([k, t]) => ({ key: k, name: skillName(k), avg: Number((t.sum / t.n).toFixed(1)) })),
+    recent: sessions.slice(0, 12).map((s) => ({ id: s.id, persona: (s.personaSeed as { persona?: string } | null)?.persona ?? "Practice lead", score: s.evaluation?.overallScore != null ? Number(s.evaluation.overallScore) : 0, startedAt: s.startedAt })),
+  };
+}
+
 /** One agent: overall + per-office breakdown + skill profile + recent calls. */
 export async function getAgentDetail(agentId: string) {
   const agent = await prisma.user.findFirst({

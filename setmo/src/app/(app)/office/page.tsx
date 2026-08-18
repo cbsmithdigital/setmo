@@ -10,6 +10,7 @@ import { OutcomesCard } from "@/components/office/OutcomesCard";
 import { OutcomesInsight } from "@/components/office/OutcomesInsight";
 import { getOfficeOutcomeFunnel } from "@/lib/outcomes";
 import { getTrainingImpact } from "@/lib/coaching";
+import { getServedOfficeAgents } from "@/lib/callcenter";
 import { getInsight } from "@/lib/insights";
 import { SettyInsight } from "@/components/coach/SettyInsight";
 import { relativeShort } from "@/lib/format";
@@ -22,12 +23,13 @@ export default async function OfficeOverviewPage() {
   const user = await requireRole("OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN");
   const o = await getOfficeOverview(user.officeId!);
   const period = currentPeriod();
-  const [outcome, funnel, insight, onboarding, impact] = await Promise.all([
+  const [outcome, funnel, insight, onboarding, impact, servedAgents] = await Promise.all([
     getOutcome(user.officeId!, period.label),
     getOfficeOutcomeFunnel(user.officeId!, period.label),
     getInsight("OFFICE", user.officeId!),
     getOnboarding(user.officeId!),
     getTrainingImpact(user.officeId!),
+    getServedOfficeAgents(user.officeId!),
   ]);
   const { purchasedMin, usedMin, remainingMin } = o.allowance;
   const poolPct = purchasedMin > 0 ? Math.round((usedMin / purchasedMin) * 100) : 0;
@@ -72,6 +74,28 @@ export default async function OfficeOverviewPage() {
                     <span className={"chip " + (r.delta >= 0 ? "mint" : "amber")} style={{ padding: "2px 8px" }}>{r.delta >= 0 ? "+" : ""}{r.delta}</span>
                   </span>
                 </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {servedAgents.agents.length > 0 && (
+          <div className="card card-pad rise" style={{ marginBottom: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
+              <h3 style={{ fontSize: 16 }}>Call center agents <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>— training for your practice</span></h3>
+              {servedAgents.callCenterName && <span className="chip purple" style={{ padding: "3px 10px" }}>{servedAgents.callCenterName}</span>}
+            </div>
+            <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>How the agents calling for you are training. Open one to see their strengths and listen to their calls for your office.</p>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {servedAgents.agents.map((a) => (
+                <Link key={a.id} href={`/office/agents/${a.id}`} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "1px solid var(--line-soft)" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{a.name}</div>
+                    <div className="muted" style={{ fontSize: 12 }}>{a.sessions} reps · {a.trainingMin}m{a.weakSkill ? ` · focus: ${a.weakSkill}` : ""}{a.last ? ` · ${relativeShort(a.last)}` : ""}</div>
+                  </div>
+                  <span className={"chip " + (a.overall >= 4.3 ? "mint" : a.overall < 3.7 ? "amber" : "")} style={{ padding: "2px 9px", fontFamily: "var(--font-lato)", fontWeight: 800 }}>{a.overall ? a.overall.toFixed(1) : "—"}</span>
+                  <Icon name="arrow" size={14} />
+                </Link>
               ))}
             </div>
           </div>

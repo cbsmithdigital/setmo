@@ -105,6 +105,19 @@ async function main() {
     await prisma.membership.upsert({ where: { userId_role_scopeId: { userId: id, role: m.role, scopeId } }, update: {}, create: { userId: id, role: m.role, scopeType, scopeId } });
   }
 
+  // A served practice's OWN office admin (so the practice can see the read-only
+  // call-center-agent reporting for their account). Cedar Park Dental.
+  if (sb) {
+    const email = "casey@cedarparkdental.example";
+    const id = await ensureAuthUser(sb, email, "Casey Lane");
+    await prisma.user.upsert({
+      where: { email },
+      update: { firstName: "Casey", lastName: "Lane", role: "OFFICE_ADMIN", status: "ACTIVE", officeId: "cc-office-cedar", organizationId: null, callCenterPodId: null },
+      create: { id, email, firstName: "Casey", lastName: "Lane", role: "OFFICE_ADMIN", status: "ACTIVE", officeId: "cc-office-cedar" },
+    });
+    await prisma.membership.upsert({ where: { userId_role_scopeId: { userId: id, role: "OFFICE_ADMIN", scopeId: "cc-office-cedar" } }, update: {}, create: { userId: id, role: "OFFICE_ADMIN", scopeType: "OFFICE", scopeId: "cc-office-cedar" } });
+  }
+
   // Agents (login-able) + office assignments + sessions.
   const implant = await prisma.agent.findUnique({ where: { serviceType: "IMPLANT" } });
   const now = new Date();
@@ -149,5 +162,6 @@ async function main() {
   console.log(`Logins (pw ${DEMO_PASSWORD}):`);
   console.log(`  Managers: morgan@brightcall.example (senior) · jamie@brightcall.example (Pod North) · riley@brightcall.example (Pod South)`);
   console.log(`  Agents: ${AGENTS.map(agentEmail).join(" · ")}`);
+  console.log(`  Served practice: casey@cedarparkdental.example (Cedar Park office admin — sees the call-center agents reporting)`);
 }
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

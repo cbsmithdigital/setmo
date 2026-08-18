@@ -16,6 +16,7 @@ export async function skillAveragesOverSessions(officeIds: string[], range: Anal
   const sessions = await prisma.session.findMany({
     where: {
       officeId: { in: officeIds },
+      callCenterOrgId: null, // exclude external call-center agents from a practice's own-team stats
       status: "SCORED",
       durationSeconds: { gte: 60 },
       startedAt: { gte: range.from, lte: range.to },
@@ -71,8 +72,8 @@ export async function getOfficeTeam(officeId: string, range: AnalyticsRange = th
       select: { id: true, firstName: true, lastName: true },
     }),
     prisma.session.findMany({
-      // windowed, excluding sub-minute hang-ups/interruptions
-      where: { officeId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to } },
+      // windowed, excluding sub-minute hang-ups/interruptions + external call-center agents
+      where: { officeId, callCenterOrgId: null, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to } },
       orderBy: { startedAt: "asc" },
       include: { evaluation: { select: { overallScore: true } } },
     }),
@@ -162,7 +163,7 @@ export async function getOfficeOverview(officeId: string, range: AnalyticsRange 
 
   const weekAgo = new Date(Date.now() - 7 * 86400_000);
   const sessionsThisWeek = await prisma.session.count({
-    where: { officeId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: weekAgo } },
+    where: { officeId, callCenterOrgId: null, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: weekAgo } },
   });
 
   // Office strengths + gaps (this month) for the overview card.
@@ -198,7 +199,7 @@ export async function getOfficeSkillMatrix(officeId: string, range: AnalyticsRan
   const [setters, sessions] = await Promise.all([
     prisma.user.findMany({ where: { officeId, role: "SETTER" }, select: { id: true, firstName: true, lastName: true } }),
     prisma.session.findMany({
-      where: { officeId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null } },
+      where: { officeId, callCenterOrgId: null, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null } },
       include: { evaluation: { include: { skills: true } } },
     }),
   ]);
