@@ -249,6 +249,20 @@ export async function getAgentLeaderboards(userId: string) {
   return { pod: toRows(pod?.agents ?? [], false), center: toRows(center.agents, true), podName: agent.pod.name };
 }
 
+/** Senior leaderboards: every agent center-wide (each tagged with its pod) +
+ *  the pod standings (pods ranked by average). No self-highlight — the senior
+ *  manager isn't an agent. */
+export async function getCenterLeaderboards(orgId: string) {
+  const center = await getCallCenterOverview(orgId);
+  const agents: LbRow[] = center.agents
+    .filter((a) => a.sessions > 0)
+    .map((a, i) => ({ rank: i + 1, name: a.name, sub: a.podName, initials: initialsFrom(a.name), score: a.overall, movement: 0, me: false, top: i === 0 }));
+  const pods: LbRow[] = center.pods
+    .filter((p) => p.sessions > 0)
+    .map((p, i) => ({ rank: i + 1, name: p.name, sub: `${p.agents} agent${p.agents === 1 ? "" : "s"}`, initials: initialsFrom(p.name), score: p.avg, movement: 0, me: false, top: i === 0 }));
+  return { agents, pods, centerName: center.name };
+}
+
 // ---------------------------------------------------------------------------
 // FLOOR-MANAGER PARITY (mirrors the office-admin layer, pool-/pod-scoped).
 // getPodTeam / getPodSkillMatrix return the SAME shapes as getOfficeTeam /
@@ -256,22 +270,13 @@ export async function getAgentLeaderboards(userId: string) {
 // them unchanged. Scoped by session.callCenterOrgId (the pool) + the pod's agents.
 // ---------------------------------------------------------------------------
 
-/** Per-agent aggregates for one pod over a window (default: this month) — the
- *  call-center analog of getOfficeTeam, returning office-compatible TeamRow[]. */
-export async function getPodTeam(podId: string, range: AnalyticsRange = thisMonthRange()): Promise<TeamRow[]> {
-  const pod = await prisma.pod.findUnique({ where: { id: podId }, select: { organizationId: true } });
-  if (!pod) return [];
-  const orgId = pod.organizationId;
-  const [agents, sessions, recs] = await Promise.all([
-    prisma.user.findMany({ where: { role: "SETTER", status: "ACTIVE", callCenterPodId: podId }, select: { id: true, firstName: true, lastName: true } }),
-    prisma.session.findMany({
-      where: { callCenterOrgId: orgId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, setter: { callCenterPodId: podId } },
-      orderBy: { startedAt: "asc" },
-      include: { evaluation: { select: { overallScore: true } } },
-    }),
-    prisma.recommendation.findMany({ where: { status: "ACTIVE", setter: { callCenterPodId: podId } }, orderBy: { createdAt: "desc" } }),
-  ]);
+// Pure aggregators shared by the pod (floor) + center (senior) variants — the
+// only difference between floor and center is the query scope (one pod vs every
+// pod in the org); the math is identical, so it lives here once.
+type TeamAgent = { id: string; firstName: string | null; lastName: string | null; podName?: string };
+type TeamSess = { setterId: string; startedAt: Date; durationSeconds: number | null; evaluation: { overallScore: unknown } | null };
 
+function buildTeamRows(agents: TeamAgent[], sessions: TeamSess[], recs: { setterId: string; skillKey: string; reason: string }[]): (TeamRow & { podName?: string })[] {
   const byUser = new Map<string, { overalls: number[]; durations: number[]; last: Date | null }>();
   for (const s of sessions) {
     const u = getOr(byUser, s.setterId, () => ({ overalls: [] as number[], durations: [] as number[], last: null as Date | null }));
@@ -302,33 +307,24 @@ export async function getPodTeam(podId: string, range: AnalyticsRange = thisMont
         recSkill: rec ? skillName(rec.skillKey) : null,
         rec: rec?.reason ?? null,
         status: computeStatus(avg, delta, count),
+        ...(u.podName !== undefined ? { podName: u.podName } : {}),
       };
     })
     .sort((a, b) => b.avg - a.avg);
 }
 
-/** Agent × skill matrix for one pod over a window — office-compatible shape for
- *  the shared <SkillMatrix> component. */
-export async function getPodSkillMatrix(podId: string, range: AnalyticsRange = thisMonthRange()) {
-  const pod = await prisma.pod.findUnique({ where: { id: podId }, select: { organizationId: true } });
-  if (!pod) return { skills: [] as { key: string; short: string }[], rows: [] as { id: string; name: string; avg: number; cells: { key: string; score: number | null }[] }[] };
-  const orgId = pod.organizationId;
-  const [agents, sessions] = await Promise.all([
-    prisma.user.findMany({ where: { role: "SETTER", callCenterPodId: podId }, select: { id: true, firstName: true, lastName: true } }),
-    prisma.session.findMany({
-      where: { callCenterOrgId: orgId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null }, setter: { callCenterPodId: podId } },
-      include: { evaluation: { include: { skills: true } } },
-    }),
-  ]);
+function buildAgentMatrix(
+  agents: { id: string; firstName: string | null; lastName: string | null }[],
+  sessions: { setterId: string; evaluation: { overallScore: unknown; skills: { skillKey: string; score: unknown }[] } | null }[]
+) {
   const order = rubricFor("IMPLANT").map((s) => s.key);
   const r1 = (n: number) => Number(n.toFixed(1));
-
   const acc = new Map<string, { overalls: number[]; sums: Map<string, { t: number; n: number }> }>();
   for (const s of sessions) {
-    if (s.evaluation!.skills.length === 0 || s.evaluation!.overallScore == null) continue;
+    if (!s.evaluation || s.evaluation.skills.length === 0 || s.evaluation.overallScore == null) continue;
     const a = getOr(acc, s.setterId, () => ({ overalls: [] as number[], sums: new Map<string, { t: number; n: number }>() }));
-    a.overalls.push(Number(s.evaluation!.overallScore));
-    for (const k of s.evaluation!.skills) {
+    a.overalls.push(Number(s.evaluation.overallScore));
+    for (const k of s.evaluation.skills) {
       const c = getOr(a.sums, k.skillKey, () => ({ t: 0, n: 0 }));
       c.t += Number(k.score); c.n++;
     }
@@ -343,6 +339,55 @@ export async function getPodSkillMatrix(podId: string, range: AnalyticsRange = t
     }))
     .sort((a, b) => b.avg - a.avg);
   return { skills: order.map((k) => ({ key: k, short: skillShort(k) })), rows };
+}
+
+const SESS_INCLUDE = { evaluation: { select: { overallScore: true } } } as const;
+
+/** Per-agent aggregates for one pod over a window (default: this month) — the
+ *  call-center analog of getOfficeTeam, returning office-compatible TeamRow[]. */
+export async function getPodTeam(podId: string, range: AnalyticsRange = thisMonthRange()): Promise<TeamRow[]> {
+  const pod = await prisma.pod.findUnique({ where: { id: podId }, select: { organizationId: true } });
+  if (!pod) return [];
+  const [agents, sessions, recs] = await Promise.all([
+    prisma.user.findMany({ where: { role: "SETTER", status: "ACTIVE", callCenterPodId: podId }, select: { id: true, firstName: true, lastName: true } }),
+    prisma.session.findMany({ where: { callCenterOrgId: pod.organizationId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, setter: { callCenterPodId: podId } }, orderBy: { startedAt: "asc" }, include: SESS_INCLUDE }),
+    prisma.recommendation.findMany({ where: { status: "ACTIVE", setter: { callCenterPodId: podId } }, orderBy: { createdAt: "desc" } }),
+  ]);
+  return buildTeamRows(agents, sessions, recs);
+}
+
+/** Center-wide per-agent aggregates across EVERY pod in the org (senior view).
+ *  Each row carries its podName so the roster can show which pod an agent is in. */
+export async function getCenterTeam(orgId: string, range: AnalyticsRange = thisMonthRange()): Promise<(TeamRow & { podName: string })[]> {
+  const [agents, sessions, recs] = await Promise.all([
+    prisma.user.findMany({ where: { role: "SETTER", status: "ACTIVE", pod: { organizationId: orgId } }, select: { id: true, firstName: true, lastName: true, pod: { select: { name: true } } } }),
+    prisma.session.findMany({ where: { callCenterOrgId: orgId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to } }, orderBy: { startedAt: "asc" }, include: SESS_INCLUDE }),
+    prisma.recommendation.findMany({ where: { status: "ACTIVE", setter: { pod: { organizationId: orgId } } }, orderBy: { createdAt: "desc" } }),
+  ]);
+  const withPod: TeamAgent[] = agents.map((a) => ({ id: a.id, firstName: a.firstName, lastName: a.lastName, podName: a.pod?.name ?? "" }));
+  return buildTeamRows(withPod, sessions, recs) as (TeamRow & { podName: string })[];
+}
+
+const MATRIX_INCLUDE = { evaluation: { include: { skills: true } } } as const;
+
+/** Agent × skill matrix for one pod over a window — office-compatible shape. */
+export async function getPodSkillMatrix(podId: string, range: AnalyticsRange = thisMonthRange()) {
+  const pod = await prisma.pod.findUnique({ where: { id: podId }, select: { organizationId: true } });
+  if (!pod) return { skills: [] as { key: string; short: string }[], rows: [] as { id: string; name: string; avg: number; cells: { key: string; score: number | null }[] }[] };
+  const [agents, sessions] = await Promise.all([
+    prisma.user.findMany({ where: { role: "SETTER", callCenterPodId: podId }, select: { id: true, firstName: true, lastName: true } }),
+    prisma.session.findMany({ where: { callCenterOrgId: pod.organizationId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null }, setter: { callCenterPodId: podId } }, include: MATRIX_INCLUDE }),
+  ]);
+  return buildAgentMatrix(agents, sessions);
+}
+
+/** Center-wide agent × skill matrix across every pod (senior view). */
+export async function getCenterSkillMatrix(orgId: string, range: AnalyticsRange = thisMonthRange()) {
+  const [agents, sessions] = await Promise.all([
+    prisma.user.findMany({ where: { role: "SETTER", pod: { organizationId: orgId } }, select: { id: true, firstName: true, lastName: true } }),
+    prisma.session.findMany({ where: { callCenterOrgId: orgId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null } }, include: MATRIX_INCLUDE }),
+  ]);
+  return buildAgentMatrix(agents, sessions);
 }
 
 /** Rich floor-manager overview — the pod analog of getOfficeOverview. Composes
@@ -375,19 +420,14 @@ export type PodAccount = {
   offerFraming: string; appointmentFraming: string; depositPolicy: string;
   services: { key: string; name: string; live: boolean }[];
   avg: number; agents: number; sessions: number;
+  podName?: string; // set only for the center-wide (senior) view
 };
 
-/** Read-only "Accounts" view for a floor manager: each practice the pod calls
- *  for, with its offer framing + the services agents train on + per-account
- *  stats. The served practice still OWNS its catalog — this is view-only. */
-export async function getPodAccounts(podId: string): Promise<PodAccount[]> {
-  const [offices, base] = await Promise.all([
-    prisma.office.findMany({ where: { servedByPodId: podId }, select: { id: true }, orderBy: { name: "asc" } }),
-    getPodOverview(podId),
-  ]);
-  const statBy = new Map((base?.offices ?? []).map((o) => [o.id, o]));
-  const cats = await Promise.all(offices.map((o) => getOfficeCatalog(o.id)));
-  return offices.map((o, i) => {
+// Shared builder: turn a set of served offices into PodAccount rows using the
+// office catalog (offer framing + enabled services) + rollup stats.
+async function accountRows(officeIds: { id: string; podName?: string }[], statBy: Map<string, { avg: number; agents: number; sessions: number }>): Promise<PodAccount[]> {
+  const cats = await Promise.all(officeIds.map((o) => getOfficeCatalog(o.id)));
+  return officeIds.map((o, i) => {
     const c = cats[i];
     const st = statBy.get(o.id);
     return {
@@ -401,8 +441,34 @@ export async function getPodAccounts(podId: string): Promise<PodAccount[]> {
       avg: st?.avg ?? 0,
       agents: st?.agents ?? 0,
       sessions: st?.sessions ?? 0,
+      ...(o.podName !== undefined ? { podName: o.podName } : {}),
     };
   });
+}
+
+/** Read-only "Accounts" view for a floor manager: each practice the pod calls
+ *  for, with its offer framing + the services agents train on + per-account
+ *  stats. The served practice still OWNS its catalog — this is view-only. */
+export async function getPodAccounts(podId: string): Promise<PodAccount[]> {
+  const [offices, base] = await Promise.all([
+    prisma.office.findMany({ where: { servedByPodId: podId }, select: { id: true }, orderBy: { name: "asc" } }),
+    getPodOverview(podId),
+  ]);
+  const statBy = new Map((base?.offices ?? []).map((o) => [o.id, o]));
+  return accountRows(offices, statBy);
+}
+
+/** Center-wide Accounts view (senior): every served practice across all pods,
+ *  each tagged with the pod that serves it. Read-only. */
+export async function getCenterAccounts(orgId: string): Promise<PodAccount[]> {
+  const pods = await prisma.pod.findMany({ where: { organizationId: orgId }, select: { id: true, name: true } });
+  const podNameById = new Map(pods.map((p) => [p.id, p.name]));
+  const [offices, base] = await Promise.all([
+    prisma.office.findMany({ where: { servedByPodId: { in: pods.map((p) => p.id) } }, select: { id: true, servedByPodId: true }, orderBy: { name: "asc" } }),
+    getCallCenterOverview(orgId),
+  ]);
+  const statBy = new Map(base.offices.map((o) => [o.id, o]));
+  return accountRows(offices.map((o) => ({ id: o.id, podName: o.servedByPodId ? podNameById.get(o.servedByPodId) ?? "" : "" })), statBy);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,12 +1,12 @@
-import { requireUser } from "@/lib/auth";
+import { requireUser, getActiveRole } from "@/lib/auth";
 import { getOfficeLeaderboard, getGlobalLeaderboard } from "@/lib/queries";
-import { getAgentLeaderboards } from "@/lib/callcenter";
+import { getAgentLeaderboards, getCenterLeaderboards } from "@/lib/callcenter";
 import { LeaderboardClient } from "@/components/leaderboard/LeaderboardClient";
 
 export default async function LeaderboardPage() {
   const user = await requireUser();
 
-  // Call-center phone agents rank as individuals within their pod and across
+  // Call-center phone agents + floor managers rank within their pod and across
   // the whole call center — not against practices.
   if (user.callCenterPodId) {
     const lb = await getAgentLeaderboards(user.id);
@@ -15,6 +15,14 @@ export default async function LeaderboardPage() {
         <LeaderboardClient variant="agent" officeRows={lb.pod} globalRows={lb.center} officeName={lb.podName} />
       );
     }
+  }
+
+  // Senior call-center manager → agents (center-wide) vs pod standings.
+  if (getActiveRole(user) === "CALL_CENTER_ADMIN" && user.organizationId) {
+    const lb = await getCenterLeaderboards(user.organizationId);
+    return (
+      <LeaderboardClient variant="center" officeRows={lb.agents} globalRows={lb.pods} officeName={lb.centerName} />
+    );
   }
 
   const [officeRows, globalRows] = await Promise.all([

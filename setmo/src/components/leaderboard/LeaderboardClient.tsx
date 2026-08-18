@@ -33,29 +33,42 @@ export function LeaderboardClient({
   officeRows: Row[];
   globalRows: Row[];
   officeName: string;
-  variant?: "setter" | "agent";
+  variant?: "setter" | "agent" | "center";
 }) {
   const isAgent = variant === "agent";
+  const isCenter = variant === "center";
   const [scope, setScope] = useState<"office" | "global">("office");
   const rows = scope === "office" ? officeRows : globalRows;
   // Agents rank as individuals on BOTH boards (their pod + the whole call
   // center), so "You" applies everywhere. Setters only appear by name on the
-  // office board — the global board shows practice standings, not people.
-  const showMe = (p: Row) => Boolean(p.me) && (isAgent || scope === "office");
-  const subFor = (p: Row) => (scope === "office" && !isAgent ? officeName : p.sub ?? (scope === "office" ? officeName : ""));
+  // office board. The senior "center" view is agents (primary) vs pod standings
+  // (secondary) — no self-highlight, since the manager isn't an agent.
+  const showMe = (p: Row) => Boolean(p.me) && (isAgent || (scope === "office" && variant === "setter"));
+  const subFor = (p: Row) =>
+    isCenter
+      ? p.sub ?? ""
+      : isAgent
+        ? p.sub ?? (scope === "office" ? officeName : "")
+        : scope === "office"
+          ? officeName
+          : p.sub ?? "";
 
-  // Tab + copy differ for call-center agents.
-  const primaryLabel = isAgent ? "My pod" : "My office";
+  // Tab + copy differ per audience.
+  const primaryLabel = isCenter ? "Agents" : isAgent ? "My pod" : "My office";
   const primaryIcon = "team" as const;
-  const secondaryLabel = isAgent ? "Whole call center" : "Global · practices";
+  const secondaryLabel = isCenter ? "Pods" : isAgent ? "Whole call center" : "Global · practices";
   const secondaryIcon = "shield" as const;
-  const emptyNoun = scope === "office" ? (isAgent ? "agents" : "setters") : isAgent ? "agents" : "practices";
+  const emptyNoun = scope === "office" ? (isCenter || isAgent ? "agents" : "setters") : isCenter ? "pods" : isAgent ? "agents" : "practices";
   const footer =
     scope === "global"
-      ? isAgent
-        ? "Center-wide rankings across every pod — climb by improving your average, not by taking more calls."
-        : "Global rankings show practice-level standings only — individual names stay inside each office."
-      : "Rankings update after each scored session. Climb by improving, not by grinding volume.";
+      ? isCenter
+        ? "Pod standings — how each pod's agents average out. Balanced coaching lifts the whole floor."
+        : isAgent
+          ? "Center-wide rankings across every pod — climb by improving your average, not by taking more calls."
+          : "Global rankings show practice-level standings only — individual names stay inside each office."
+      : isCenter
+        ? "Every agent across your call center, ranked on average — improvement beats call volume."
+        : "Rankings update after each scored session. Climb by improving, not by grinding volume.";
 
   // Podium order: 2nd, 1st, 3rd.
   const podium = [rows[1], rows[0], rows[2]].filter(Boolean) as Row[];

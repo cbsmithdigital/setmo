@@ -1,5 +1,5 @@
-import { requireRole } from "@/lib/auth";
-import { getPodAccounts } from "@/lib/callcenter";
+import { requireRole, getActiveRole } from "@/lib/auth";
+import { getPodAccounts, getCenterAccounts } from "@/lib/callcenter";
 import { Icon } from "@/components/ui/Icon";
 
 function scoreChip(v: number) {
@@ -20,33 +20,35 @@ function Detail({ label, value }: { label: string; value: string }) {
 // Read-only "Accounts" view for a floor manager: each served practice's offer +
 // the services agents train on + per-account stats. The practice owns its
 // catalog; this is view-only context for coaching.
-export default async function PodAccountsPage() {
+export default async function CallCenterAccountsPage() {
   const user = await requireRole("CALL_CENTER_MANAGER", "CALL_CENTER_ADMIN");
+  const senior = getActiveRole(user) === "CALL_CENTER_ADMIN";
+  const scopeId = senior ? user.organizationId : user.callCenterPodId;
 
-  if (!user.callCenterPodId) {
+  if (!scopeId) {
     return (
       <>
         <div className="topbar"><div className="tb-greet"><h1>Accounts</h1></div></div>
-        <div className="content"><div className="card card-pad muted" style={{ fontSize: 14 }}>Served offices are listed on your Overview at the center level.</div></div>
+        <div className="content"><div className="card card-pad muted" style={{ fontSize: 14 }}>Your account isn&apos;t linked to a {senior ? "call center" : "pod"} yet.</div></div>
       </>
     );
   }
 
-  const accounts = await getPodAccounts(user.callCenterPodId);
+  const accounts = senior ? await getCenterAccounts(scopeId) : await getPodAccounts(scopeId);
 
   return (
     <>
       <div className="topbar">
         <div className="tb-greet">
           <h1>Accounts</h1>
-          <p>The practices your pod calls for — their offer and what your agents train on.</p>
+          <p>The practices {senior ? "your call center calls" : "your pod calls"} for — their offer and what your agents train on.</p>
         </div>
         <div className="tb-right"><span className="chip"><Icon name="shield" size={13} /> Read-only</span></div>
       </div>
 
       <div className="content">
         {accounts.length === 0 ? (
-          <div className="card card-pad muted" style={{ fontSize: 14 }}>No served practices assigned to your pod yet.</div>
+          <div className="card card-pad muted" style={{ fontSize: 14 }}>No served practices assigned yet.</div>
         ) : (
           <div className="grid g-2" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))" }}>
             {accounts.map((a) => (
@@ -54,7 +56,7 @@ export default async function PodAccountsPage() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                   <div>
                     <h3 style={{ fontSize: 17, marginBottom: 2 }}>{a.name}</h3>
-                    <div className="muted" style={{ fontSize: 12.5 }}>{a.city ? `${a.city} · ` : ""}{a.agents} agent{a.agents === 1 ? "" : "s"} · {a.sessions} reps</div>
+                    <div className="muted" style={{ fontSize: 12.5 }}>{a.podName ? `${a.podName} · ` : ""}{a.city ? `${a.city} · ` : ""}{a.agents} agent{a.agents === 1 ? "" : "s"} · {a.sessions} reps</div>
                   </div>
                   {scoreChip(a.avg)}
                 </div>

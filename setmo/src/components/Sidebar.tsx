@@ -63,9 +63,13 @@ const NAV_PARTNER: NavItem[] = [
   { href: "/partner/team", label: "Team & codes", icon: "team" },
 ];
 
-// Senior call-center manager (CALL_CENTER_ADMIN) — whole-center overview + pool.
+// Senior call-center manager (CALL_CENTER_ADMIN) — whole-center depth: team +
+// accounts + leaderboard span every pod (the floor pages are role-aware).
 const NAV_CALLCENTER: NavItem[] = [
   { href: "/callcenter", label: "Overview", icon: "building" },
+  { href: "/callcenter/team", label: "Team", icon: "team" },
+  { href: "/callcenter/accounts", label: "Accounts", icon: "target" },
+  { href: "/callcenter/leaderboard", label: "Leaderboard", icon: "trophy" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
   { href: "/callcenter/billing", label: "Billing", icon: "card" },
   { href: "/resources", label: "Resources", icon: "book" },

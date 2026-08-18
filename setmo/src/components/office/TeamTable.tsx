@@ -17,6 +17,7 @@ type Row = {
   trend: number[];
   recSkill: string | null;
   status: string;
+  podName?: string; // shown as a prefix on the sub-line (senior center-wide roster)
 };
 
 function trendColor(status: string) {
@@ -78,7 +79,7 @@ export function TeamTable({ rows, hrefBase = "/office/team", noun = "setter" }: 
               <div className="lb-av" style={{ width: 38, height: 38, fontSize: 13 }}>{t.initials}</div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14.5 }}>{t.name}</div>
-                <div className="muted" style={{ fontSize: 12 }}>Active {relativeShort(t.lastActive ? new Date(t.lastActive) : null)}</div>
+                <div className="muted" style={{ fontSize: 12 }}>{t.podName ? `${t.podName} · ` : ""}Active {relativeShort(t.lastActive ? new Date(t.lastActive) : null)}</div>
               </div>
             </div>
             <div>

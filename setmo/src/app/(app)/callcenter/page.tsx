@@ -237,7 +237,10 @@ function SeniorHome({ data }: { data: Awaited<ReturnType<typeof getCallCenterOve
 
         <div className="grid g-2" style={{ gridTemplateColumns: "1.35fr .65fr", marginBottom: 18 }}>
           <div className="card card-pad rise">
-            <h3 style={{ fontSize: 17, marginBottom: 12 }}>Agents</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h3 style={{ fontSize: 17 }}>Agents</h3>
+              <Link className="muted" style={{ fontSize: 13, fontWeight: 600 }} href="/callcenter/team">View team →</Link>
+            </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
               {data.agents.map((a) => (
                 <Link key={a.id} href={`/callcenter/agent/${a.id}`} className="cc-agent-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "1px solid var(--line-soft)" }}>
@@ -267,7 +270,7 @@ function SeniorHome({ data }: { data: Awaited<ReturnType<typeof getCallCenterOve
         <div className="card card-pad rise" style={{ animationDelay: ".1s" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
             <h3 style={{ fontSize: 17 }}>Served offices</h3>
-            <span className="muted" style={{ fontSize: 12.5 }}>Practices your agents call for</span>
+            <Link className="muted" style={{ fontSize: 13, fontWeight: 600 }} href="/callcenter/accounts">Accounts →</Link>
           </div>
           <div style={{ display: "flex", flexDirection: "column" }}>
             {data.offices.map((o) => (
