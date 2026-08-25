@@ -49,6 +49,33 @@ const OBJECTIONS = [
 const TONES = ["guarded", "anxious", "hopeful but cautious", "frustrated", "matter-of-fact", "chatty but non-committal", "skeptical"];
 const AGES = ["late 40s", "50s", "early 60s", "mid 60s", "70s"];
 
+// The three challenge levels the setter picks (ADAPTIVE escalates from the
+// setter's memory floor). Difficulty biases BOTH the sampled ingredients (a
+// tougher lead skews to harder objections + guarded tones) AND the behavior
+// directive in the lead prompt (how hard they are to win over).
+export type Difficulty = "ADAPTIVE" | "WARM" | "TOUGH";
+
+const DIFFICULTY_TONES: Record<Difficulty, readonly string[]> = {
+  WARM: ["hopeful but cautious", "chatty but non-committal", "matter-of-fact"],
+  ADAPTIVE: TONES,
+  TOUGH: ["guarded", "skeptical", "frustrated"],
+};
+const DIFFICULTY_OBJECTIONS: Record<Difficulty, readonly string[]> = {
+  WARM: ["needs to talk to their spouse first", "timing — too busy right now", "not sure it's worth it at their age"],
+  ADAPTIVE: OBJECTIONS,
+  TOUGH: ["price — it sounds way too expensive", "got a cheaper quote elsewhere", "skeptical it'll actually work for them", "worried about being pressured / upsold"],
+};
+const DIFFICULTY_HINT: Record<Difficulty, string> = {
+  WARM: " This lead is relatively RECEPTIVE and friendly — open to the call and warms up quickly to a decent setter.",
+  ADAPTIVE: "",
+  TOUGH: " This lead is GUARDED and skeptical — hard to win over, holds their objection firmly, and is slow to trust.",
+};
+const DIFFICULTY_DIRECTIVE: Record<Difficulty, string> = {
+  WARM: `DIFFICULTY — WARM LEAD: You're a more receptive, friendly lead. You still want to be heard, but you warm up quickly when the setter is decent: share your "why" with only light prompting, hold your objection only briefly, and lean toward saying yes once they've handled your main concern reasonably.`,
+  ADAPTIVE: `DIFFICULTY — BALANCED LEAD: Respond in proportion to the setter's skill — neither a pushover nor impossible. Warm up as they earn it.`,
+  TOUGH: `DIFFICULTY — TOUGH LEAD: You're guarded and skeptical. Make the setter really earn it: keep your "why" hidden unless they do excellent discovery, hold your objection firmly and re-raise it if it's brushed off, and only agree to book if they've genuinely handled your concern AND given a compelling reason that matters to YOU. Default to stalling or a polite "let me think about it" unless they're truly good.`,
+};
+
 const sample = <T,>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
 export const PersonaZ = z.object({
@@ -68,15 +95,17 @@ export function isPersonaConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
-/** Compose a fresh lead persona (LLM from sampled ingredients) + match a voice. */
-export async function generatePersona(): Promise<Persona> {
+/** Compose a fresh lead persona (LLM from sampled ingredients) + match a voice.
+ *  `difficulty` skews the sampled tone/objection so a tougher pick genuinely
+ *  produces a harder lead (see DIFFICULTY_* pools). */
+export async function generatePersona(difficulty: Difficulty = "ADAPTIVE"): Promise<Persona> {
   const gender: "male" | "female" = Math.random() < 0.5 ? "male" : "female";
   const seed = {
     situation: sample(SITUATIONS),
     why: sample(WHY_DRIVERS),
     pain: sample(PAIN),
-    objection: sample(OBJECTIONS),
-    tone: sample(TONES),
+    objection: sample(DIFFICULTY_OBJECTIONS[difficulty]),
+    tone: sample(DIFFICULTY_TONES[difficulty]),
     age: sample(AGES),
   };
 
@@ -106,7 +135,7 @@ export async function generatePersona(): Promise<Persona> {
       messages: [
         {
           role: "user",
-          content: `Compose a ${gender} lead, roughly ${seed.age}. Weave in (don't copy verbatim): situation="${seed.situation}", underlying why="${seed.why}", pain level=${seed.pain}, main objection they'll raise="${seed.objection}", tone="${seed.tone}". Return the persona.`,
+          content: `Compose a ${gender} lead, roughly ${seed.age}. Weave in (don't copy verbatim): situation="${seed.situation}", underlying why="${seed.why}", pain level=${seed.pain}, main objection they'll raise="${seed.objection}", tone="${seed.tone}".${DIFFICULTY_HINT[difficulty]} Return the persona.`,
         },
       ],
     });
@@ -130,7 +159,8 @@ export function personaLabel(p: Persona): string {
 export function buildLeadPrompt(
   p: Persona,
   office: { name?: string | null; city?: string | null; offerFraming?: string | null; appointmentFraming?: string | null },
-  setterFirstName?: string | null
+  setterFirstName?: string | null,
+  difficulty: Difficulty = "ADAPTIVE"
 ): string {
   return `You are role-playing a DENTAL LEAD on a phone call. A dental appointment setter${
     setterFirstName ? ` (${setterFirstName})` : ""
@@ -143,6 +173,8 @@ WHO YOU ARE
 - Emotional tone: ${p.emotionalTone}.
 - The REAL reason you're interested (your hidden "why"): ${p.hiddenWhy}. Do NOT volunteer this. Only open up about it if the setter earns it with genuine curiosity and good discovery questions. If they never dig, keep it surface-level.
 - Your main hesitation: ${p.primaryObjection}. Raise it naturally at some point; don't give in easily.
+
+${DIFFICULTY_DIRECTIVE[difficulty]}
 
 HOW TO BEHAVE
 - Talk like a real person on the phone: short, natural, sometimes hesitant. One thought at a time.

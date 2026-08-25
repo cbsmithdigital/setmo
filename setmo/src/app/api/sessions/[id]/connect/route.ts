@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { agentIdFor, getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
-import { generatePersona, buildLeadPrompt, personaLabel } from "@/lib/personas";
+import { generatePersona, buildLeadPrompt, personaLabel, type Difficulty } from "@/lib/personas";
 import { error, json } from "@/lib/api";
 import type { ServiceKey } from "@/generated/prisma/client";
 
@@ -31,6 +31,12 @@ export async function POST(
     .map((s) => s.serviceType)
     .join(", ");
 
+  // Resolve the effective difficulty: an explicit WARM/TOUGH pick is used as-is;
+  // ADAPTIVE escalates to the setter's memory floor (rises as they improve). This
+  // drives BOTH the persona (skewed objection/tone) and the lead-prompt directive.
+  const effectiveDifficulty: Difficulty =
+    session.difficulty === "ADAPTIVE" ? (memory?.difficultyFloor ?? "ADAPTIVE") : session.difficulty;
+
   // Server-built overrides (the office + setter context the agent role-plays with).
   const dynamicVariables: Record<string, string> = {
     session_id: session.id,
@@ -43,13 +49,14 @@ export async function POST(
     deposit_policy: office?.depositPolicy ?? "",
     allowed_services: enabledServices,
     memory_summary: memory?.summary ?? "",
-    difficulty: session.difficulty,
+    difficulty: effectiveDifficulty,
   };
 
   // Compose a fresh lead + matching voice, loaded as overrides so every rep is
   // a different person with a different voice (not the agent's self-randomization).
-  const persona = await generatePersona();
-  const systemPrompt = buildLeadPrompt(persona, office ?? {}, user.firstName);
+  // Difficulty shapes how hard this lead is to win over.
+  const persona = await generatePersona(effectiveDifficulty);
+  const systemPrompt = buildLeadPrompt(persona, office ?? {}, user.firstName, effectiveDifficulty);
   const firstMessage = persona.openingLine;
 
   await prisma.session.update({
@@ -57,7 +64,7 @@ export async function POST(
     data: {
       status: "IN_PROGRESS",
       startedAt: new Date(),
-      personaSeed: { persona: personaLabel(persona), ...persona },
+      personaSeed: { persona: personaLabel(persona), resolvedDifficulty: effectiveDifficulty, ...persona },
     },
   });
 
