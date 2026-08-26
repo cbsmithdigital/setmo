@@ -68,6 +68,15 @@ export function UserActions({ userId, status, role }: { userId: string; status: 
     router.refresh();
     setBusy(false);
   }
+  async function resend() {
+    setBusy(true);
+    const res = await fetch("/api/platform/user", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId, action: "resend_invite" }) });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok) window.alert(j.emailed ? "Invite email sent." : `Email isn't configured here — share this link:\n\n${j.previewLink ?? "(no link)"}`);
+    else window.alert(j.error ?? "Couldn't resend the invite.");
+    router.refresh();
+    setBusy(false);
+  }
 
   return (
     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -77,6 +86,9 @@ export function UserActions({ userId, status, role }: { userId: string; status: 
           <option value="OFFICE_ADMIN">Office manager</option>
           <option value="GROUP_ADMIN">Group admin</option>
         </select>
+      )}
+      {status === "INVITED" && (
+        <button className="btn btn-ghost" disabled={busy} onClick={resend} style={{ padding: "4px 9px", fontSize: 11.5, color: "var(--purple-2)" }}>Resend invite</button>
       )}
       <button className="btn btn-ghost" disabled={busy} onClick={impersonate} style={{ padding: "4px 9px", fontSize: 11.5 }}>View as</button>
       <button className="btn btn-ghost" disabled={busy} onClick={toggle} style={{ padding: "4px 9px", fontSize: 11.5, color: status === "DISABLED" ? "var(--mint)" : "var(--amber)" }}>
