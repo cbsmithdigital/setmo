@@ -5,17 +5,26 @@ import { getCallCenterBalance, callCenterOrgForAgent } from "@/lib/usage";
 import { ServicePicker } from "@/components/ServicePicker";
 import { AllowanceMeter } from "@/components/ui/widgets";
 
+// Practice is open to every user type. Setters/office-admins/group-admins drill
+// against their office; call-center agents + managers pick a served account and
+// draw the pooled call-center balance. Everyone reps calls + gets Setty feedback.
 export default async function PracticePage() {
   const user = await requireUser();
+  const isCallCenter = Boolean(user.callCenterPodId) || user.role === "CALL_CENTER_ADMIN";
 
-  // Call-center phone agent: choose which served office (account) to practice for;
-  // time draws the pooled call-center balance.
-  if (user.callCenterPodId) {
-    const [assignments, orgId] = await Promise.all([
-      prisma.agentOffice.findMany({ where: { userId: user.id }, select: { office: { select: { id: true, name: true } } }, orderBy: { office: { name: "asc" } } }),
-      callCenterOrgForAgent(user.id),
-    ]);
-    const accounts = await Promise.all(assignments.map(async (a) => ({ officeId: a.office.id, officeName: a.office.name, services: await getServiceOptions(a.office.id) })));
+  if (isCallCenter) {
+    const orgId = user.organizationId ?? (await callCenterOrgForAgent(user.id));
+    // Which served offices they can practice for, by role.
+    let offices: { id: string; name: string }[] = [];
+    if (user.role === "SETTER") {
+      const assignments = await prisma.agentOffice.findMany({ where: { userId: user.id }, select: { office: { select: { id: true, name: true } } }, orderBy: { office: { name: "asc" } } });
+      offices = assignments.map((a) => a.office);
+    } else if (user.callCenterPodId) {
+      offices = await prisma.office.findMany({ where: { servedByPodId: user.callCenterPodId }, select: { id: true, name: true }, orderBy: { name: "asc" } });
+    } else if (orgId) {
+      offices = await prisma.office.findMany({ where: { servedByPod: { organizationId: orgId } }, select: { id: true, name: true }, orderBy: { name: "asc" } });
+    }
+    const accounts = await Promise.all(offices.map(async (o) => ({ officeId: o.id, officeName: o.name, services: await getServiceOptions(o.id) })));
     const pool = orgId ? await getCallCenterBalance(orgId) : { purchasedMin: 0, usedMin: 0, remainingMin: 0 };
     return (
       <>
@@ -31,16 +40,30 @@ export default async function PracticePage() {
         {accounts.length ? (
           <ServicePicker accounts={accounts} />
         ) : (
-          <div className="content"><div className="card card-pad"><p className="muted">You&apos;re not assigned to any offices yet — ask your floor manager.</p></div></div>
+          <div className="content"><div className="card card-pad"><p className="muted">No served offices to practice for yet.</p></div></div>
         )}
       </>
     );
   }
 
-  const [services, allowance] = await Promise.all([
-    getServiceOptions(user.officeId!),
-    getAllowance(user.officeId!),
-  ]);
+  // Setter / office admin / group admin: drill against their own office (a group
+  // admin with no single office falls back to the org's first office).
+  const officeId =
+    user.officeId ??
+    (user.organizationId
+      ? (await prisma.office.findFirst({ where: { organizationId: user.organizationId }, select: { id: true }, orderBy: { createdAt: "asc" } }))?.id ?? null
+      : null);
+
+  if (!officeId) {
+    return (
+      <>
+        <div className="topbar"><div className="tb-greet"><h1>Start a practice session</h1></div></div>
+        <div className="content"><div className="card card-pad"><p className="muted">No practice office assigned to your account yet.</p></div></div>
+      </>
+    );
+  }
+
+  const [services, allowance] = await Promise.all([getServiceOptions(officeId), getAllowance(officeId)]);
 
   return (
     <>

@@ -23,6 +23,7 @@ const NAV_SETTER: NavItem[] = [
 
 const NAV_OFFICE: NavItem[] = [
   { href: "/office", label: "Overview", icon: "home" },
+  { href: "/practice", label: "Practice", icon: "mic" },
   { href: "/office/team", label: "Team", icon: "team" },
   { href: "/office/goals", label: "Goals & rewards", icon: "flame" },
   { href: "/office/catalog", label: "Service catalog", icon: "target" },
@@ -35,6 +36,7 @@ const NAV_OFFICE: NavItem[] = [
 
 const NAV_GROUP: NavItem[] = [
   { href: "/group", label: "Portfolio", icon: "building" },
+  { href: "/practice", label: "Practice", icon: "mic" },
   { href: "/group/performance", label: "Performance", icon: "chart" },
   { href: "/group/goals", label: "Goals & rewards", icon: "flame" },
   { href: "/resources", label: "Resources", icon: "book" },
@@ -67,6 +69,7 @@ const NAV_PARTNER: NavItem[] = [
 // accounts + leaderboard span every pod (the floor pages are role-aware).
 const NAV_CALLCENTER: NavItem[] = [
   { href: "/callcenter", label: "Overview", icon: "building" },
+  { href: "/practice", label: "Practice", icon: "mic" },
   { href: "/callcenter/team", label: "Team", icon: "team" },
   { href: "/callcenter/accounts", label: "Accounts", icon: "target" },
   { href: "/callcenter/leaderboard", label: "Leaderboard", icon: "trophy" },
@@ -79,6 +82,7 @@ const NAV_CALLCENTER: NavItem[] = [
 // pod: team, accounts (served practices, read-only), leaderboard, voice coach.
 const NAV_CALLCENTER_FLOOR: NavItem[] = [
   { href: "/callcenter", label: "Overview", icon: "building" },
+  { href: "/practice", label: "Practice", icon: "mic" },
   { href: "/callcenter/team", label: "Team", icon: "team" },
   { href: "/callcenter/accounts", label: "Accounts", icon: "target" },
   { href: "/callcenter/leaderboard", label: "Leaderboard", icon: "trophy" },

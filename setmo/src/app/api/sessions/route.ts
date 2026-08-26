@@ -16,30 +16,47 @@ const Body = z.object({
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
-  if (user.role !== "SETTER") return error("Only setters can start practice sessions", 403);
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid request body", 422);
   const { serviceType, difficulty } = parsed.data;
 
-  // A call-center phone AGENT (setter in a pod) is shared across offices: the
-  // served office is chosen per call, and time meters the pooled call-center
-  // balance — NOT the served office. A normal single-office setter is unchanged.
-  const isAgent = Boolean(user.callCenterPodId);
+  // Practice is open to every user type (setters, office/group admins, and
+  // call-center agents + managers) — they all benefit from repping calls + Setty
+  // feedback. We just need a valid office context (whose offer/script the lead
+  // uses) and a pool to meter. Call-center users draw the pooled call-center
+  // balance; everyone else draws their office pool.
+  const isCallCenter = Boolean(user.callCenterPodId) || user.role === "CALL_CENTER_ADMIN";
   let officeId: string;
   let callCenterOrgId: string | null = null;
 
-  if (isAgent) {
+  if (isCallCenter) {
+    const orgId = user.organizationId ?? (await callCenterOrgForAgent(user.id));
+    if (!orgId) return error("No call center assigned", 400);
     const target = parsed.data.officeId;
     if (!target) return error("Choose which office you're calling for", 422);
-    const assigned = await prisma.agentOffice.findUnique({ where: { userId_officeId: { userId: user.id, officeId: target } } });
-    if (!assigned) return error("You're not assigned to that office", 403);
-    callCenterOrgId = await callCenterOrgForAgent(user.id);
-    if (!callCenterOrgId) return error("No call center assigned", 400);
+    // Scope: an agent may only call for offices they're assigned; a floor manager
+    // for offices their pod serves; a senior for any office in the call center.
+    let inScope: boolean;
+    if (user.role === "SETTER") {
+      inScope = Boolean(await prisma.agentOffice.findUnique({ where: { userId_officeId: { userId: user.id, officeId: target } } }));
+    } else if (user.callCenterPodId) {
+      inScope = Boolean(await prisma.office.findFirst({ where: { id: target, servedByPodId: user.callCenterPodId }, select: { id: true } }));
+    } else {
+      inScope = Boolean(await prisma.office.findFirst({ where: { id: target, servedByPod: { organizationId: orgId } }, select: { id: true } }));
+    }
+    if (!inScope) return error("That office isn't in your call center", 403);
+    callCenterOrgId = orgId;
     officeId = target;
   } else {
-    if (!user.officeId) return error("No office assigned", 400);
-    officeId = user.officeId;
+    // Setter / office admin / group admin: their own office (a group admin with
+    // no single office falls back to the org's first office).
+    let resolved = user.officeId;
+    if (!resolved && user.organizationId) {
+      resolved = (await prisma.office.findFirst({ where: { organizationId: user.organizationId }, select: { id: true }, orderBy: { createdAt: "asc" } }))?.id ?? null;
+    }
+    if (!resolved) return error("No practice office assigned", 400);
+    officeId = resolved;
   }
 
   // The (served) office must offer this service and the agent must be live.
