@@ -42,7 +42,7 @@ export default async function ResultsPage({
 }) {
   const user = await requireUser();
   const { id } = await params;
-  const r = await getSessionResult(id, user);
+  const r = await getSessionResult(id, user, { hydrateAudio: true });
   if (!r) notFound();
 
   return (

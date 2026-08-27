@@ -58,6 +58,28 @@ export async function getSignedUrl(agentId: string): Promise<string> {
 }
 
 /**
+ * Fetch a conversation's recording from ElevenLabs by conversation id. Used as a
+ * lazy fallback when the `post_call_audio` webhook was missed (dropped/late) so a
+ * recording can still be recovered on demand. Returns the mp3 bytes, or null when
+ * the audio isn't available (zero-retention workspace, not found, or any error).
+ */
+export async function getConversationAudio(conversationId: string): Promise<Buffer | null> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch(`${API_BASE}/v1/convai/conversations/${encodeURIComponent(conversationId)}/audio`, {
+      headers: { "xi-api-key": apiKey },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    return buf.length > 0 ? buf : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Verifies the ElevenLabs post-call webhook HMAC signature.
  * Header format: `t=<unix_ts>,v0=<hex_hmac_sha256(t.body)>`.
  */

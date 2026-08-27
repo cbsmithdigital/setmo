@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { downloadRecording } from "@/lib/storage";
+import { downloadRecording, ensureRecording } from "@/lib/storage";
 import { error } from "@/lib/api";
 
 // GET /api/sessions/:id/audio — stream the call recording from Supabase Storage.
@@ -22,9 +22,11 @@ export async function GET(
     user.officeId === session.officeId;
   if (!isOwner && !isOfficeAdmin) return error("Forbidden", 403);
 
-  if (!session.audioPath) return error("No recording for this session", 404);
+  // Stored recording, else lazily recover it from ElevenLabs by conversation id.
+  const audioPath = await ensureRecording(session);
+  if (!audioPath) return error("No recording for this session", 404);
 
-  const buffer = await downloadRecording(session.audioPath);
+  const buffer = await downloadRecording(audioPath);
   if (!buffer) return error("Recording unavailable", 404);
 
   return new Response(new Uint8Array(buffer), {

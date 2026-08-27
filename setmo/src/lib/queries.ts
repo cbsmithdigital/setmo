@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { ensureRecording } from "@/lib/storage";
 import { getMinuteBalance, lastPurchasedMinutes } from "@/lib/usage";
 import { callShowRate } from "@/lib/audit";
 import { skillName, skillTier, rubricFor, type SkillTierKey } from "@/lib/skills";
@@ -709,7 +710,7 @@ export async function getSavedRecordings(user: { id: string; role: string; offic
 // ---------- session result ----------
 type ResultViewer = { id: string; role: string; officeId: string | null; organizationId?: string | null; callCenterPodId?: string | null };
 
-export async function getSessionResult(sessionId: string, viewer: ResultViewer) {
+export async function getSessionResult(sessionId: string, viewer: ResultViewer, opts: { hydrateAudio?: boolean } = {}) {
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
     include: { evaluation: { include: { skills: true } }, setter: true },
@@ -733,6 +734,10 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer) 
   );
   const canView = isOwner || (isManager && session.officeId === viewer.officeId) || isCallCenterView;
   if (!canView) return null;
+
+  // Recover a missed recording on demand (results-page load only), so a call
+  // with a conversation id but no stored audio still becomes listenable.
+  const audioPath = opts.hydrateAudio ? await ensureRecording(session) : session.audioPath;
 
   const e = session.evaluation;
   const rubricKeys = rubricFor(session.serviceType).map((s) => s.key);
@@ -784,7 +789,7 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer) 
     personaCoaching: e.personaCoaching,
     nextScenario: e.recommendedNextScenario,
     transcript,
-    audioAvailable: Boolean(session.audioPath),
+    audioAvailable: Boolean(audioPath),
     saved: session.saved,
     shareToken: session.shareToken,
   };

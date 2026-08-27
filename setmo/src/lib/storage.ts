@@ -1,4 +1,6 @@
 import { getAdminClient, isAdminConfigured } from "@/lib/supabase/admin";
+import { prisma } from "@/lib/db";
+import { getConversationAudio } from "@/lib/elevenlabs";
 
 const BUCKET = "recordings";
 
@@ -37,6 +39,33 @@ export async function downloadRecording(path: string): Promise<Buffer | null> {
   const { data, error } = await sb.storage.from(BUCKET).download(path);
   if (error || !data) return null;
   return Buffer.from(await data.arrayBuffer());
+}
+
+/**
+ * Ensure a session's recording is stored, returning its storage path. Lazily
+ * fetches + caches the audio from ElevenLabs when we have a conversation id but
+ * the `post_call_audio` webhook never landed (dropped/late/out-of-order — a known
+ * gap that silently loses recordings). Returns null if no recording is obtainable
+ * (e.g. a zero-retention workspace). Never throws; no-ops without an API key.
+ */
+export async function ensureRecording(session: {
+  id: string;
+  officeId: string;
+  audioPath: string | null;
+  elevenlabsConversationId: string | null;
+}): Promise<string | null> {
+  if (session.audioPath) return session.audioPath;
+  if (!session.elevenlabsConversationId) return null;
+  const bytes = await getConversationAudio(session.elevenlabsConversationId);
+  if (!bytes) return null;
+  const path = `${session.officeId}/${session.id}.mp3`;
+  try {
+    await uploadRecording(path, bytes);
+    await prisma.session.update({ where: { id: session.id }, data: { audioPath: path } });
+  } catch {
+    return null;
+  }
+  return path;
 }
 
 // ── Training assets (videos / workbook PDFs) ─────────────────────────────────
