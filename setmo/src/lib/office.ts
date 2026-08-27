@@ -302,14 +302,34 @@ export async function getOfficeSetterDetail(officeId: string, setterId: string, 
   const len = current.to.getTime() - current.from.getTime();
   const prior: AnalyticsRange = { from: new Date(current.from.getTime() - len), to: current.from };
 
-  const [a, rec] = await Promise.all([
+  const [a, rec, callRows] = await Promise.all([
     getSetterAnalytics(setterId, current, prior, { allSkills: true }),
     prisma.recommendation.findFirst({
       where: { setterId, status: "ACTIVE" },
       orderBy: { createdAt: "desc" },
       include: { training: true },
     }),
+    // Every individual call in the window — so the admin can open + listen to ANY
+    // of the setter's conversations, not just the saved ones. Office-scoped.
+    prisma.session.findMany({
+      where: { setterId, officeId, kind: "PRACTICE", status: "SCORED", startedAt: { gte: current.from, lte: current.to }, evaluation: { isNot: null } },
+      orderBy: { startedAt: "desc" },
+      select: { id: true, startedAt: true, durationSeconds: true, personaSeed: true, saved: true, audioPath: true, elevenlabsConversationId: true, evaluation: { select: { overallScore: true } } },
+    }),
   ]);
+
+  const calls = callRows
+    .filter((s) => (s.durationSeconds ?? 0) >= 60 && s.evaluation?.overallScore != null)
+    .map((s) => ({
+      id: s.id,
+      persona: (s.personaSeed as { persona?: string } | null)?.persona ?? "Practice lead",
+      when: s.startedAt,
+      durationSeconds: s.durationSeconds ?? 0,
+      score: Number(s.evaluation!.overallScore),
+      saved: s.saved,
+      // A recording exists (stored) OR is recoverable from ElevenLabs by conv id.
+      hasRecording: Boolean(s.audioPath || s.elevenlabsConversationId),
+    }));
 
   return {
     id: setter.id,
@@ -325,5 +345,6 @@ export async function getOfficeSetterDetail(officeId: string, setterId: string, 
     series: a.series,
     snapshot: a.perSkill,
     recommendation: rec ? { skill: skillName(rec.skillKey), reason: rec.reason, training: rec.training.title } : null,
+    calls,
   };
 }

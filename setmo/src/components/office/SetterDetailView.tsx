@@ -3,6 +3,7 @@ import { Ring, Delta } from "@/components/ui/widgets";
 import { Icon } from "@/components/ui/Icon";
 import { ScoreOverTime } from "@/components/progress/ProgressCharts";
 import { ProgressControls } from "@/components/progress/ProgressControls";
+import { whenLabel, mmss } from "@/lib/format";
 
 type SeriesDef = { key: string; name: string; color: string };
 export type SetterDetail = {
@@ -18,6 +19,7 @@ export type SetterDetail = {
   series: SeriesDef[];
   snapshot: { key: string; name: string; tier: string; score: number }[];
   recommendation: { training: string; reason: string; skill: string } | null;
+  calls: { id: string; persona: string; when: Date | string; durationSeconds: number; score: number; saved: boolean; hasRecording: boolean }[];
 };
 
 // Shared team-member detail (used by the office-admin view and the group drill-in).
@@ -143,6 +145,44 @@ export function SetterDetailView({
                 </p>
               </div>
             )}
+
+            {/* Every individual call — open any to listen back + read the transcript. */}
+            <div className="card card-pad rise" style={{ marginTop: 18, animationDelay: ".2s" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <Icon name="sound" size={16} color="var(--purple-2)" />
+                <h3 style={{ fontSize: 18 }}>Calls</h3>
+              </div>
+              <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
+                Every scored call {t.name.split(" ")[0]} ran this period — open any to listen back and read the transcript.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {t.calls.length === 0 && <p className="muted" style={{ fontSize: 13.5, padding: "8px 0" }}>No calls in this window.</p>}
+                {t.calls.map((c, i) => (
+                  <Link
+                    key={c.id}
+                    href={`/results/${c.id}`}
+                    style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 8px", borderRadius: 10, borderTop: i ? "1px solid var(--line-soft)" : "none" }}
+                  >
+                    <div style={{ width: 42, height: 42, borderRadius: 11, background: "var(--s3)", display: "grid", placeItems: "center", color: "var(--purple-2)", flex: "none" }}>
+                      <Icon name="mic" size={18} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.persona}</div>
+                      <div className="muted" style={{ fontSize: 12.5 }}>{whenLabel(new Date(c.when))} · {mmss(c.durationSeconds)}</div>
+                    </div>
+                    {c.hasRecording && (
+                      <span className="chip" style={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4 }} title="Recording available">
+                        <Icon name="sound" size={12} /> Recording
+                      </span>
+                    )}
+                    {c.saved && <span className="chip purple" style={{ fontSize: 11 }}>Saved</span>}
+                    <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 19, width: 44, textAlign: "right" }} className={c.score >= 4 ? "mint-text" : "grad-text"}>
+                      {c.score.toFixed(1)}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
           </>
         )}
       </div>
