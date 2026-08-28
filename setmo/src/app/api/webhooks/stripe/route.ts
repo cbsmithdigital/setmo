@@ -178,7 +178,7 @@ async function onInvoicePaid(invoice: Stripe.Invoice) {
   if (!customerId) return;
   // The access subscription row is created by customer.subscription.created (with
   // officeId from metadata) before the first invoice.paid, so match by customer.
-  const sub = await prisma.subscription.findFirst({ where: { stripeCustomerId: customerId }, select: { officeId: true, paidInvoices: true, plan: true } });
+  const sub = await prisma.subscription.findFirst({ where: { stripeCustomerId: customerId }, select: { officeId: true, paidInvoices: true, plan: true, usageMinutes: true, usageAmountCents: true } });
   if (!sub) return;
 
   const count = sub.paidInvoices + 1;
@@ -192,6 +192,25 @@ async function onInvoicePaid(invoice: Stripe.Invoice) {
   await accrueCommission({ officeId: sub.officeId, kind: "ACCESS", baseCents: accessCents, stripeRef: invoice.id ?? `inv:${sub.officeId}:${count}`, earned });
   // Crossing the 2nd payment earns everything that was pending for this account.
   if (count === EARN_AFTER_PAYMENTS) await markOfficeCommissionsEarned(sub.officeId);
+
+  // Super-admin recurring plan: grant this cycle's usage-minute allowance. Keyed
+  // on the invoice id so Stripe retries never double-grant.
+  if (sub.usageMinutes > 0) {
+    try {
+      await prisma.conversationBundle.create({
+        data: {
+          officeId: sub.officeId,
+          minutesPurchased: sub.usageMinutes,
+          minutesRemaining: sub.usageMinutes,
+          hours: Math.round(sub.usageMinutes / 60),
+          amountCents: sub.usageAmountCents,
+          stripePaymentIntent: `${invoice.id}:allowance`,
+        },
+      });
+    } catch {
+      /* unique stripePaymentIntent → this cycle already granted (Stripe retry) */
+    }
+  }
 }
 
 // Flat Practice Access subscription → status + period only (no tiers/seats).
@@ -210,11 +229,14 @@ async function syncAccess(sub: Stripe.Subscription) {
   const periodEnd = item?.current_period_end ? new Date(item.current_period_end * 1000) : null;
   // Plan from subscription metadata, else the price interval (year → annual).
   const plan = (sub.metadata?.plan === "annual" || item?.price?.recurring?.interval === "year") ? "ANNUAL" : "MONTHLY";
+  // Super-admin recurring plans carry a per-cycle minute allowance in metadata.
+  const usageMinutes = Number(sub.metadata?.usageMinutes ?? 0) || 0;
+  const usageAmountCents = Number(sub.metadata?.usageCents ?? 0) || 0;
 
   await prisma.subscription.upsert({
     where: { officeId },
-    update: { stripeCustomerId: customerId, stripeSubscriptionId: sub.id, status, currentPeriodEnd: periodEnd, plan },
-    create: { officeId, stripeCustomerId: customerId, stripeSubscriptionId: sub.id, status, currentPeriodEnd: periodEnd, plan },
+    update: { stripeCustomerId: customerId, stripeSubscriptionId: sub.id, status, currentPeriodEnd: periodEnd, plan, usageMinutes, usageAmountCents },
+    create: { officeId, stripeCustomerId: customerId, stripeSubscriptionId: sub.id, status, currentPeriodEnd: periodEnd, plan, usageMinutes, usageAmountCents },
   });
   if (customerId) await prisma.office.update({ where: { id: officeId }, data: { stripeCustomerId: customerId } });
 

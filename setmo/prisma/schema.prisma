@@ -725,6 +725,8 @@ model Subscription {
   status               SubscriptionStatus @default(ACTIVE)
   currentPeriodEnd     DateTime?          @map("current_period_end")
   paidInvoices         Int                @default(0) @map("paid_invoices") // access payments captured (2nd → partner commission earns)
+  usageMinutes         Int                @default(0) @map("usage_minutes") // super-admin recurring plan: minutes granted each billing cycle (0 = access-only)
+  usageAmountCents     Int                @default(0) @map("usage_amount_cents") // the recurring usage charge (tax-inclusive) that grant reflects
 
   office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
 

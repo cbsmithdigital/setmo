@@ -309,6 +309,72 @@ export async function createActivationCheckout(opts: {
 }
 
 /**
+ * Super-admin RECURRING billing: one monthly subscription with two tax-INCLUSIVE
+ * recurring prices — access + a fixed usage bundle that grants `usageMinutes`
+ * each cycle. The card is saved by subscription mode, so future cycles auto-charge.
+ * Created today → the billing cycle naturally anchors to today's day-of-month.
+ * The minute allowance rides on the subscription metadata; the invoice.paid webhook
+ * grants it each cycle (idempotent per invoice). Returns the Checkout URL for the
+ * super-admin to complete (they enter the card on Stripe's hosted page).
+ */
+export async function createRecurringBillingCheckout(opts: {
+  officeId: string;
+  accessCents: number; // tax-inclusive access charge (e.g. 4495)
+  usageCents: number; // tax-inclusive usage charge (e.g. 20505)
+  usageMinutes: number; // minutes granted each cycle (e.g. 285)
+  stripeCustomerId?: string | null;
+  customerEmail?: string;
+  returnUrl: string; // where Stripe returns the super-admin (the account page)
+}): Promise<string> {
+  const stripe = getStripe();
+  const sep = opts.returnUrl.includes("?") ? "&" : "?";
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription",
+    ...(opts.stripeCustomerId
+      ? { customer: opts.stripeCustomerId, customer_update: { address: "auto" as const } }
+      : opts.customerEmail
+        ? { customer_email: opts.customerEmail }
+        : {}),
+    billing_address_collection: "required",
+    automatic_tax: { enabled: true },
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: opts.accessCents,
+          recurring: { interval: "month" },
+          tax_behavior: "inclusive",
+          product_data: { name: "SetMo — Practice Access", description: "Monthly access per location (tax included)." },
+        },
+      },
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: opts.usageCents,
+          recurring: { interval: "month" },
+          tax_behavior: "inclusive",
+          product_data: {
+            name: `SetMo — Monthly Usage (${opts.usageMinutes.toLocaleString()} min)`,
+            description: `${opts.usageMinutes.toLocaleString()} practice minutes granted each month (tax included). Hard cap — no overage.`,
+          },
+        },
+      },
+    ],
+    // subscription metadata drives syncAccess + the per-cycle minute grant.
+    subscription_data: {
+      metadata: { kind: "access", officeId: opts.officeId, plan: "monthly", usageMinutes: String(opts.usageMinutes), usageCents: String(opts.usageCents) },
+    },
+    metadata: { kind: "recurring_setup", officeId: opts.officeId },
+    success_url: `${opts.returnUrl}${sep}billing=success`,
+    cancel_url: `${opts.returnUrl}${sep}billing=cancel`,
+  });
+  if (!session.url) throw new Error("Stripe did not return a checkout URL");
+  return session.url;
+}
+
+/**
  * Auto top-up: charge the customer's saved card off-session for `minutes` via a
  * one-off **invoice** with Stripe Tax enabled (so auto top-ups collect sales tax,
  * matching Checkout). Tokens are granted by the `invoice.paid` webhook (kind

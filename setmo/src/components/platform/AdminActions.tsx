@@ -2,19 +2,34 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ModalShell } from "@/components/Modal";
 
 async function post(url: string, body: object, method = "POST") {
   const res = await fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   return res.ok;
 }
 
-// Per-location: grant comp minutes + toggle access.
-export function LocationActions({ officeId, accessActive }: { officeId: string; accessActive: boolean }) {
+// Per-location: recurring billing (card + subscription + minutes), comp minutes,
+// and access toggle. Card entry happens on Stripe's hosted page — never here.
+export function LocationActions({
+  officeId,
+  accessActive,
+  hasCard,
+  recurringUsageMin,
+  renewsOn,
+}: {
+  officeId: string;
+  accessActive: boolean;
+  hasCard: boolean;
+  recurringUsageMin: number;
+  renewsOn: string | null;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [billOpen, setBillOpen] = useState(false);
 
   async function grant() {
-    const v = window.prompt("Grant how many complimentary minutes?");
+    const v = window.prompt("Grant how many complimentary (free) minutes?");
     if (!v) return;
     const minutes = Math.round(Number(v));
     if (!minutes || minutes < 1) return;
@@ -33,14 +48,94 @@ export function LocationActions({ officeId, accessActive }: { officeId: string; 
     router.refresh();
     setBusy(false);
   }
+  async function portal() {
+    setBusy(true);
+    const res = await fetch("/api/platform/billing", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "portal", officeId }) });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok && j.url) window.open(j.url, "_blank");
+    else window.alert(j.error ?? "Couldn't open the billing portal.");
+    setBusy(false);
+  }
 
   return (
-    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+      {recurringUsageMin > 0 ? (
+        <span className="chip mint" title={renewsOn ? `Renews ${new Date(renewsOn).toLocaleDateString()}` : undefined} style={{ padding: "5px 10px", fontSize: 11.5 }}>
+          Recurring · {recurringUsageMin} min/mo
+        </span>
+      ) : (
+        <button className="btn btn-ghost" disabled={busy} onClick={() => setBillOpen(true)} style={{ padding: "5px 10px", fontSize: 12, color: "var(--purple-2)" }}>
+          Set up billing
+        </button>
+      )}
+      {hasCard && (
+        <button className="btn btn-ghost" disabled={busy} onClick={portal} style={{ padding: "5px 10px", fontSize: 12 }}>Card</button>
+      )}
       <button className="btn btn-ghost" disabled={busy} onClick={grant} style={{ padding: "5px 10px", fontSize: 12 }}>+ Minutes</button>
       <button className="btn btn-ghost" disabled={busy} onClick={access} style={{ padding: "5px 10px", fontSize: 12, color: accessActive ? "var(--amber)" : "var(--mint)" }}>
         {accessActive ? "Pause access" : "Reinstate"}
       </button>
+      {billOpen && <BillingModal officeId={officeId} onClose={() => { setBillOpen(false); router.refresh(); }} />}
     </div>
+  );
+}
+
+// Super-admin recurring-billing setup: pick the monthly access + usage amounts
+// (tax-inclusive) and the minute allowance, then continue to Stripe's hosted
+// checkout to enter the card. Billing recurs on today's day-of-month.
+function BillingModal({ officeId, onClose }: { officeId: string; onClose: () => void }) {
+  const [access, setAccess] = useState("44.95");
+  const [usage, setUsage] = useState("205.05");
+  const [minutes, setMinutes] = useState("285");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const total = (Number(access) || 0) + (Number(usage) || 0);
+
+  async function go() {
+    setErr(null);
+    setBusy(true);
+    const res = await fetch("/api/platform/billing", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "setup_recurring", officeId, accessCents: Math.round((Number(access) || 0) * 100), usageCents: Math.round((Number(usage) || 0) * 100), usageMinutes: Math.round(Number(minutes) || 0) }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok && j.url) { window.location.href = j.url; return; } // → Stripe checkout (enter card)
+    setErr(j.error ?? "Couldn't start billing setup.");
+    setBusy(false);
+  }
+
+  const field = (label: string, value: string, set: (v: string) => void, prefix?: string) => (
+    <label style={{ display: "block", marginBottom: 14 }}>
+      <div className="muted" style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {prefix && <span className="muted">{prefix}</span>}
+        <input className="input" value={value} onChange={(e) => set(e.target.value)} inputMode="decimal" style={{ width: "100%" }} />
+      </div>
+    </label>
+  );
+
+  return (
+    <ModalShell onClose={onClose} width={460}>
+      <div className="card-pad">
+        <h3 style={{ fontSize: 19, marginBottom: 4 }}>Set up recurring billing</h3>
+        <p className="muted" style={{ fontSize: 13, marginBottom: 18 }}>
+          Monthly, tax-inclusive, billed on today&apos;s date. The card is entered on Stripe&apos;s secure page — never here. When the minutes run out, calls pause until the next cycle (no overage).
+        </p>
+        {err && <div className="banner error" style={{ marginBottom: 14 }}>{err}</div>}
+        {field("Access — $/month (tax incl.)", access, setAccess, "$")}
+        {field("Usage — $/month (tax incl.)", usage, setUsage, "$")}
+        {field("Minutes granted each month", minutes, setMinutes)}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, marginBottom: 18 }}>
+          <span className="muted" style={{ fontSize: 13 }}>Total per month</span>
+          <span className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 20 }}>${total.toFixed(2)}</span>
+        </div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn btn-primary" onClick={go} disabled={busy || total <= 0}>{busy ? "Starting…" : "Continue to Stripe"}</button>
+        </div>
+      </div>
+    </ModalShell>
   );
 }
 

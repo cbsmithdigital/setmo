@@ -130,12 +130,12 @@ export async function getPlatformOverview() {
 }
 
 // ---- per-office stats (shared by directory + detail) ----
-type OfficeStat = { id: string; name: string; city: string | null; organizationId: string | null; accountId: string; accessActive: boolean; purchasedMin: number; consumedMin: number; balanceMin: number; burnPerDay: number; daysToEmpty: number | null; cashLifetime: number; lastActivity: Date | null };
+type OfficeStat = { id: string; name: string; city: string | null; organizationId: string | null; accountId: string; accessActive: boolean; purchasedMin: number; consumedMin: number; balanceMin: number; burnPerDay: number; daysToEmpty: number | null; cashLifetime: number; lastActivity: Date | null; hasCard: boolean; recurringUsageMin: number; renewsOn: Date | null };
 
 async function officeStats(where: object): Promise<OfficeStat[]> {
   const offices = await prisma.office.findMany({
     where,
-    select: { id: true, name: true, city: true, organizationId: true, subscription: { select: { status: true } } },
+    select: { id: true, name: true, city: true, organizationId: true, stripeCustomerId: true, subscription: { select: { status: true, usageMinutes: true, currentPeriodEnd: true } } },
   });
   const ids = offices.map((o) => o.id);
   if (ids.length === 0) return [];
@@ -170,6 +170,9 @@ async function officeStats(where: object): Promise<OfficeStat[]> {
       daysToEmpty: burnPerDay > 0 ? Math.round(balanceMin / burnPerDay) : null,
       cashLifetime: r2(ob.reduce((a, b) => a + cashOf(b, cfg), 0)),
       lastActivity: os.reduce<Date | null>((acc, s) => (!acc || s.startedAt > acc ? s.startedAt : acc), null),
+      hasCard: Boolean(o.stripeCustomerId),
+      recurringUsageMin: o.subscription?.usageMinutes ?? 0,
+      renewsOn: o.subscription?.currentPeriodEnd ?? null,
     };
   });
 }
