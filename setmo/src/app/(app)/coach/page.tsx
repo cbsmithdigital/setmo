@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireUser, getActiveRole, isManagerRole, isCallCenterRole } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
 import { getOfficeOverview } from "@/lib/office";
-import { getGroupOverview } from "@/lib/group";
+import { getGroupOverview, groupScope } from "@/lib/group";
 import { getCallCenterOverview, getPodOverview } from "@/lib/callcenter";
 import { getOrgCoachBalance } from "@/lib/usage";
 import { CoachWorkspace } from "@/components/coach/CoachWorkspace";
@@ -95,14 +95,18 @@ export default async function CoachPage({
     );
   }
 
-  // Group / DSO leader → Portfolio strategist (chat, multi-office grounded).
-  if (activeRole === "GROUP_ADMIN" && user.organizationId) {
-    const [g, wallet] = await Promise.all([getGroupOverview(user.organizationId), getOrgCoachBalance(user.organizationId)]);
+  // Group / DSO leader (or a Multi Practice Admin over a subset) → Portfolio
+  // strategist (chat, multi-office grounded — scoped to their offices).
+  if ((activeRole === "GROUP_ADMIN" || activeRole === "MULTI_PRACTICE_ADMIN") && user.organizationId) {
+    const isMPA = activeRole === "MULTI_PRACTICE_ADMIN";
+    const { officeIds } = await groupScope(user);
+    const [g, wallet] = await Promise.all([getGroupOverview(user.organizationId, officeIds), getOrgCoachBalance(user.organizationId)]);
     const lagging = g.attention.map((o) => o.name).slice(0, 2);
-    const welcome = `Hey ${first} 👋 I'm Setty Advisor. Across ${g.officeCount} practices you're averaging ${g.orgAvg.toFixed(1)}/5${
+    const welcome = `Hey ${first} 👋 I'm Setty Advisor. Across ${g.officeCount} practice${g.officeCount === 1 ? "" : "s"} you're averaging ${g.orgAvg.toFixed(1)}/5${
       lagging.length ? `, with ${lagging.join(" & ")} lagging` : ""
-    }. Want me to show you where to focus across the group?`;
-    const lowWallet = wallet.remainingMin <= 15;
+    }. Want me to show you where to focus?`;
+    // Only a full DSO admin manages the org billing the low-wallet banner links to.
+    const lowWallet = !isMPA && wallet.remainingMin <= 15;
     return (
       <>
         <div className="topbar">

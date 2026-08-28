@@ -25,6 +25,7 @@ enum Role {
   CALL_CENTER_ADMIN // call-center senior manager — oversees all: billing, client offices, cross-floor
   CALL_CENTER_MANAGER // call-center floor manager — owns a pod (its agents + served offices)
   GROUP_ADMIN
+  MULTI_PRACTICE_ADMIN // oversees a CURATED SUBSET of a group's offices (not the whole org); read-only oversight. Scope = OFFICE-scoped memberships with this role.
   OFFICE_ADMIN
   SETTER // dental-practice setter OR call-center phone agent (agent = setter shared across offices)
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/auth";
-import { getGroupOverview } from "@/lib/group";
+import { requireRole, getActiveRole } from "@/lib/auth";
+import { getGroupOverview, groupScope } from "@/lib/group";
 import { getOnboarding } from "@/lib/office";
 import { prisma } from "@/lib/db";
 import { OnboardingChecklist } from "@/components/office/OnboardingChecklist";
@@ -16,7 +16,7 @@ const STATUS: Record<string, { label: string; color: string }> = {
 };
 
 export default async function GroupPage() {
-  const user = await requireRole("GROUP_ADMIN", "PLATFORM_ADMIN");
+  const user = await requireRole("GROUP_ADMIN", "MULTI_PRACTICE_ADMIN", "PLATFORM_ADMIN");
   if (!user.organizationId) {
     return (
       <div className="content">
@@ -24,9 +24,11 @@ export default async function GroupPage() {
       </div>
     );
   }
-  const g = await getGroupOverview(user.organizationId);
+  const isMPA = getActiveRole(user) === "MULTI_PRACTICE_ADMIN";
+  const { officeIds } = await groupScope(user);
+  const g = await getGroupOverview(user.organizationId, officeIds);
   const onboarding = user.officeId ? await getOnboarding(user.officeId) : null;
-  const offices = await prisma.office.findMany({ where: { organizationId: user.organizationId }, select: { id: true, name: true }, orderBy: { name: "asc" } });
+  const offices = await prisma.office.findMany({ where: { organizationId: user.organizationId, ...(officeIds ? { id: { in: officeIds } } : {}) }, select: { id: true, name: true }, orderBy: { name: "asc" } });
 
   return (
     <>
@@ -36,7 +38,7 @@ export default async function GroupPage() {
           <p>{g.officeCount} practices · portfolio performance</p>
         </div>
         <div className="tb-right" style={{ display: "flex", gap: 10 }}>
-          <InviteButton scope="group" offices={offices} className="btn btn-ghost" />
+          {!isMPA && <InviteButton scope="group" offices={offices} className="btn btn-ghost" />}
           <Link className="btn btn-primary" href="/coach">
             <Icon name="chat" /> Ask Setty Advisor
           </Link>

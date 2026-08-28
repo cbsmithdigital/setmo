@@ -20,7 +20,11 @@ export async function GET(
   const isOfficeAdmin =
     ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(user.role) &&
     user.officeId === session.officeId;
-  if (!isOwner && !isOfficeAdmin) return error("Forbidden", 403);
+  // A Multi Practice Admin may play calls for any office in their assigned set.
+  const isMpa =
+    user.role === "MULTI_PRACTICE_ADMIN" &&
+    Boolean(await prisma.membership.findFirst({ where: { userId: user.id, role: "MULTI_PRACTICE_ADMIN", scopeType: "OFFICE", scopeId: session.officeId } }));
+  if (!isOwner && !isOfficeAdmin && !isMpa) return error("Forbidden", 403);
 
   // Stored recording, else lazily recover it from ElevenLabs by conversation id.
   const audioPath = await ensureRecording(session);

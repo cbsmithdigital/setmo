@@ -84,9 +84,10 @@ export async function getOfficeOutcomeFunnel(officeId: string, periodLabel: stri
   return buildFunnel(sig, reported);
 }
 
-// Per-location outcomes for the whole group + portfolio totals.
-export async function getGroupOutcomes(orgId: string, periodLabel: string) {
-  const offices = await prisma.office.findMany({ where: { organizationId: orgId }, select: { id: true, name: true, city: true } });
+// Per-location outcomes for a group + portfolio totals. Scoped to `officeIds`
+// (a Multi Practice Admin's subset) when given, else the whole org.
+export async function getGroupOutcomes(orgId: string, periodLabel: string, officeIds?: string[]) {
+  const offices = await prisma.office.findMany({ where: { organizationId: orgId, ...(officeIds ? { id: { in: officeIds } } : {}) }, select: { id: true, name: true, city: true } });
   const range = monthRangeOf(periodLabel);
   const rows = await Promise.all(
     offices.map(async (o) => {

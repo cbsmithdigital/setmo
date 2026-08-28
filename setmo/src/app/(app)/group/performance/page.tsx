@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/auth";
+import { requireRole, getActiveRole } from "@/lib/auth";
 import { resolveAnalyticsRange, type AnalyticsRange } from "@/lib/queries";
-import { getGroupAnalytics } from "@/lib/group";
+import { getGroupAnalytics, groupScope } from "@/lib/group";
 import { StatTile } from "@/components/ui/StatTile";
 import { Sparkline, Delta } from "@/components/ui/widgets";
 import { Icon } from "@/components/ui/Icon";
@@ -33,7 +33,7 @@ export default async function GroupPerformancePage({
 }: {
   searchParams: Promise<{ range?: string; from?: string; to?: string }>;
 }) {
-  const user = await requireRole("GROUP_ADMIN", "PLATFORM_ADMIN");
+  const user = await requireRole("GROUP_ADMIN", "MULTI_PRACTICE_ADMIN", "PLATFORM_ADMIN");
   if (!user.organizationId) {
     return (
       <div className="content">
@@ -42,15 +42,18 @@ export default async function GroupPerformancePage({
     );
   }
 
+  const isMPA = getActiveRole(user) === "MULTI_PRACTICE_ADMIN";
+  const { officeIds } = await groupScope(user);
   const sp = await searchParams;
   const { key, range, label } = resolveAnalyticsRange(sp);
   const len = range.to.getTime() - range.from.getTime();
   const prior: AnalyticsRange = { from: new Date(range.from.getTime() - len), to: range.from };
-  const g = await getGroupAnalytics(user.organizationId, range, prior);
+  const g = await getGroupAnalytics(user.organizationId, range, prior, officeIds);
   const period = periodForRangeKey(key);
+  // The cached Setty insight is org-wide, so it's shown only to full DSO admins.
   const [outcomes, insight] = await Promise.all([
-    getGroupOutcomes(user.organizationId, period.label),
-    getInsight("GROUP", user.organizationId),
+    getGroupOutcomes(user.organizationId, period.label, officeIds),
+    isMPA ? Promise.resolve(null) : getInsight("GROUP", user.organizationId),
   ]);
 
   return (
@@ -69,7 +72,7 @@ export default async function GroupPerformancePage({
       </div>
 
       <div className="content">
-        <SettyInsight scope="GROUP" subjectId={user.organizationId} insight={insight} />
+        {!isMPA && <SettyInsight scope="GROUP" subjectId={user.organizationId} insight={insight} />}
 
         <div className="grid g-4 rise" style={{ marginBottom: 18 }}>
           <div className="stat-tile">

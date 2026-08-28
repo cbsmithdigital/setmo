@@ -44,6 +44,16 @@ const NAV_GROUP: NavItem[] = [
   { href: "/group/billing", label: "Billing", icon: "card" },
 ];
 
+// Multi Practice Admin — oversight of a curated SUBSET of a group's offices.
+// Read-only: portfolio + performance + drill-in + coach, scoped to their offices.
+// No org billing/goals/invites (those stay with the full DSO admin).
+const NAV_MULTIPRACTICE: NavItem[] = [
+  { href: "/group", label: "Portfolio", icon: "building" },
+  { href: "/group/performance", label: "Performance", icon: "chart" },
+  { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
+  { href: "/resources", label: "Resources", icon: "book" },
+];
+
 const NAV_PLATFORM: NavItem[] = [
   { href: "/platform", label: "Overview", icon: "chart" },
   { href: "/platform/accounts", label: "Accounts", icon: "building" },
@@ -109,6 +119,7 @@ const NAV_BY_ROLE: Record<string, NavItem[]> = {
   SETTER: NAV_SETTER,
   OFFICE_ADMIN: NAV_OFFICE,
   GROUP_ADMIN: NAV_GROUP,
+  MULTI_PRACTICE_ADMIN: NAV_MULTIPRACTICE,
   PLATFORM_ADMIN: NAV_PLATFORM_SUPER,
   SUPPORT: NAV_PLATFORM,
   PARTNER_ADMIN: NAV_PARTNER,

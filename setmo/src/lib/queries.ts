@@ -732,7 +732,11 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer, 
     (viewer.role === "CALL_CENTER_ADMIN" ||
       (viewer.role === "CALL_CENTER_MANAGER" && viewer.callCenterPodId != null && viewer.callCenterPodId === session.setter?.callCenterPodId))
   );
-  const canView = isOwner || (isManager && session.officeId === viewer.officeId) || isCallCenterView;
+  // A Multi Practice Admin may view calls for any office in their assigned set.
+  const isMpaView =
+    viewer.role === "MULTI_PRACTICE_ADMIN" &&
+    Boolean(await prisma.membership.findFirst({ where: { userId: viewer.id, role: "MULTI_PRACTICE_ADMIN", scopeType: "OFFICE", scopeId: session.officeId } }));
+  const canView = isOwner || (isManager && session.officeId === viewer.officeId) || isCallCenterView || isMpaView;
   if (!canView) return null;
 
   // Recover a missed recording on demand (results-page load only), so a call

@@ -158,6 +158,7 @@ export function homeForRole(role: Role): string {
     case "CALL_CENTER_MANAGER":
       return "/callcenter";
     case "GROUP_ADMIN":
+    case "MULTI_PRACTICE_ADMIN":
       return "/group";
     case "OFFICE_ADMIN":
       return "/office";

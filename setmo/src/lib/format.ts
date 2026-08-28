@@ -20,6 +20,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   CALL_CENTER_ADMIN: "Call Center Admin",
   CALL_CENTER_MANAGER: "Floor Manager",
   GROUP_ADMIN: "Group Admin",
+  MULTI_PRACTICE_ADMIN: "Multi Practice Admin",
   OFFICE_ADMIN: "Office Admin",
   SETTER: "Appointment Setter",
 };

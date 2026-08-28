@@ -24,11 +24,13 @@ function officeStatus(avg: number, activeSetters: number): OfficeRollup["status"
   return "steady";
 }
 
-// Portfolio rollup across every office in a DSO/group, computed in one sweep.
-export async function getGroupOverview(orgId: string) {
+// Portfolio rollup across a DSO/group's offices, computed in one sweep. When
+// `officeIds` is passed the portfolio is scoped to exactly those offices (a Multi
+// Practice Admin's curated subset); omit it for the whole organization.
+export async function getGroupOverview(orgId: string, scopeOfficeIds?: string[]) {
   const [org, offices] = await Promise.all([
     prisma.organization.findUnique({ where: { id: orgId } }),
-    prisma.office.findMany({ where: { organizationId: orgId }, select: { id: true, name: true, city: true } }),
+    prisma.office.findMany({ where: { organizationId: orgId, ...(scopeOfficeIds ? { id: { in: scopeOfficeIds } } : {}) }, select: { id: true, name: true, city: true } }),
   ]);
   const officeIds = offices.map((o) => o.id);
 
@@ -122,10 +124,10 @@ export async function getGroupOverview(orgId: string) {
 // Windowed performance across EVERY location in a group — the office-team page
 // one level up. Period vs the immediately-preceding equal window, with a
 // per-location weekly trend and a location×skill heatmap matrix.
-export async function getGroupAnalytics(orgId: string, current: AnalyticsRange, prior: AnalyticsRange | null) {
+export async function getGroupAnalytics(orgId: string, current: AnalyticsRange, prior: AnalyticsRange | null, scopeOfficeIds?: string[]) {
   const [org, offices] = await Promise.all([
     prisma.organization.findUnique({ where: { id: orgId }, select: { name: true } }),
-    prisma.office.findMany({ where: { organizationId: orgId }, select: { id: true, name: true, city: true } }),
+    prisma.office.findMany({ where: { organizationId: orgId, ...(scopeOfficeIds ? { id: { in: scopeOfficeIds } } : {}) }, select: { id: true, name: true, city: true } }),
   ]);
   const officeIds = offices.map((o) => o.id);
   const earliest = prior && prior.from < current.from ? prior.from : current.from;
@@ -274,7 +276,47 @@ export async function getGroupAnalytics(orgId: string, current: AnalyticsRange, 
   };
 }
 
-// Everything the Group/DSO coach needs for grounding.
-export async function getGroupCoachContext(orgId: string) {
-  return getGroupOverview(orgId);
+// Everything the Group/DSO coach needs for grounding (scoped to officeIds if given).
+export async function getGroupCoachContext(orgId: string, officeIds?: string[]) {
+  return getGroupOverview(orgId, officeIds);
+}
+
+// ---------------------------------------------------------------------------
+// MULTI PRACTICE ADMIN scoping. A MULTI_PRACTICE_ADMIN oversees a CURATED SUBSET
+// of a group's offices — the offices on their OFFICE-scoped memberships with this
+// role. A full GROUP_ADMIN / PLATFORM_ADMIN oversees the whole org (officeIds
+// undefined = no filter). Everything is fail-closed: org-level features gate on
+// GROUP_ADMIN, so a Multi Practice Admin is excluded unless explicitly granted.
+// ---------------------------------------------------------------------------
+type ScopeUser = { id: string; role: string; activeRole?: string; organizationId: string | null };
+
+/** The office IDs a Multi Practice Admin is assigned to (constrained to their org). */
+export async function mpaOfficeIds(userId: string, orgId: string | null): Promise<string[]> {
+  const mems = await prisma.membership.findMany({ where: { userId, role: "MULTI_PRACTICE_ADMIN", scopeType: "OFFICE" }, select: { scopeId: true } });
+  const ids = mems.map((m) => m.scopeId).filter((x): x is string => Boolean(x));
+  if (!ids.length || !orgId) return [];
+  const valid = await prisma.office.findMany({ where: { id: { in: ids }, organizationId: orgId }, select: { id: true } });
+  return valid.map((o) => o.id);
+}
+
+/** Resolve the office allow-list for a group-surface user. `officeIds: undefined`
+ *  means "every office in the org" (full DSO admin); an array is the curated set. */
+export async function groupScope(user: ScopeUser): Promise<{ orgId: string | null; officeIds: string[] | undefined }> {
+  const role = user.activeRole ?? user.role;
+  const orgId = user.organizationId;
+  if (role !== "MULTI_PRACTICE_ADMIN") return { orgId, officeIds: undefined };
+  return { orgId, officeIds: await mpaOfficeIds(user.id, orgId) };
+}
+
+/** Drill-in guard: may this user open THIS office's detail? Platform → any;
+ *  Multi Practice Admin → only offices in their set; group admin → any in-org. */
+export async function canAccessGroupOffice(user: ScopeUser, officeId: string): Promise<boolean> {
+  const role = user.activeRole ?? user.role;
+  if (role === "PLATFORM_ADMIN") return true;
+  const office = await prisma.office.findUnique({ where: { id: officeId }, select: { organizationId: true } });
+  if (!office || office.organizationId !== user.organizationId) return false;
+  if (role === "MULTI_PRACTICE_ADMIN") {
+    return Boolean(await prisma.membership.findFirst({ where: { userId: user.id, role: "MULTI_PRACTICE_ADMIN", scopeType: "OFFICE", scopeId: officeId } }));
+  }
+  return role === "GROUP_ADMIN";
 }

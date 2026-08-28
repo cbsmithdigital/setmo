@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
-import { requireRole, getActiveRole } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { resolveAnalyticsRange } from "@/lib/queries";
 import { getOfficeSetterDetail } from "@/lib/office";
+import { canAccessGroupOffice } from "@/lib/group";
 import { SetterDetailView } from "@/components/office/SetterDetailView";
 
 export default async function GroupSetterDetailPage({
@@ -12,12 +13,12 @@ export default async function GroupSetterDetailPage({
   params: Promise<{ officeId: string; setterId: string }>;
   searchParams: Promise<{ range?: string; from?: string; to?: string }>;
 }) {
-  const user = await requireRole("GROUP_ADMIN", "PLATFORM_ADMIN");
+  const user = await requireRole("GROUP_ADMIN", "MULTI_PRACTICE_ADMIN", "PLATFORM_ADMIN");
   const { officeId, setterId } = await params;
 
-  const office = await prisma.office.findUnique({ where: { id: officeId }, select: { name: true, organizationId: true } });
-  const allowed = office && (getActiveRole(user) === "PLATFORM_ADMIN" || office.organizationId === user.organizationId);
-  if (!allowed) notFound();
+  if (!(await canAccessGroupOffice(user, officeId))) notFound();
+  const office = await prisma.office.findUnique({ where: { id: officeId }, select: { name: true } });
+  if (!office) notFound();
 
   const sp = await searchParams;
   const { key, range, label } = resolveAnalyticsRange(sp);

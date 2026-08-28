@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireRole, getActiveRole } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getOfficeOverview } from "@/lib/office";
+import { canAccessGroupOffice } from "@/lib/group";
 import { StatTile } from "@/components/ui/StatTile";
 import { Sparkline, Delta } from "@/components/ui/widgets";
 
@@ -11,13 +12,14 @@ function trendColor(status: string) {
 }
 
 export default async function GroupOfficePage({ params }: { params: Promise<{ officeId: string }> }) {
-  const user = await requireRole("GROUP_ADMIN", "PLATFORM_ADMIN");
+  const user = await requireRole("GROUP_ADMIN", "MULTI_PRACTICE_ADMIN", "PLATFORM_ADMIN");
   const { officeId } = await params;
 
-  // The office must belong to this group leader's organization.
-  const office = await prisma.office.findUnique({ where: { id: officeId }, select: { id: true, name: true, city: true, organizationId: true } });
-  const allowed = office && (getActiveRole(user) === "PLATFORM_ADMIN" || office.organizationId === user.organizationId);
-  if (!allowed) notFound();
+  // Must be an office this leader oversees (their org, and within a Multi Practice
+  // Admin's assigned subset).
+  if (!(await canAccessGroupOffice(user, officeId))) notFound();
+  const office = await prisma.office.findUnique({ where: { id: officeId }, select: { id: true, name: true, city: true } });
+  if (!office) notFound();
 
   const o = await getOfficeOverview(officeId);
 

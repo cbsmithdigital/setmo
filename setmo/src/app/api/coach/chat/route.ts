@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, getActiveRole, isManagerRole, isCallCenterRole } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
 import { getOfficeCoachContext } from "@/lib/office";
-import { getGroupCoachContext } from "@/lib/group";
+import { getGroupCoachContext, groupScope } from "@/lib/group";
 import { getCallCenterOverview, getPodOverview } from "@/lib/callcenter";
 import {
   coachChatSystem,
@@ -69,8 +69,9 @@ export async function POST(req: Request) {
     if (isCallCenterRole(activeRole) && user.organizationId) {
       return await callCenterChat(first, activeRole, user.organizationId, user.callCenterPodId ?? null, apiMessages);
     }
-    if (activeRole === "GROUP_ADMIN" && user.organizationId) {
-      return await groupChat(first, user.organizationId, apiMessages);
+    if ((activeRole === "GROUP_ADMIN" || activeRole === "MULTI_PRACTICE_ADMIN") && user.organizationId) {
+      const { officeIds } = await groupScope(user);
+      return await groupChat(first, user.organizationId, apiMessages, officeIds);
     }
     if (isManagerRole(activeRole) && user.officeId) {
       return await managerChat(first, user.officeId, apiMessages);
@@ -112,9 +113,10 @@ async function setterChat(
 async function groupChat(
   first: string,
   orgId: string,
-  apiMessages: { role: "user" | "assistant"; content: string }[]
+  apiMessages: { role: "user" | "assistant"; content: string }[],
+  officeIds?: string[]
 ) {
-  const g = await getGroupCoachContext(orgId);
+  const g = await getGroupCoachContext(orgId, officeIds);
   const system = groupCoachSystem(
     coachGroupGrounding(first, {
       orgName: g.orgName,

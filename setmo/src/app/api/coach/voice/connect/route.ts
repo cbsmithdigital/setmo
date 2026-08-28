@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, getActiveRole, isManagerRole, isCallCenterRole } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
 import { getOfficeCoachContext } from "@/lib/office";
-import { getGroupCoachContext } from "@/lib/group";
+import { getGroupCoachContext, groupScope } from "@/lib/group";
 import { getCallCenterOverview, getPodOverview } from "@/lib/callcenter";
 import { canStartSession, canStartGroupCoach, canStartCallCenter, callCenterOrgForAgent } from "@/lib/usage";
 import { coachAgentId, managerCoachAgentId, groupCoachAgentId, getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
@@ -45,15 +45,19 @@ export async function POST(req: Request) {
     return callCenterVoiceConnect(user.id, user.organizationId, user.callCenterPodId ?? null, activeRole, first);
   }
 
+  // Group/DSO leader OR a Multi Practice Admin (a curated subset) → the portfolio
+  // strategist, grounded across their offices. Before the office guard because a
+  // Multi Practice Admin has no home office.
+  if ((activeRole === "GROUP_ADMIN" || activeRole === "MULTI_PRACTICE_ADMIN") && user.organizationId) {
+    const { officeIds } = await groupScope(user);
+    const sessionOfficeId = user.officeId ?? officeIds?.[0] ?? null;
+    if (!sessionOfficeId) return error("No practice office assigned for coaching yet.", 400);
+    return groupVoiceConnect(user.id, user.organizationId, sessionOfficeId, first, officeIds);
+  }
+
   // Agents (call-center phone agents) have no home office; they're handled in the
   // setter path below, metered against the call-center pool.
   if (!user.officeId && !user.callCenterPodId) return error("No office assigned", 400);
-
-  // Group/DSO acting role → the portfolio strategist (multi-office grounded).
-  // Checked before the generic manager branch since GROUP_ADMIN is a manager role.
-  if (activeRole === "GROUP_ADMIN" && user.organizationId) {
-    return groupVoiceConnect(user.id, user.organizationId, user.officeId!, first);
-  }
 
   // Manager acting role → the management & training assistant (team-grounded),
   // not the setter call role-play. (Managers always have an office.)
@@ -162,7 +166,7 @@ export async function POST(req: Request) {
 // Metered against the leader's own office pool (same pool model as the manager
 // assistant), so a COACH session is created and the post-call webhook draws the
 // duration down from that pool.
-async function groupVoiceConnect(userId: string, orgId: string, officeId: string, first: string) {
+async function groupVoiceConnect(userId: string, orgId: string, officeId: string, first: string, officeIds?: string[]) {
   // Metered against the per-organization coach wallet (free monthly allowance +
   // purchased tokens), NOT the office pool.
   const allowance = await canStartGroupCoach(orgId);
@@ -170,7 +174,8 @@ async function groupVoiceConnect(userId: string, orgId: string, officeId: string
     return error("Your group Setty Advisor tokens are used up. Add a card and top up (50% off) to keep going, or wait for next month's free allowance.", 402);
   }
 
-  const g = await getGroupCoachContext(orgId);
+  // Grounded across the leader's offices (a Multi Practice Admin's subset if scoped).
+  const g = await getGroupCoachContext(orgId, officeIds);
   const officeLines = g.offices.map(
     (o) =>
       `${o.name}${o.city ? ` (${o.city})` : ""}: avg ${o.teamAvg ? o.teamAvg.toFixed(1) : "—"}/5, ${o.activeSetters} active setters, ${o.sessions} scored sessions, status ${o.status}`
