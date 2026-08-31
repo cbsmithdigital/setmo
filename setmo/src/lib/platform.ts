@@ -130,7 +130,7 @@ export async function getPlatformOverview() {
 }
 
 // ---- per-office stats (shared by directory + detail) ----
-type OfficeStat = { id: string; name: string; city: string | null; organizationId: string | null; accountId: string; accessActive: boolean; purchasedMin: number; consumedMin: number; balanceMin: number; burnPerDay: number; daysToEmpty: number | null; cashLifetime: number; lastActivity: Date | null; hasCard: boolean; recurringUsageMin: number; renewsOn: Date | null };
+type OfficeStat = { id: string; name: string; city: string | null; organizationId: string | null; accountId: string; accessActive: boolean; purchasedMin: number; consumedMin: number; balanceMin: number; burnPerDay: number; daysToEmpty: number | null; cashLifetime: number; lastActivity: Date | null; hasCard: boolean; recurringUsageMin: number; renewsOn: Date | null; contactEmail: string | null };
 
 async function officeStats(where: object): Promise<OfficeStat[]> {
   const offices = await prisma.office.findMany({
@@ -140,13 +140,17 @@ async function officeStats(where: object): Promise<OfficeStat[]> {
   const ids = offices.map((o) => o.id);
   if (ids.length === 0) return [];
   const cfg = await getPricingConfig();
-  const [bundles, sessions] = await Promise.all([
+  const [bundles, sessions, admins] = await Promise.all([
     prisma.conversationBundle.findMany({ where: { officeId: { in: ids } }, select: { officeId: true, minutesPurchased: true, amountCents: true } }),
     // Exclude sessions metered against another pool (group/DSO coach organizationId,
     // and call-center agents' callCenterOrgId) so they don't inflate a served
     // office's burn/balance — the office never bought those minutes.
     prisma.session.findMany({ where: { officeId: { in: ids }, organizationId: null, callCenterOrgId: null, durationSeconds: { not: null }, isAudit: false }, select: { officeId: true, durationSeconds: true, startedAt: true } }),
+    // Office admins → the default billing contact for each location.
+    prisma.user.findMany({ where: { officeId: { in: ids }, role: "OFFICE_ADMIN" }, select: { officeId: true, email: true }, orderBy: { createdAt: "asc" } }),
   ]);
+  const contactByOffice = new Map<string, string>();
+  for (const a of admins) if (a.officeId && a.email && !contactByOffice.has(a.officeId)) contactByOffice.set(a.officeId, a.email);
   const since30 = new Date(Date.now() - 30 * 86400_000);
   return offices.map((o) => {
     const ob = bundles.filter((b) => b.officeId === o.id);
@@ -173,6 +177,7 @@ async function officeStats(where: object): Promise<OfficeStat[]> {
       hasCard: Boolean(o.stripeCustomerId),
       recurringUsageMin: o.subscription?.usageMinutes ?? 0,
       renewsOn: o.subscription?.currentPeriodEnd ?? null,
+      contactEmail: contactByOffice.get(o.id) ?? null,
     };
   });
 }

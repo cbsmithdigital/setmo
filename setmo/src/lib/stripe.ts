@@ -323,17 +323,23 @@ export async function createRecurringBillingCheckout(opts: {
   usageCents: number; // tax-inclusive usage charge (e.g. 20505)
   usageMinutes: number; // minutes granted each cycle (e.g. 285)
   stripeCustomerId?: string | null;
-  customerEmail?: string;
+  contactEmail?: string; // billing contact — receives Stripe receipts/invoices
   returnUrl: string; // where Stripe returns the super-admin (the account page)
 }): Promise<string> {
   const stripe = getStripe();
   const sep = opts.returnUrl.includes("?") ? "&" : "?";
+  // The billing contact (who gets Stripe receipts) is the customer's email. For an
+  // existing customer, update it so receipts go to the chosen contact, not whoever
+  // it was first created as.
+  if (opts.stripeCustomerId && opts.contactEmail) {
+    await stripe.customers.update(opts.stripeCustomerId, { email: opts.contactEmail }).catch(() => {});
+  }
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     ...(opts.stripeCustomerId
       ? { customer: opts.stripeCustomerId, customer_update: { address: "auto" as const } }
-      : opts.customerEmail
-        ? { customer_email: opts.customerEmail }
+      : opts.contactEmail
+        ? { customer_email: opts.contactEmail }
         : {}),
     billing_address_collection: "required",
     automatic_tax: { enabled: true },

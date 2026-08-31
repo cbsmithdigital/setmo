@@ -12,6 +12,7 @@ const Body = z.discriminatedUnion("action", [
     accessCents: z.number().int().min(0).max(1_000_000),
     usageCents: z.number().int().min(0).max(1_000_000),
     usageMinutes: z.number().int().min(1).max(100_000),
+    contactEmail: z.string().email().optional(), // billing contact (Stripe receipts)
   }),
   z.object({ action: z.literal("portal"), officeId: z.string().min(1) }),
 ]);
@@ -45,19 +46,18 @@ export async function POST(req: Request) {
     return json({ url });
   }
 
-  // setup_recurring
-  const admin = await prisma.user.findFirst({
-    where: { officeId, role: "OFFICE_ADMIN" },
-    select: { email: true },
-    orderBy: { createdAt: "asc" },
-  });
+  // setup_recurring — billing contact: the chosen email, else the office admin.
+  const admin = parsed.data.contactEmail
+    ? null
+    : await prisma.user.findFirst({ where: { officeId, role: "OFFICE_ADMIN" }, select: { email: true }, orderBy: { createdAt: "asc" } });
+  const contactEmail = parsed.data.contactEmail ?? admin?.email ?? undefined;
   const url = await createRecurringBillingCheckout({
     officeId,
     accessCents: parsed.data.accessCents,
     usageCents: parsed.data.usageCents,
     usageMinutes: parsed.data.usageMinutes,
     stripeCustomerId: office.stripeCustomerId,
-    customerEmail: admin?.email,
+    contactEmail,
     returnUrl: `${origin}${returnPath}`,
   });
   await logAdminAction(actor, {

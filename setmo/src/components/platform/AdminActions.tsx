@@ -17,12 +17,16 @@ export function LocationActions({
   hasCard,
   recurringUsageMin,
   renewsOn,
+  contactEmail,
+  contacts,
 }: {
   officeId: string;
   accessActive: boolean;
   hasCard: boolean;
   recurringUsageMin: number;
   renewsOn: string | null;
+  contactEmail: string | null;
+  contacts: { name: string; email: string }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -75,7 +79,7 @@ export function LocationActions({
       <button className="btn btn-ghost" disabled={busy} onClick={access} style={{ padding: "5px 10px", fontSize: 12, color: accessActive ? "var(--amber)" : "var(--mint)" }}>
         {accessActive ? "Pause access" : "Reinstate"}
       </button>
-      {billOpen && <BillingModal officeId={officeId} onClose={() => { setBillOpen(false); router.refresh(); }} />}
+      {billOpen && <BillingModal officeId={officeId} defaultEmail={contactEmail} contacts={contacts} onClose={() => { setBillOpen(false); router.refresh(); }} />}
     </div>
   );
 }
@@ -83,21 +87,28 @@ export function LocationActions({
 // Super-admin recurring-billing setup: pick the monthly access + usage amounts
 // (tax-inclusive) and the minute allowance, then continue to Stripe's hosted
 // checkout to enter the card. Billing recurs on today's day-of-month.
-function BillingModal({ officeId, onClose }: { officeId: string; onClose: () => void }) {
+function BillingModal({ officeId, defaultEmail, contacts, onClose }: { officeId: string; defaultEmail: string | null; contacts: { name: string; email: string }[]; onClose: () => void }) {
   const [access, setAccess] = useState("44.95");
   const [usage, setUsage] = useState("205.05");
   const [minutes, setMinutes] = useState("285");
+  const [email, setEmail] = useState(defaultEmail ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const total = (Number(access) || 0) + (Number(usage) || 0);
+  const listId = `contacts-${officeId}`;
 
   async function go() {
     setErr(null);
+    const contact = email.trim();
+    if (!contact || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contact)) {
+      setErr("Enter a valid billing contact email.");
+      return;
+    }
     setBusy(true);
     const res = await fetch("/api/platform/billing", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "setup_recurring", officeId, accessCents: Math.round((Number(access) || 0) * 100), usageCents: Math.round((Number(usage) || 0) * 100), usageMinutes: Math.round(Number(minutes) || 0) }),
+      body: JSON.stringify({ action: "setup_recurring", officeId, contactEmail: contact, accessCents: Math.round((Number(access) || 0) * 100), usageCents: Math.round((Number(usage) || 0) * 100), usageMinutes: Math.round(Number(minutes) || 0) }),
     });
     const j = await res.json().catch(() => ({}));
     if (res.ok && j.url) { window.location.href = j.url; return; } // → Stripe checkout (enter card)
@@ -123,6 +134,16 @@ function BillingModal({ officeId, onClose }: { officeId: string; onClose: () => 
           Monthly, tax-inclusive, billed on today&apos;s date. The card is entered on Stripe&apos;s secure page — never here. When the minutes run out, calls pause until the next cycle (no overage).
         </p>
         {err && <div className="banner error" style={{ marginBottom: 14 }}>{err}</div>}
+        <label style={{ display: "block", marginBottom: 14 }}>
+          <div className="muted" style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Billing contact — gets Stripe receipts</div>
+          <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} list={listId} type="email" placeholder="name@practice.com" style={{ width: "100%" }} />
+          <datalist id={listId}>
+            {contacts.filter((c) => c.email).map((c) => (
+              <option key={c.email} value={c.email}>{c.name}</option>
+            ))}
+          </datalist>
+          <div className="muted" style={{ fontSize: 11.5, marginTop: 5 }}>Pick a person at this account, or type any email. Receipts and invoices go here.</div>
+        </label>
         {field("Access — $/month (tax incl.)", access, setAccess, "$")}
         {field("Usage — $/month (tax incl.)", usage, setUsage, "$")}
         {field("Minutes granted each month", minutes, setMinutes)}

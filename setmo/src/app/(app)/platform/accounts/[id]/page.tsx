@@ -44,7 +44,7 @@ export default async function PlatformAccountDetailPage({ params }: { params: Pr
               <div><span className={"chip " + (l.accessActive ? "mint" : "amber")} style={{ padding: "2px 9px", fontSize: 11 }}>{l.accessActive ? "Access on" : "Inactive"}</span></div>
               <div style={{ fontSize: 13.5, color: l.balanceMin < 0 ? "var(--amber)" : "var(--text-1)" }}>{l.balanceMin.toLocaleString()} min · {l.daysToEmpty != null ? `${l.daysToEmpty}d` : "—"}</div>
               <div className="muted" style={{ fontSize: 13 }}>{l.burnPerDay.toFixed(1)}/day</div>
-              <LocationActions officeId={l.id} accessActive={l.accessActive} hasCard={l.hasCard} recurringUsageMin={l.recurringUsageMin} renewsOn={l.renewsOn ? l.renewsOn.toISOString() : null} />
+              <LocationActions officeId={l.id} accessActive={l.accessActive} hasCard={l.hasCard} recurringUsageMin={l.recurringUsageMin} renewsOn={l.renewsOn ? l.renewsOn.toISOString() : null} contactEmail={l.contactEmail} contacts={a.users.map((u) => ({ name: u.name, email: u.email }))} />
             </div>
           ))}
         </div>
