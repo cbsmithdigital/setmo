@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 
 export function ModalShell({
   children,
@@ -17,7 +18,13 @@ export function ModalShell({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  return (
+  // Portal to <body> so the fixed overlay isn't trapped by a transformed ancestor
+  // (e.g. a `.rise`-animated card), which would otherwise contain it and let later
+  // cards paint on top. Modals only render after a client interaction, so guarding
+  // on `document` is SSR-safe (no hydration mismatch — it's never in initial HTML).
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       onClick={onClose}
       style={{
@@ -42,6 +49,7 @@ export function ModalShell({
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
