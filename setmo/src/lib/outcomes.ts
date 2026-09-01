@@ -33,6 +33,7 @@ export async function practiceSignal(officeIds: string[], range: AnalyticsRange,
     where: {
       officeId: { in: officeIds },
       ...(setterId ? { setterId } : {}),
+      kind: "PRACTICE",
       status: "SCORED",
       durationSeconds: { gte: 60 },
       startedAt: { gte: range.from, lte: range.to },

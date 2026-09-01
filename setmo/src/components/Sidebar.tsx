@@ -25,6 +25,7 @@ const NAV_OFFICE: NavItem[] = [
   { href: "/office", label: "Overview", icon: "home" },
   { href: "/practice", label: "Practice", icon: "mic" },
   { href: "/office/team", label: "Team", icon: "team" },
+  { href: "/office/live", label: "Live calls", icon: "sound" },
   { href: "/office/goals", label: "Goals & rewards", icon: "flame" },
   { href: "/office/catalog", label: "Service catalog", icon: "target" },
   { href: "/resources", label: "Resources", icon: "book" },
@@ -38,6 +39,7 @@ const NAV_GROUP: NavItem[] = [
   { href: "/group", label: "Portfolio", icon: "building" },
   { href: "/practice", label: "Practice", icon: "mic" },
   { href: "/group/performance", label: "Performance", icon: "chart" },
+  { href: "/office/live", label: "Live calls", icon: "sound" },
   { href: "/group/goals", label: "Goals & rewards", icon: "flame" },
   { href: "/resources", label: "Resources", icon: "book" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
@@ -50,6 +52,7 @@ const NAV_GROUP: NavItem[] = [
 const NAV_MULTIPRACTICE: NavItem[] = [
   { href: "/group", label: "Portfolio", icon: "building" },
   { href: "/group/performance", label: "Performance", icon: "chart" },
+  { href: "/office/live", label: "Live calls", icon: "sound" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
   { href: "/resources", label: "Resources", icon: "book" },
 ];
@@ -66,6 +69,7 @@ const NAV_PLATFORM: NavItem[] = [
 const NAV_PLATFORM_SUPER: NavItem[] = [
   ...NAV_PLATFORM,
   { href: "/platform/callcenter", label: "Call centers", icon: "building" },
+  { href: "/platform/ghl", label: "GHL live calls", icon: "sound" },
   { href: "/platform/config", label: "Configuration", icon: "gear" },
   { href: "/platform/admins", label: "Internal admins", icon: "team" },
 ];
@@ -81,6 +85,7 @@ const NAV_CALLCENTER: NavItem[] = [
   { href: "/callcenter", label: "Overview", icon: "building" },
   { href: "/practice", label: "Practice", icon: "mic" },
   { href: "/callcenter/team", label: "Team", icon: "team" },
+  { href: "/callcenter/live", label: "Live calls", icon: "sound" },
   { href: "/callcenter/accounts", label: "Accounts", icon: "target" },
   { href: "/callcenter/leaderboard", label: "Leaderboard", icon: "trophy" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },
@@ -94,6 +99,7 @@ const NAV_CALLCENTER_FLOOR: NavItem[] = [
   { href: "/callcenter", label: "Overview", icon: "building" },
   { href: "/practice", label: "Practice", icon: "mic" },
   { href: "/callcenter/team", label: "Team", icon: "team" },
+  { href: "/callcenter/live", label: "Live calls", icon: "sound" },
   { href: "/callcenter/accounts", label: "Accounts", icon: "target" },
   { href: "/callcenter/leaderboard", label: "Leaderboard", icon: "trophy" },
   { href: "/coach", label: "Coach Setty", icon: "chat", ai: true },

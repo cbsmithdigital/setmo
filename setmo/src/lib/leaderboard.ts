@@ -17,7 +17,7 @@ export async function recomputeOfficeLeaderboard(
   serviceType: ServiceKey = DEFAULT_SERVICE
 ): Promise<void> {
   const sessions = await prisma.session.findMany({
-    where: { officeId, serviceType, status: "SCORED", evaluation: { isNot: null } },
+    where: { officeId, serviceType, kind: "PRACTICE", status: "SCORED", evaluation: { isNot: null } },
     include: { evaluation: { select: { overallScore: true } } },
   });
 
@@ -41,7 +41,7 @@ export async function recomputeGlobalLeaderboard(
   serviceType: ServiceKey = DEFAULT_SERVICE
 ): Promise<void> {
   const sessions = await prisma.session.findMany({
-    where: { serviceType, status: "SCORED", evaluation: { isNot: null } },
+    where: { serviceType, kind: "PRACTICE", status: "SCORED", evaluation: { isNot: null } },
     include: { evaluation: { select: { overallScore: true } } },
   });
 

@@ -58,14 +58,14 @@ function streakWeeks(dates: Date[]): number {
 
 async function setterScored(setterId: string, range: AnalyticsRange) {
   return prisma.session.findMany({
-    where: { setterId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null } },
+    where: { setterId, kind: "PRACTICE", status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null } },
     include: { evaluation: { include: { skills: true } } },
   });
 }
 
 async function officeScored(officeId: string, range: AnalyticsRange) {
   return prisma.session.findMany({
-    where: { officeId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null } },
+    where: { officeId, kind: "PRACTICE", status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null } },
     include: { evaluation: { include: { skills: true } } },
   });
 }

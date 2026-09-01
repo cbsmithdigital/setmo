@@ -14,6 +14,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const session = await prisma.session.findUnique({ where: { id } });
   if (!session) return error("Not found", 404);
+  // Real (LIVE) patient calls must never get a public share link.
+  if (session.kind === "LIVE") return error("Live calls can't be shared publicly.", 403);
 
   const canManage =
     session.setterId === user.id ||

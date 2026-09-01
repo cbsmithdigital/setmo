@@ -31,7 +31,7 @@ export async function GET(req: Request) {
 
   const since = new Date(Date.now() - 7 * 86400_000);
   const recent = await prisma.session.findMany({
-    where: { status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: since } },
+    where: { kind: "PRACTICE", status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: since } },
     select: { officeId: true, setterId: true },
   });
   const officeIds = [...new Set(recent.map((r) => r.officeId))];

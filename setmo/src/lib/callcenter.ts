@@ -46,7 +46,7 @@ async function loadScope(orgId: string, podIds: string[]) {
     prisma.user.findMany({ where: { role: "SETTER", status: "ACTIVE", callCenterPodId: { in: podIds } }, select: { id: true, firstName: true, lastName: true, callCenterPodId: true } }),
     prisma.office.findMany({ where: { servedByPodId: { in: podIds } }, select: { id: true, name: true, city: true, servedByPodId: true } }),
     prisma.session.findMany({
-      where: { callCenterOrgId: orgId, status: "SCORED", evaluation: { isNot: null }, setter: { callCenterPodId: { in: podIds } } },
+      where: { callCenterOrgId: orgId, kind: "PRACTICE", status: "SCORED", evaluation: { isNot: null }, setter: { callCenterPodId: { in: podIds } } },
       orderBy: { startedAt: "desc" },
       select: { setterId: true, officeId: true, startedAt: true, durationSeconds: true, evaluation: { select: { overallScore: true, skills: { select: { skillKey: true, score: true } } } } },
     }),
@@ -195,7 +195,7 @@ export async function getAgentHome(userId: string) {
     getSetterAnalytics(userId, current, prior, { allSkills: true }),
     getCallCenterBalance(orgId),
     getPodOverview(agent.callCenterPodId),
-    prisma.session.findMany({ where: { setterId: userId, callCenterOrgId: orgId, status: "SCORED", evaluation: { isNot: null } }, orderBy: { startedAt: "desc" }, take: 7, select: { id: true, startedAt: true, durationSeconds: true, officeId: true, personaSeed: true, evaluation: { select: { overallScore: true } } } }),
+    prisma.session.findMany({ where: { setterId: userId, callCenterOrgId: orgId, kind: "PRACTICE", status: "SCORED", evaluation: { isNot: null } }, orderBy: { startedAt: "desc" }, take: 7, select: { id: true, startedAt: true, durationSeconds: true, officeId: true, personaSeed: true, evaluation: { select: { overallScore: true } } } }),
     prisma.recommendation.findFirst({ where: { setterId: userId, status: "ACTIVE" }, orderBy: { createdAt: "desc" }, include: { training: { select: { title: true, length: true } } } }),
   ]);
 
@@ -350,7 +350,7 @@ export async function getPodTeam(podId: string, range: AnalyticsRange = thisMont
   if (!pod) return [];
   const [agents, sessions, recs] = await Promise.all([
     prisma.user.findMany({ where: { role: "SETTER", status: "ACTIVE", callCenterPodId: podId }, select: { id: true, firstName: true, lastName: true } }),
-    prisma.session.findMany({ where: { callCenterOrgId: pod.organizationId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, setter: { callCenterPodId: podId } }, orderBy: { startedAt: "asc" }, include: SESS_INCLUDE }),
+    prisma.session.findMany({ where: { callCenterOrgId: pod.organizationId, kind: "PRACTICE", status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, setter: { callCenterPodId: podId } }, orderBy: { startedAt: "asc" }, include: SESS_INCLUDE }),
     prisma.recommendation.findMany({ where: { status: "ACTIVE", setter: { callCenterPodId: podId } }, orderBy: { createdAt: "desc" } }),
   ]);
   return buildTeamRows(agents, sessions, recs);
@@ -361,7 +361,7 @@ export async function getPodTeam(podId: string, range: AnalyticsRange = thisMont
 export async function getCenterTeam(orgId: string, range: AnalyticsRange = thisMonthRange()): Promise<(TeamRow & { podName: string })[]> {
   const [agents, sessions, recs] = await Promise.all([
     prisma.user.findMany({ where: { role: "SETTER", status: "ACTIVE", pod: { organizationId: orgId } }, select: { id: true, firstName: true, lastName: true, pod: { select: { name: true } } } }),
-    prisma.session.findMany({ where: { callCenterOrgId: orgId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to } }, orderBy: { startedAt: "asc" }, include: SESS_INCLUDE }),
+    prisma.session.findMany({ where: { callCenterOrgId: orgId, kind: "PRACTICE", status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to } }, orderBy: { startedAt: "asc" }, include: SESS_INCLUDE }),
     prisma.recommendation.findMany({ where: { status: "ACTIVE", setter: { pod: { organizationId: orgId } } }, orderBy: { createdAt: "desc" } }),
   ]);
   const withPod: TeamAgent[] = agents.map((a) => ({ id: a.id, firstName: a.firstName, lastName: a.lastName, podName: a.pod?.name ?? "" }));
@@ -376,7 +376,7 @@ export async function getPodSkillMatrix(podId: string, range: AnalyticsRange = t
   if (!pod) return { skills: [] as { key: string; short: string }[], rows: [] as { id: string; name: string; avg: number; cells: { key: string; score: number | null }[] }[] };
   const [agents, sessions] = await Promise.all([
     prisma.user.findMany({ where: { role: "SETTER", callCenterPodId: podId }, select: { id: true, firstName: true, lastName: true } }),
-    prisma.session.findMany({ where: { callCenterOrgId: pod.organizationId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null }, setter: { callCenterPodId: podId } }, include: MATRIX_INCLUDE }),
+    prisma.session.findMany({ where: { callCenterOrgId: pod.organizationId, kind: "PRACTICE", status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null }, setter: { callCenterPodId: podId } }, include: MATRIX_INCLUDE }),
   ]);
   return buildAgentMatrix(agents, sessions);
 }
@@ -385,7 +385,7 @@ export async function getPodSkillMatrix(podId: string, range: AnalyticsRange = t
 export async function getCenterSkillMatrix(orgId: string, range: AnalyticsRange = thisMonthRange()) {
   const [agents, sessions] = await Promise.all([
     prisma.user.findMany({ where: { role: "SETTER", pod: { organizationId: orgId } }, select: { id: true, firstName: true, lastName: true } }),
-    prisma.session.findMany({ where: { callCenterOrgId: orgId, status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null } }, include: MATRIX_INCLUDE }),
+    prisma.session.findMany({ where: { callCenterOrgId: orgId, kind: "PRACTICE", status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null } }, include: MATRIX_INCLUDE }),
   ]);
   return buildAgentMatrix(agents, sessions);
 }
@@ -480,7 +480,7 @@ export async function getCenterAccounts(orgId: string): Promise<PodAccount[]> {
 /** The call-center agents who ran calls for `officeId`, with this-office stats. */
 export async function getServedOfficeAgents(officeId: string) {
   const sessions = await prisma.session.findMany({
-    where: { officeId, callCenterOrgId: { not: null }, status: "SCORED", evaluation: { isNot: null } },
+    where: { officeId, callCenterOrgId: { not: null }, kind: "PRACTICE", status: "SCORED", evaluation: { isNot: null } },
     orderBy: { startedAt: "desc" },
     select: { setterId: true, startedAt: true, durationSeconds: true, setter: { select: { firstName: true, lastName: true } }, evaluation: { select: { overallScore: true, skills: { select: { skillKey: true, score: true } } } } },
   });
@@ -509,7 +509,7 @@ type ServedAgentRow = { id: string; name: string; overall: number; sessions: num
 /** One call-center agent's stats + calls FOR a specific served office only. */
 export async function getServedOfficeAgentDetail(officeId: string, agentId: string) {
   const sessions = await prisma.session.findMany({
-    where: { officeId, setterId: agentId, callCenterOrgId: { not: null }, status: "SCORED", evaluation: { isNot: null } },
+    where: { officeId, setterId: agentId, callCenterOrgId: { not: null }, kind: "PRACTICE", status: "SCORED", evaluation: { isNot: null } },
     orderBy: { startedAt: "desc" },
     select: { id: true, startedAt: true, durationSeconds: true, personaSeed: true, evaluation: { select: { overallScore: true, skills: { select: { skillKey: true, score: true } } } } },
   });
@@ -545,7 +545,7 @@ export async function getAgentDetail(agentId: string) {
 
   const [sessions, offices] = await Promise.all([
     prisma.session.findMany({
-      where: { setterId: agentId, callCenterOrgId: agent.pod!.organizationId, status: "SCORED", evaluation: { isNot: null } },
+      where: { setterId: agentId, callCenterOrgId: agent.pod!.organizationId, kind: "PRACTICE", status: "SCORED", evaluation: { isNot: null } },
       orderBy: { startedAt: "desc" },
       select: { id: true, officeId: true, startedAt: true, durationSeconds: true, personaSeed: true, evaluation: { select: { overallScore: true, skills: { select: { skillKey: true, score: true } } } } },
     }),

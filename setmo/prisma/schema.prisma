@@ -101,6 +101,7 @@ enum SessionStatus {
 enum SessionKind {
   PRACTICE
   COACH
+  LIVE // a REAL call ingested from an external phone system (GHL) — scored for coaching, but kept OUT of practice analytics/leaderboards and NEVER metered against any pool
 }
 
 enum Difficulty {
@@ -296,6 +297,7 @@ model Office {
   audits       SetterAudit[]
   goals        Goal[]
   agentAssignments AgentOffice[] // call-center agents assigned to this office
+  ghlIntegration GhlIntegration? // connected GHL sub-account (live-call ingestion)
 
   @@index([organizationId])
   @@index([servedByPodId])
@@ -356,6 +358,7 @@ model User {
   memberships     Membership[]
   goalParticipations GoalParticipant[]
   agentOffices    AgentOffice[] // call-center agent → assigned offices
+  ghlUserMaps     GhlUserMap[] // GHL agent identity mapped to this user
 
   @@index([officeId])
   @@index([organizationId])
@@ -618,6 +621,7 @@ model Evaluation {
   recommendedNextScenario String?  @map("recommended_next_scenario")
   rawPayload              Json?    @map("raw_payload")
   booked                  Boolean? // did the lead actually schedule a consult on this call (independent of score)
+  liveOutcome             Json?    @map("live_outcome") // LIVE calls only: extended outcome taxonomy {disposition, leadStates[{state,evidence}], primaryBlocker, bookedQuality, recoverable, nextAction, transcriptQuality}
   scoredAt                DateTime? @map("scored_at") // null = transcript captured but not yet scored
   createdAt               DateTime @default(now()) @map("created_at")
 
@@ -638,6 +642,62 @@ model SkillScore {
 
   @@id([evaluationId, skillKey])
   @@map("skill_score")
+}
+
+// ---------- GHL live-call integration ----------
+// One row per connected GHL sub-account (client practice). The workflow webhook
+// pushes {locationId, userId, contactId, transcript}; webhookSecret authenticates
+// it. pitToken (optional) is held for future API pulls on non-HIPAA accounts.
+model GhlIntegration {
+  id            String   @id @default(uuid())
+  officeId      String   @unique @map("office_id") // the SetMo practice this sub-account maps to
+  ghlLocationId String   @unique @map("ghl_location_id")
+  webhookSecret String   @map("webhook_secret")
+  pitToken      String?  @map("pit_token") // optional Private Integration Token (future pull path)
+  status        String   @default("ACTIVE") // ACTIVE | PAUSED
+  lastCallAt    DateTime? @map("last_call_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  office Office            @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  events GhlInboundEvent[]
+
+  @@map("ghl_integration")
+}
+
+// GHL user (agent) → SetMo user. GHL user ids are agency-global, so one mapping
+// serves every sub-account the agent works across. Auto-seeded by email match on
+// first webhook; manually adjustable by the super-admin.
+model GhlUserMap {
+  id        String   @id @default(uuid())
+  ghlUserId String   @unique @map("ghl_user_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ghl_user_map")
+}
+
+// Every inbound GHL call webhook, PII-scrubbed at the door. Doubles as the
+// idempotency anchor (dedupeKey) and the debug/repair queue: UNMAPPED_USER rows
+// are reprocessed after the super-admin maps the agent.
+model GhlInboundEvent {
+  id            String   @id @default(uuid())
+  integrationId String   @map("integration_id")
+  dedupeKey     String   @unique @map("dedupe_key") // hash(locationId:contactId:transcript)
+  ghlUserId     String?  @map("ghl_user_id")
+  ghlUserEmail  String?  @map("ghl_user_email") // the GHL STAFF user's email (captured pre-scrub; drives auto-mapping — staff identity, not patient PII)
+  ghlContactId  String?  @map("ghl_contact_id")
+  payload       Json     // scrubbed webhook payload (no PII); transcript removed once processed
+  status        String   @default("RECEIVED") // RECEIVED | PROCESSING | PROCESSED | UNMAPPED_USER | TOO_SHORT | LOW_QUALITY | ERROR
+  note          String?
+  sessionId     String?  @map("session_id") // the LIVE session created from this event
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  integration GhlIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId, status])
+  @@map("ghl_inbound_event")
 }
 
 // ---------- coaching ----------

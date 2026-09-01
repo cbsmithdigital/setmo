@@ -37,7 +37,7 @@ export async function getGroupOverview(orgId: string, scopeOfficeIds?: string[])
   const [setters, sessions] = await Promise.all([
     prisma.user.findMany({ where: { officeId: { in: officeIds }, role: "SETTER" }, select: { id: true, firstName: true, lastName: true, officeId: true } }),
     prisma.session.findMany({
-      where: { officeId: { in: officeIds }, status: "SCORED", evaluation: { isNot: null } },
+      where: { officeId: { in: officeIds }, kind: "PRACTICE", status: "SCORED", evaluation: { isNot: null } },
       orderBy: { startedAt: "desc" },
       include: { evaluation: { include: { skills: true } } },
     }),
@@ -135,6 +135,7 @@ export async function getGroupAnalytics(orgId: string, current: AnalyticsRange, 
   const sessions = await prisma.session.findMany({
     where: {
       officeId: { in: officeIds },
+      kind: "PRACTICE",
       status: "SCORED",
       durationSeconds: { gte: 60 },
       startedAt: { gte: earliest, lte: current.to },

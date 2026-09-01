@@ -13,6 +13,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const session = await prisma.session.findUnique({ where: { id } });
   if (!session) return error("Not found", 404);
+  // The saved library is practice-only; live calls live on the Live Calls pages.
+  if (session.kind === "LIVE") return error("Live calls can't be saved to the library.", 403);
 
   const canManage =
     session.setterId === user.id ||

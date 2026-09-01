@@ -14,7 +14,8 @@ export async function getMinuteBalance(officeId: string): Promise<{ purchasedMin
     // Exclude sessions metered against another pool: group/DSO coach (organizationId)
     // and call-center agents' practice calls (callCenterOrgId) — neither draws this
     // office's balance, so a served office is never billed for a call center's agents.
-    prisma.session.aggregate({ where: { officeId, organizationId: null, callCenterOrgId: null, isAudit: false, durationSeconds: { not: null } }, _sum: { durationSeconds: true } }),
+    // kind LIVE excluded: ingested real calls never draw down the practice pool
+    prisma.session.aggregate({ where: { officeId, organizationId: null, callCenterOrgId: null, isAudit: false, kind: { not: "LIVE" }, durationSeconds: { not: null } }, _sum: { durationSeconds: true } }),
   ]);
   const purchasedMin = purchases._sum.minutesPurchased ?? 0;
   const usedMin = Math.round((used._sum.durationSeconds ?? 0) / 60);
@@ -304,7 +305,8 @@ export async function sweepOrgCoachThresholds(): Promise<{ checked: number }> {
 export async function getCallCenterBalance(orgId: string): Promise<{ purchasedMin: number; usedMin: number; remainingMin: number; remainingSeconds: number }> {
   const [purchases, used] = await Promise.all([
     prisma.callCenterBundle.aggregate({ where: { organizationId: orgId }, _sum: { minutesPurchased: true } }),
-    prisma.session.aggregate({ where: { callCenterOrgId: orgId, isAudit: false, durationSeconds: { not: null } }, _sum: { durationSeconds: true } }),
+    // kind LIVE excluded: ingested real calls never draw down the call-center pool
+    prisma.session.aggregate({ where: { callCenterOrgId: orgId, isAudit: false, kind: { not: "LIVE" }, durationSeconds: { not: null } }, _sum: { durationSeconds: true } }),
   ]);
   const purchasedMin = purchases._sum.minutesPurchased ?? 0;
   const usedMin = Math.round((used._sum.durationSeconds ?? 0) / 60);

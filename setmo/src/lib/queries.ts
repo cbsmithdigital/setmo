@@ -129,7 +129,8 @@ export async function getSetterAnalytics(
 ) {
   const earliest = prior && prior.from < current.from ? prior.from : current.from;
   const sessions = await prisma.session.findMany({
-    where: { setterId, status: "SCORED", startedAt: { gte: earliest, lte: current.to } },
+    // kind PRACTICE: real (LIVE) calls are analyzed separately, never in practice analytics
+    where: { setterId, kind: "PRACTICE", status: "SCORED", startedAt: { gte: earliest, lte: current.to } },
     orderBy: { startedAt: "asc" },
     include: { evaluation: { include: { skills: true } } },
   });
@@ -233,7 +234,7 @@ export async function getSetterAnalytics(
 export async function getSetterOnboarding(setterId: string) {
   const [practiceCount, scoredCount, coachCount] = await Promise.all([
     prisma.session.count({ where: { setterId, kind: "PRACTICE" } }),
-    prisma.session.count({ where: { setterId, status: "SCORED", evaluation: { isNot: null } } }),
+    prisma.session.count({ where: { setterId, kind: "PRACTICE", status: "SCORED", evaluation: { isNot: null } } }),
     prisma.session.count({ where: { setterId, kind: "COACH" } }),
   ]);
   const steps = [
@@ -253,7 +254,7 @@ export async function getSetterHome(user: {
   const [allowance, sessions, board, rec] = await Promise.all([
     getAllowance(officeId),
     prisma.session.findMany({
-      where: { setterId: user.id, status: "SCORED" },
+      where: { setterId: user.id, kind: "PRACTICE", status: "SCORED" },
       orderBy: { startedAt: "desc" },
       take: 8,
       include: { evaluation: { include: { skills: true } } },
@@ -359,7 +360,7 @@ export async function getSetterProgress(userId: string, officeId: string | null,
     getSetterAnalytics(userId, current, prior, { allSkills: true }),
     officeId ? getAllowance(officeId) : Promise.resolve({ purchasedMin: 0, usedMin: 0, remainingMin: 0, remainingSeconds: 0 }),
     prisma.session.findMany({
-      where: { setterId: userId, status: "SCORED", startedAt: { gte: current.from, lte: current.to } },
+      where: { setterId: userId, kind: "PRACTICE", status: "SCORED", startedAt: { gte: current.from, lte: current.to } },
       orderBy: { startedAt: "desc" },
       include: { evaluation: { include: { skills: true } } },
     }),
@@ -649,6 +650,9 @@ export async function getSharedRecording(token: string) {
     include: { evaluation: { include: { skills: true } }, setter: true, office: true },
   });
   if (!session || !session.evaluation || !session.shareToken) return null;
+  // Real (LIVE) patient calls are never publicly viewable, even if a token
+  // somehow exists — the share route also refuses to mint one.
+  if (session.kind === "LIVE") return null;
 
   const e = session.evaluation;
   const order = rubricFor(session.serviceType).map((s) => s.key);
@@ -713,16 +717,21 @@ type ResultViewer = { id: string; role: string; officeId: string | null; organiz
 export async function getSessionResult(sessionId: string, viewer: ResultViewer, opts: { hydrateAudio?: boolean } = {}) {
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
-    include: { evaluation: { include: { skills: true } }, setter: true },
+    include: { evaluation: { include: { skills: true } }, setter: true, office: { select: { organizationId: true } } },
   });
   // The transcript is captured (evaluation row created) before scoring finishes;
   // only treat the call as ready once it's actually been scored.
   if (!session || !session.evaluation || !session.evaluation.scoredAt) return null;
 
-  // The setter owns their call; office/group/platform admins may view any call
-  // in their office (read-only — setter-only actions are hidden in the UI).
+  // The setter owns their call; office admins may view any call in their office;
+  // a GROUP_ADMIN any call in their organization's offices (the group drill-in
+  // links across the whole org); platform admins any call.
   const isOwner = session.setterId === viewer.id;
-  const isManager = ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(viewer.role);
+  const isOfficeManager = ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(viewer.role) && session.officeId === viewer.officeId;
+  const isPlatform = viewer.role === "PLATFORM_ADMIN";
+  const isGroupView = Boolean(
+    viewer.role === "GROUP_ADMIN" && viewer.organizationId && session.office?.organizationId === viewer.organizationId
+  );
   // A call-center senior manager can view any of the call center's agent calls; a
   // floor manager only their own pod's agents.
   const isCallCenterView = Boolean(
@@ -732,11 +741,14 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer, 
     (viewer.role === "CALL_CENTER_ADMIN" ||
       (viewer.role === "CALL_CENTER_MANAGER" && viewer.callCenterPodId != null && viewer.callCenterPodId === session.setter?.callCenterPodId))
   );
-  // A Multi Practice Admin may view calls for any office in their assigned set.
+  // A Multi Practice Admin may view calls for any office in their assigned set —
+  // membership PLUS the office still belonging to their org (fail-closed, matching
+  // mpaOfficeIds' re-validation).
   const isMpaView =
     viewer.role === "MULTI_PRACTICE_ADMIN" &&
+    Boolean(viewer.organizationId && session.office?.organizationId === viewer.organizationId) &&
     Boolean(await prisma.membership.findFirst({ where: { userId: viewer.id, role: "MULTI_PRACTICE_ADMIN", scopeType: "OFFICE", scopeId: session.officeId } }));
-  const canView = isOwner || (isManager && session.officeId === viewer.officeId) || isCallCenterView || isMpaView;
+  const canView = isOwner || isOfficeManager || isPlatform || isGroupView || isCallCenterView || isMpaView;
   if (!canView) return null;
 
   // Recover a missed recording on demand (results-page load only), so a call
@@ -749,10 +761,12 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer, 
     (a, b) => rubricKeys.indexOf(a.skillKey) - rubricKeys.indexOf(b.skillKey)
   );
 
-  // previous session score for "up from" (relative to the call's owner)
+  // previous session score for "up from" (relative to the call's owner) —
+  // compared within the SAME kind, so live calls trend against live calls.
   const prev = await prisma.session.findFirst({
     where: {
       setterId: session.setterId,
+      kind: session.kind,
       status: "SCORED",
       startedAt: { lt: session.startedAt },
     },
@@ -796,5 +810,7 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer, 
     audioAvailable: Boolean(audioPath),
     saved: session.saved,
     shareToken: session.shareToken,
+    kind: session.kind,
+    liveOutcome: (session.evaluation.liveOutcome ?? null) as import("@/lib/scorer").LiveOutcome | null,
   };
 }

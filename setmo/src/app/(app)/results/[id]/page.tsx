@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser } from "@/lib/auth";
+import { requireUser, getActiveRole, isCallCenterRole } from "@/lib/auth";
 import { getSessionResult } from "@/lib/queries";
 import { Icon } from "@/components/ui/Icon";
 import { Ring } from "@/components/ui/widgets";
 import { RecordingActions } from "@/components/RecordingActions";
 import { mmss } from "@/lib/format";
 import { showRateColor } from "@/lib/audit";
+import { LIVE_DISPOSITION_LABEL, LIVE_BLOCKER_LABEL, LIVE_LEAD_STATE_LABEL } from "@/lib/ghl";
 
 function ResultSkill({
   s,
@@ -44,14 +45,17 @@ export default async function ResultsPage({
   const { id } = await params;
   const r = await getSessionResult(id, user, { hydrateAudio: true });
   if (!r) notFound();
+  const isLive = r.kind === "LIVE";
+  const o = r.liveOutcome;
+  const backHref = isLive ? (isCallCenterRole(getActiveRole(user)) ? "/callcenter/live" : "/office/live") : "/library";
 
   return (
     <>
       <div className="topbar">
         <div className="tb-greet">
-          <h1>{r.isOwner ? "How you did" : `${r.setterName}'s call`}</h1>
+          <h1>{r.isOwner ? (isLive ? "Your live call" : "How you did") : `${r.setterName}'s ${isLive ? "live call" : "call"}`}</h1>
           <p>
-            {r.service} · {r.persona} · {mmss(r.durationSeconds)}
+            {r.service} · {r.persona} · {mmss(r.durationSeconds)}{isLive ? " (est.)" : ""}
           </p>
         </div>
         <div className="tb-right" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -64,12 +68,12 @@ export default async function ResultsPage({
                 <Icon name="chat" /> Coach me from this call
               </Link>
               <Link className="btn btn-primary" href="/practice">
-                <Icon name="mic" /> Run another
+                <Icon name="mic" /> {isLive ? "Practice this scenario" : "Run another"}
               </Link>
             </>
           ) : (
-            <Link className="btn btn-ghost" href="/library">
-              Back to saved
+            <Link className="btn btn-ghost" href={backHref}>
+              {isLive ? "Back to live calls" : "Back to saved"}
             </Link>
           )}
         </div>
@@ -96,6 +100,63 @@ export default async function ResultsPage({
             {r.narrative && <h2 style={{ fontSize: 24, maxWidth: "22em", lineHeight: 1.2 }}>{r.narrative}</h2>}
           </div>
         </div>
+
+        {/* live-call outcome analysis (real calls only) */}
+        {isLive && o && (
+          <div className="card card-pad rise" style={{ marginBottom: 18, animationDelay: ".03s" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+              <h3 style={{ fontSize: 18 }}>Call outcome</h3>
+              <span className={"chip " + (o.disposition === "booked" ? "mint" : o.disposition === "soft_booked" || o.disposition === "callback_agreed" ? "purple" : "")} style={{ fontWeight: 700 }}>
+                {LIVE_DISPOSITION_LABEL[o.disposition] ?? o.disposition}
+              </span>
+              {o.primaryBlocker !== "none" && (
+                <span className="chip amber" style={{ fontSize: 12 }}>Blocker: {LIVE_BLOCKER_LABEL[o.primaryBlocker] ?? o.primaryBlocker}</span>
+              )}
+              {o.transcriptQuality === "poor" && (
+                <span className="chip" style={{ fontSize: 11.5, color: "var(--amber)" }} title="The transcript was heavily garbled — treat scores as directional">
+                  <Icon name="shield" size={12} /> Low confidence
+                </span>
+              )}
+            </div>
+
+            {o.leadStates.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", marginBottom: 8 }}>How the lead showed up</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {o.leadStates.map((l, i) => (
+                    <div key={i} style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+                      <span className="chip purple" style={{ fontSize: 11.5, flex: "none" }}>{LIVE_LEAD_STATE_LABEL[l.state] ?? l.state}</span>
+                      <span className="muted" style={{ fontSize: 13, fontStyle: "italic" }}>&ldquo;{l.evidence}&rdquo;</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {o.bookedQuality && (
+              <div style={{ marginBottom: 12 }}>
+                <div className="muted" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", marginBottom: 6 }}>Booking quality</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <span className={"chip " + (o.bookedQuality.commitment === "firm" ? "mint" : "amber")} style={{ fontSize: 11.5 }}>{o.bookedQuality.commitment === "firm" ? "Firm commitment" : "Soft commitment"}</span>
+                  <span className="chip" style={{ fontSize: 11.5 }}>{o.bookedQuality.depositDiscussed ? "Deposit discussed" : "No deposit discussed"}</span>
+                  <span className="chip" style={{ fontSize: 11.5 }}>{o.bookedQuality.framedCorrectly ? "Framed correctly" : "Framing off-script"}</span>
+                  {o.bookedQuality.riskFlags.map((f, i) => (
+                    <span key={i} className="chip amber" style={{ fontSize: 11.5 }}>⚠ {f}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(o.nextAction || o.recoverable != null) && (
+              <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
+                {o.disposition !== "booked" && (
+                  <span className={"chip " + (o.recoverable ? "mint" : "")} style={{ fontSize: 11.5 }}>{o.recoverable ? "Recoverable" : "Unlikely to recover"}</span>
+                )}
+                {o.nextAction && <span style={{ fontSize: 14, color: "var(--text-2)" }}><b>Next:</b> {o.nextAction}</span>}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="grid g-2" style={{ gridTemplateColumns: "1.1fr .9fr", marginBottom: 18 }}>
           {/* skill breakdown */}
@@ -263,7 +324,8 @@ export default async function ResultsPage({
               Replay the call and read the transcript — hear exactly where it turned.
             </p>
 
-            <RecordingActions sessionId={r.sessionId} initialSaved={r.saved} initialShareToken={r.shareToken} />
+            {/* Save/share are practice-library features; live calls live on the Live Calls page. */}
+            {!isLive && <RecordingActions sessionId={r.sessionId} initialSaved={r.saved} initialShareToken={r.shareToken} />}
 
             {r.audioAvailable ? (
               <audio
@@ -272,6 +334,10 @@ export default async function ResultsPage({
                 src={`/api/sessions/${r.sessionId}/audio`}
                 style={{ width: "100%", marginBottom: r.transcript.length ? 18 : 0 }}
               />
+            ) : isLive ? (
+              <div className="muted" style={{ fontSize: 13, marginBottom: r.transcript.length ? 18 : 0 }}>
+                Live-call audio stays in your phone system — the transcript below is PII-scrubbed.
+              </div>
             ) : (
               <div className="muted" style={{ fontSize: 13, marginBottom: r.transcript.length ? 18 : 0 }}>
                 The recording will appear here once it finishes processing.

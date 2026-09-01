@@ -50,7 +50,7 @@ export async function getPlatformOverview() {
     prisma.conversationBundle.findMany({ select: { officeId: true, minutesPurchased: true, amountCents: true, purchasedAt: true } }),
     // Group/DSO coach-token purchases — a second token-revenue stream.
     prisma.orgTokenBundle.findMany({ select: { minutesPurchased: true, amountCents: true, purchasedAt: true } }),
-    prisma.session.findMany({ where: { durationSeconds: { not: null } }, select: { officeId: true, durationSeconds: true, isAudit: true, startedAt: true } }),
+    prisma.session.findMany({ where: { durationSeconds: { not: null }, kind: { not: "LIVE" } }, select: { officeId: true, durationSeconds: true, isAudit: true, startedAt: true } }),
     prisma.setterAudit.findMany({ select: { status: true, office: { select: { isProspect: true } } } }),
   ]);
   const cfg = await getPricingConfig();
@@ -145,7 +145,7 @@ async function officeStats(where: object): Promise<OfficeStat[]> {
     // Exclude sessions metered against another pool (group/DSO coach organizationId,
     // and call-center agents' callCenterOrgId) so they don't inflate a served
     // office's burn/balance — the office never bought those minutes.
-    prisma.session.findMany({ where: { officeId: { in: ids }, organizationId: null, callCenterOrgId: null, durationSeconds: { not: null }, isAudit: false }, select: { officeId: true, durationSeconds: true, startedAt: true } }),
+    prisma.session.findMany({ where: { officeId: { in: ids }, organizationId: null, callCenterOrgId: null, kind: { not: "LIVE" }, durationSeconds: { not: null }, isAudit: false }, select: { officeId: true, durationSeconds: true, startedAt: true } }),
     // Office admins → the default billing contact for each location.
     prisma.user.findMany({ where: { officeId: { in: ids }, role: "OFFICE_ADMIN" }, select: { officeId: true, email: true }, orderBy: { createdAt: "asc" } }),
   ]);

@@ -6,7 +6,9 @@ import { skillName } from "@/lib/skills";
 // improves. Recomputed after each scored session.
 export async function updateSetterMemory(setterId: string): Promise<void> {
   const sessions = await prisma.session.findMany({
-    where: { setterId, status: "SCORED" },
+    // practice only: the difficulty floor + role-play memory come from training
+    // reps, never from ingested real (LIVE) calls
+    where: { setterId, kind: "PRACTICE", status: "SCORED" },
     orderBy: { startedAt: "desc" },
     take: 5,
     include: { evaluation: { include: { skills: true } } },
