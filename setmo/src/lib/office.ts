@@ -311,11 +311,14 @@ export async function getOfficeSetterDetail(officeId: string, setterId: string, 
       orderBy: { createdAt: "desc" },
       include: { training: true },
     }),
-    // Every individual call in the window — so the admin can open + listen to ANY
-    // of the setter's conversations, not just the saved ones. Office-scoped.
+    // Every individual call — so the admin can open + listen to ANY of the
+    // setter's conversations, not just the saved ones. Deliberately NOT windowed
+    // by the analytics range: a calendar-month default would hide last month's
+    // calls the moment the month rolls over. Most recent 50, office-scoped.
     prisma.session.findMany({
-      where: { setterId, officeId, kind: "PRACTICE", status: "SCORED", startedAt: { gte: current.from, lte: current.to }, evaluation: { isNot: null } },
+      where: { setterId, officeId, kind: "PRACTICE", status: "SCORED", evaluation: { isNot: null } },
       orderBy: { startedAt: "desc" },
+      take: 50,
       select: { id: true, startedAt: true, durationSeconds: true, personaSeed: true, saved: true, audioPath: true, elevenlabsConversationId: true, evaluation: { select: { overallScore: true } } },
     }),
   ]);
