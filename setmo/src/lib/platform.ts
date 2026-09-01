@@ -226,7 +226,12 @@ export async function getPlatformAccountDetail(id: string) {
 
   const officeIds = locations.map((l) => l.id);
   const [users, recentBundles] = await Promise.all([
-    prisma.user.findMany({ where: { officeId: { in: officeIds } }, select: { id: true, firstName: true, lastName: true, email: true, role: true, status: true, officeId: true } }),
+    // Office members PLUS org-level people (group/DSO admins, multi-practice
+    // admins — officeId null) so their Resend-invite / View-as actions exist.
+    prisma.user.findMany({
+      where: org ? { OR: [{ officeId: { in: officeIds } }, { organizationId: org.id, officeId: null }] } : { officeId: { in: officeIds } },
+      select: { id: true, firstName: true, lastName: true, email: true, role: true, status: true, officeId: true },
+    }),
     prisma.conversationBundle.findMany({ where: { officeId: { in: officeIds } }, orderBy: { purchasedAt: "desc" }, take: 12, select: { officeId: true, minutesPurchased: true, amountCents: true, purchasedAt: true } }),
   ]);
   const officeName = new Map(locations.map((l) => [l.id, l.name]));
@@ -240,7 +245,7 @@ export async function getPlatformAccountDetail(id: string) {
     balanceMin: locations.reduce((a, l) => a + l.balanceMin, 0),
     cashLifetime: r2(locations.reduce((a, l) => a + l.cashLifetime, 0)),
     locations,
-    users: users.map((u) => ({ id: u.id, name: fullName(u.firstName, u.lastName), email: u.email, role: u.role, status: u.status, location: officeName.get(u.officeId ?? "") ?? "—" })),
+    users: users.map((u) => ({ id: u.id, name: fullName(u.firstName, u.lastName), email: u.email, role: u.role, status: u.status, location: officeName.get(u.officeId ?? "") ?? (u.officeId ? "—" : "Organization") })),
     transactions: recentBundles.map((b) => ({ when: b.purchasedAt, location: officeName.get(b.officeId) ?? "—", minutes: b.minutesPurchased, amount: r2(cashOf(b, cfg)) })),
   };
 }
