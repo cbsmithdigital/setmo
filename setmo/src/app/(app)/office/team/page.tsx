@@ -9,6 +9,7 @@ import { SkillMatrix } from "@/components/office/SkillMatrix";
 import { Icon } from "@/components/ui/Icon";
 
 const PRESETS = [
+  { key: "30d", label: "30 days" },
   { key: "month", label: "This month" },
   { key: "lastmonth", label: "Last month" },
   { key: "60d", label: "60 days" },
@@ -23,7 +24,8 @@ export default async function OfficeTeamPage({
 }) {
   const user = await requireRole("OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN");
   const sp = await searchParams;
-  const { key, range, label } = resolveAnalyticsRange(sp);
+  // Default = rolling last 30 days (not calendar month, which empties on rollover).
+  const { key, range, label } = resolveAnalyticsRange({ ...sp, range: sp.range ?? "30d" });
   const [team, matrix, members] = await Promise.all([
     getOfficeTeam(user.officeId!, range),
     getOfficeSkillMatrix(user.officeId!, range),

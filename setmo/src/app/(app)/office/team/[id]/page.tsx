@@ -14,7 +14,8 @@ export default async function SetterDetailPage({
   const user = await requireRole("OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN");
   const { id } = await params;
   const sp = await searchParams;
-  const { key, range, label } = resolveAnalyticsRange(sp);
+  // Default = rolling last 30 days, matching the Team page it's drilled from.
+  const { key, range, label } = resolveAnalyticsRange({ ...sp, range: sp.range ?? "30d" });
   const t = await getOfficeSetterDetail(user.officeId!, id, range);
   if (!t) notFound();
 
