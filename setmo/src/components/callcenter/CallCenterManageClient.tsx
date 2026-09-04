@@ -22,15 +22,19 @@ function Msg({ m }: { m: { kind: "ok" | "err"; text: string } | null }) {
   return <p style={{ fontSize: 12.5, marginTop: 8, color: m.kind === "ok" ? "var(--mint)" : "var(--amber)", wordBreak: "break-all" }}>{m.text}</p>;
 }
 
-export function CallCenterManageClient({ data }: { data: Data }) {
+// `orgId` is set only when a PLATFORM_ADMIN manages a center from the platform
+// console — it's passed through to each API call; senior admins omit it (their
+// own org is derived server-side).
+export function CallCenterManageClient({ data, orgId }: { data: Data; orgId?: string }) {
   const router = useRouter();
   const refresh = () => router.refresh();
+  const scoped = (body: object) => (orgId ? { ...body, orgId } : body);
 
   // Add pod
   const [podName, setPodName] = useState("");
   const [podMsg, setPodMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   async function addPod() {
-    const r = await post("/api/callcenter/pods", { name: podName });
+    const r = await post("/api/callcenter/pods", scoped({ name: podName }));
     setPodMsg(r.ok ? { kind: "ok", text: "Pod added" } : { kind: "err", text: r.error ?? "Failed" });
     if (r.ok) { setPodName(""); refresh(); }
   }
@@ -39,7 +43,7 @@ export function CallCenterManageClient({ data }: { data: Data }) {
   const [off, setOff] = useState({ name: "", city: "", podId: data.pods[0]?.id ?? "" });
   const [offMsg, setOffMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   async function addOffice() {
-    const r = await post("/api/callcenter/offices", off);
+    const r = await post("/api/callcenter/offices", scoped(off));
     setOffMsg(r.ok ? { kind: "ok", text: "Office added" } : { kind: "err", text: r.error ?? "Failed" });
     if (r.ok) { setOff({ name: "", city: "", podId: off.podId }); refresh(); }
   }
@@ -50,7 +54,7 @@ export function CallCenterManageClient({ data }: { data: Data }) {
   const podOffices = data.offices.filter((o) => o.podId === inv.podId);
   async function invite() {
     const body = inv.role === "SETTER" ? inv : { email: inv.email, name: inv.name, role: inv.role, podId: inv.podId };
-    const r = await post("/api/callcenter/members", body);
+    const r = await post("/api/callcenter/members", scoped(body));
     if (r.ok) { setInvMsg({ kind: "ok", text: r.previewLink ? `Invited. Link: ${r.previewLink}` : "Invite sent" }); setInv({ ...inv, email: "", name: "", officeIds: [] }); refresh(); }
     else setInvMsg({ kind: "err", text: r.error ?? "Failed" });
   }

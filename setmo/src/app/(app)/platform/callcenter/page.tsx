@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { listCallCenters } from "@/lib/callcenter-admin";
 import { NewCallCenterForm } from "@/components/platform/NewCallCenterForm";
@@ -24,10 +25,10 @@ export default async function PlatformCallCentersPage() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column" }}>
               {centers.map((c) => (
-                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: "1px solid var(--line-soft)" }}>
+                <Link key={c.id} href={`/platform/callcenter/${c.id}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 4px", borderTop: "1px solid var(--line-soft)", borderRadius: 8 }}>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{c.name}</div>
-                  <div className="muted" style={{ fontSize: 12.5 }}>{c.pods} pod{c.pods === 1 ? "" : "s"} · {c.agents} agent{c.agents === 1 ? "" : "s"} · {c.offices} office{c.offices === 1 ? "" : "s"}</div>
-                </div>
+                  <div className="muted" style={{ fontSize: 12.5 }}>{c.pods} pod{c.pods === 1 ? "" : "s"} · {c.agents} agent{c.agents === 1 ? "" : "s"} · {c.offices} office{c.offices === 1 ? "" : "s"} <span style={{ marginLeft: 6 }}>→</span></div>
+                </Link>
               ))}
             </div>
           )}

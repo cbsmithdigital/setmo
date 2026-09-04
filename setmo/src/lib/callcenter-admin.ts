@@ -85,6 +85,19 @@ export async function inviteCallCenterMember(opts: {
   return res.ok ? { ok: true as const, previewLink: res.previewLink } : { ok: false as const, error: "Couldn't send the invite" };
 }
 
+/** Resolve which call center an API actor may manage: a call-center senior
+ *  admin manages their own org; a platform super-admin may name any center
+ *  (validated as a real CALL_CENTER org). Anyone else: null (403 upstream). */
+export async function resolveManagedOrgId(activeRole: string, userOrgId: string | null, bodyOrgId?: string): Promise<string | null> {
+  if (activeRole === "PLATFORM_ADMIN") {
+    if (!bodyOrgId) return null;
+    const org = await prisma.organization.findFirst({ where: { id: bodyOrgId, type: "CALL_CENTER" }, select: { id: true } });
+    return org?.id ?? null;
+  }
+  if (activeRole === "CALL_CENTER_ADMIN") return userOrgId;
+  return null;
+}
+
 export async function createPod(orgId: string, name: string) {
   return prisma.pod.create({ data: { organizationId: orgId, name: name.trim() || "Pod" } });
 }
