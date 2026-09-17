@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { skillName } from "@/lib/skills";
+import type { ServiceKey } from "@/generated/prisma/client";
 
 // Recommendation engine (rules-based, Phase-2 foundation):
 // any skill averaging < THRESHOLD over the last N scored sessions maps to a
@@ -70,9 +71,12 @@ export async function getTrainingImpact(officeId: string): Promise<{ rows: Train
   return { rows, avgDelta, measured: rows.length };
 }
 
-export async function recomputeRecommendations(setterId: string): Promise<void> {
+/** Refresh a setter's training recommendations from their recent calls on ONE
+ *  kind of call. Scoped per service: a weak denture call shouldn't assign
+ *  implant training, and skills only exist inside the rubric that graded them. */
+export async function recomputeRecommendations(setterId: string, serviceType?: ServiceKey): Promise<void> {
   const sessions = await prisma.session.findMany({
-    where: { setterId, status: "SCORED" },
+    where: { setterId, status: "SCORED", ...(serviceType ? { serviceType } : {}) },
     orderBy: { startedAt: "desc" },
     take: LOOKBACK_SESSIONS,
     include: { evaluation: { include: { skills: true } } },

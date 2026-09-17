@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { isEmailConfigured, sendInviteEmail } from "@/lib/email";
 import { confirmLink } from "@/lib/invites";
+import { seedOfficeServices, defaultOfferFraming } from "@/lib/office-services";
 import { fullName } from "@/lib/format";
 import type { Role } from "@/generated/prisma/client";
 
@@ -106,8 +107,11 @@ export async function createPod(orgId: string, name: string) {
 export async function createServedOffice(opts: { orgId: string; podId: string; name: string; city?: string }) {
   const pod = await prisma.pod.findFirst({ where: { id: opts.podId, organizationId: opts.orgId }, select: { id: true } });
   if (!pod) return { ok: false as const, error: "Pod not found in this call center" };
-  const office = await prisma.office.create({ data: { name: opts.name.trim(), city: opts.city?.trim() || null, isProspect: false, servedByPodId: opts.podId, offerFraming: `${opts.name.trim()}: free implant consult + 3D scan, financing available.` } });
-  await prisma.officeService.create({ data: { officeId: office.id, serviceType: "IMPLANT", enabled: true } });
+  // The served practice's own wording — a call center books for general,
+  // pediatric and specialty practices, not only implant centers.
+  const name = opts.name.trim();
+  const office = await prisma.office.create({ data: { name, city: opts.city?.trim() || null, isProspect: false, servedByPodId: opts.podId, offerFraming: defaultOfferFraming(name) } });
+  await seedOfficeServices(office.id);
   return { ok: true as const, officeId: office.id };
 }
 

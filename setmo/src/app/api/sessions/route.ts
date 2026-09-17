@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canStartSession, canStartCallCenter, callCenterOrgForAgent } from "@/lib/usage";
+import { memoryForService } from "@/lib/memory";
 import { error, json } from "@/lib/api";
 
 const Body = z.object({
@@ -75,10 +76,11 @@ export async function POST(req: Request) {
     return error(callCenterOrgId ? "Your call center's practice balance is used up." : "Your practice pool is used up. Buy a bundle or wait for the reset.", 402);
   }
 
-  // Adaptive difficulty escalates from the setter's memory floor.
-  const memory = await prisma.setterMemory.findUnique({ where: { setterId: user.id } });
+  // Adaptive difficulty escalates from the setter's memory floor FOR THIS
+  // SERVICE (connect resolves it the same way).
+  const memoryRow = await prisma.setterMemory.findUnique({ where: { setterId: user.id } });
   const resolvedDifficulty =
-    difficulty === "ADAPTIVE" && memory?.difficultyFloor ? memory.difficultyFloor : difficulty;
+    difficulty === "ADAPTIVE" ? memoryForService(memoryRow, serviceType).difficultyFloor : difficulty;
 
   const session = await prisma.session.create({
     data: {

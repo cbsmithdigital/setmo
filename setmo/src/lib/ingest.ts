@@ -7,6 +7,7 @@ import { evaluateMinuteThresholds } from "@/lib/usage";
 import { uploadRecording } from "@/lib/storage";
 import { parsePostCall, extractTranscript } from "@/lib/elevenlabs";
 import { scoreTranscript, isScorerConfigured } from "@/lib/scorer";
+import { rubricForService } from "@/lib/packs/registry";
 
 // Below this, a call is treated as too short to score (hang-ups / interruptions).
 // Under a minute is excluded from scoring + averages.
@@ -136,6 +137,10 @@ export async function scoreSession(
     await tx.evaluation.update({
       where: { sessionId: session.id },
       data: {
+        // Pin the rubric this call was graded against, so the results page and
+        // every report keep rendering it the way it was scored even after a
+        // service's rubric moves on.
+        rubricId: rubricForService(session.serviceType).id,
         overallScore: overall != null ? overall.toFixed(1) : null,
         narrative,
         wins,
@@ -165,8 +170,8 @@ export async function scoreSession(
   // recommendations, or hit a leaderboard (the prospect isn't a customer).
   if (session.isAudit) return { ok: true, source: source + "-audit" };
 
-  await recomputeRecommendations(session.setterId);
-  await updateSetterMemory(session.setterId);
+  await recomputeRecommendations(session.setterId, session.serviceType);
+  await updateSetterMemory(session.setterId, session.serviceType);
   await recomputeLeaderboards(session.officeId);
   // refresh any active goals this call could move (the setter's + their team's)
   await evaluateGoalsForSetter(session.setterId).catch(() => {});

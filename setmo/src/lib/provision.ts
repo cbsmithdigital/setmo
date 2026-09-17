@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { partnerIdForCode } from "@/lib/partners";
+import { seedOfficeServices } from "@/lib/office-services";
 
 // Self-serve account provisioning, shared by the direct signup and the
 // assessment→account conversion. Creates the Supabase auth user (auto-confirmed,
@@ -47,6 +48,7 @@ export async function provisionAccount(opts: {
       const office = opts.claimOfficeId
         ? await prisma.office.update({ where: { id: opts.claimOfficeId }, data: { isProspect: false, name: opts.practiceName } })
         : await prisma.office.create({ data: { name: opts.practiceName, isProspect: false, ...refData } });
+      await seedOfficeServices(office.id);
       await prisma.user.create({ data: { id: userId, email, firstName, lastName, role: "OFFICE_ADMIN", status: "ACTIVE", officeId: office.id } });
       await prisma.membership.create({ data: { userId, role: "OFFICE_ADMIN", scopeType: "OFFICE", scopeId: office.id } });
     } else {
@@ -56,6 +58,7 @@ export async function provisionAccount(opts: {
       const office = opts.claimOfficeId
         ? await prisma.office.update({ where: { id: opts.claimOfficeId }, data: { isProspect: false, name: opts.practiceName, organizationId: org.id } })
         : await prisma.office.create({ data: { name: opts.practiceName, isProspect: false, organizationId: org.id, ...refData } });
+      await seedOfficeServices(office.id);
       // Group admin who also manages the first location (multi-role).
       await prisma.user.create({ data: { id: userId, email, firstName, lastName, role: "GROUP_ADMIN", status: "ACTIVE", organizationId: org.id, officeId: office.id } });
       await prisma.membership.create({ data: { userId, role: "GROUP_ADMIN", scopeType: "GROUP", scopeId: org.id } });

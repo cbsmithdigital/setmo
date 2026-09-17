@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { loadAuditByCookie } from "@/lib/audit-auth";
 import { auditCallCounts, buildAuditReport, AUDIT_CALLS, AUDIT_CALL_MAX_SECONDS } from "@/lib/audit";
+import { getPricingConfig } from "@/lib/config";
 import { AuditRunner } from "@/components/audit/AuditRunner";
 import { AuditClaim } from "@/components/audit/AuditClaim";
 import { AuditRequestReview } from "@/components/audit/AuditRequestReview";
@@ -77,6 +78,8 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
     const r = await buildAuditReport(id);
     if (!r) return <Shell><div className="audit-card">Report unavailable.</div></Shell>;
     const rec = r.recovery;
+    // Quote the live price, never a hard-coded one — this is what Stripe charges.
+    const { accessMonthly } = await getPricingConfig();
     return (
       <Shell>
         <div className="sec-head" style={{ marginBottom: 22 }}>
@@ -208,7 +211,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
         <div className="audit-card">
           <h3 style={{ fontSize: 20, marginBottom: 6 }}>Turn this into your team&apos;s baseline</h3>
           <p style={{ color: "var(--m-muted)", fontSize: 14.5, marginBottom: 6 }}>
-            Activate SetMo for {r.practiceName} and put every setter on the same coaching. Early adopters who start before <b style={{ color: "var(--ink-soft)" }}>Aug 1</b> lock in special pricing.
+            Activate SetMo for {r.practiceName} and put every setter on the same coaching — <b style={{ color: "var(--ink-soft)" }}>${accessMonthly.toFixed(2)}/month</b> per location, unlimited users, practice time pay-as-you-go.
           </p>
           <AuditClaim auditId={id} />
           <p className="audit-note" style={{ textAlign: "center" }}>

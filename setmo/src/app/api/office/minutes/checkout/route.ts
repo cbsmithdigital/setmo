@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
-import { createMinuteCheckout, isStripeConfigured, MIN_MINUTES, MAX_MINUTES } from "@/lib/stripe";
+import { createMinuteCheckout, isStripeConfigured } from "@/lib/stripe";
 import { accountTokenDiscountPct } from "@/lib/usage";
+import { checkMinutes } from "@/lib/minute-limits";
 import { error, json } from "@/lib/api";
 
-const Body = z.object({ minutes: z.number().int().min(MIN_MINUTES).max(MAX_MINUTES) });
+const Body = z.object({ minutes: z.number().int().min(1) });
 
 // POST /api/office/minutes/checkout — buy tokens (slider amount).
 export async function POST(req: Request) {
@@ -16,6 +17,8 @@ export async function POST(req: Request) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid minute amount", 422);
+  const bounds = await checkMinutes(parsed.data.minutes);
+  if (!bounds.ok) return error(bounds.message, bounds.status, bounds.code ? { code: bounds.code } : undefined);
 
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
   try {

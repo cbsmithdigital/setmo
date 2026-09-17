@@ -2,6 +2,7 @@ import { loadAuditByCookie } from "@/lib/audit-auth";
 import { buildAuditReport } from "@/lib/audit";
 import { buildSettyPrompt } from "@/lib/setty";
 import { getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
+import { getPlatformConfig } from "@/lib/config";
 import { error, json } from "@/lib/api";
 
 // POST /api/audit/:id/setty — start a free Setty voice session for the prospect,
@@ -17,6 +18,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const report = await buildAuditReport(id);
   const contactFirst = audit.contactName.split(/\s+/)[0] || "there";
   const call = report?.perCall?.[0];
+  const cfg = await getPlatformConfig();
 
   const { systemPrompt, firstMessage } = buildSettyPrompt({
     practiceName: audit.practiceName,
@@ -28,6 +30,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     showRate: call?.showRate ?? 0,
     win: call?.win ?? null,
     miss: call?.miss ?? null,
+    pricing: {
+      accessMonthly: cfg.accessMonthly,
+      monthlyDiscountPct: cfg.monthlyTokenDiscountPct,
+      annualDiscountPct: cfg.annualTokenDiscountPct,
+    },
   });
 
   try {

@@ -1,14 +1,22 @@
 import { prisma } from "@/lib/db";
 import { skillName } from "@/lib/skills";
+import type { Difficulty, ServiceKey } from "@/generated/prisma/client";
 
 // SetMo-owned per-setter memory: a rolling summary injected into each new
 // session for continuity, plus an escalating difficulty floor as the setter
 // improves. Recomputed after each scored session.
-export async function updateSetterMemory(setterId: string): Promise<void> {
+//
+// Memory is kept PER SERVICE. Being strong on implant calls says nothing about
+// how someone handles an emergency toothache, so each kind of call carries its
+// own difficulty floor and its own summary. The legacy top-level columns mirror
+// implant, which keeps every existing reader working unchanged.
+const LEGACY_SERVICE: ServiceKey = "IMPLANT";
+
+export async function updateSetterMemory(setterId: string, serviceType: ServiceKey = LEGACY_SERVICE): Promise<void> {
   const sessions = await prisma.session.findMany({
     // practice only: the difficulty floor + role-play memory come from training
     // reps, never from ingested real (LIVE) calls
-    where: { setterId, kind: "PRACTICE", status: "SCORED" },
+    where: { setterId, serviceType, kind: "PRACTICE", status: "SCORED" },
     orderBy: { startedAt: "desc" },
     take: 5,
     include: { evaluation: { include: { skills: true } } },
@@ -42,7 +50,10 @@ export async function updateSetterMemory(setterId: string): Promise<void> {
   const oldest = overallOf(sessions[sessions.length - 1]);
   const trend = newest - oldest;
 
-  const difficultyFloor = overall >= 4.5 ? "TOUGH" : overall >= 3.8 ? "WARM" : "ADAPTIVE";
+  // The ladder escalates as the setter improves: WARM (easiest) → ADAPTIVE
+  // (balanced) → TOUGH. It was inverted — 3.8–4.5 setters were being sent to
+  // WARM, an EASIER lead than the ADAPTIVE beginners got.
+  const difficultyFloor: Difficulty = overall >= 4.5 ? "TOUGH" : overall >= 3.8 ? "ADAPTIVE" : "WARM";
 
   const summary = [
     `Recent average ${overall.toFixed(1)} across ${sessions.length} sessions (${trend >= 0 ? "up" : "down"} ${Math.abs(trend).toFixed(1)}).`,
@@ -53,9 +64,35 @@ export async function updateSetterMemory(setterId: string): Promise<void> {
     .filter(Boolean)
     .join(" ");
 
+  const existing = await prisma.setterMemory.findUnique({ where: { setterId } });
+  const summaries = { ...((existing?.summaries as Record<string, string> | null) ?? {}), [serviceType]: summary };
+  const floors = { ...((existing?.floors as Record<string, string> | null) ?? {}), [serviceType]: difficultyFloor };
+  // The legacy columns stay the implant view, so nothing that reads them changes.
+  const legacy = serviceType === LEGACY_SERVICE ? { summary, difficultyFloor } : {};
+
   await prisma.setterMemory.upsert({
     where: { setterId },
-    update: { summary, difficultyFloor },
-    create: { setterId, summary, difficultyFloor },
+    update: { ...legacy, summaries, floors },
+    create: { setterId, summary, difficultyFloor, summaries, floors },
   });
+}
+
+export type SetterMemoryView = { summary: string | null; difficultyFloor: Difficulty };
+
+/** The memory that applies to ONE kind of call. Falls back to the legacy
+ *  columns for implant, and to a fresh start for a service they've never run. */
+export function memoryForService(
+  memory: { summary: string | null; difficultyFloor: Difficulty; summaries: unknown; floors: unknown } | null,
+  serviceType: ServiceKey
+): SetterMemoryView {
+  if (!memory) return { summary: null, difficultyFloor: "ADAPTIVE" };
+  const summaries = (memory.summaries as Record<string, string> | null) ?? {};
+  const floors = (memory.floors as Record<string, Difficulty> | null) ?? {};
+  if (serviceType === LEGACY_SERVICE) {
+    return {
+      summary: summaries[serviceType] ?? memory.summary,
+      difficultyFloor: floors[serviceType] ?? memory.difficultyFloor,
+    };
+  }
+  return { summary: summaries[serviceType] ?? null, difficultyFloor: floors[serviceType] ?? "ADAPTIVE" };
 }

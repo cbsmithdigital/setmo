@@ -1,88 +1,49 @@
+import { rubricForService, rubricById, skillDef } from "@/lib/packs/registry";
+import { IMPLANT_RUBRIC_V1 } from "@/lib/packs/implant";
+import type { RubricSkill, SkillTierKey } from "@/lib/packs/types";
+
 // The SetMo skill taxonomy. Two tiers:
 //  - universal: present in every rubric (transferable across service types)
 //  - service_specific: unique to one service's call
-// Keys match the prototype's data shapes and the ElevenLabs agent rubric.
+// The definitions live in the service packs (src/lib/packs) — this file is the
+// app-facing lookup, so callers don't care which service a skill came from.
 
-export type SkillTierKey = "universal" | "service_specific";
+export type { SkillTierKey };
+export type SkillDef = RubricSkill;
 
-export interface SkillDef {
-  key: string;
-  name: string;
-  tier: SkillTierKey;
-}
+/** The 8-skill implant rubric, in display order. */
+export const IMPLANT_RUBRIC: SkillDef[] = IMPLANT_RUBRIC_V1.skills;
 
-// Universal skills — every rubric scores these.
-export const UNIVERSAL_SKILLS: SkillDef[] = [
-  { key: "rapport", name: "Rapport & warmth", tier: "universal" },
-  { key: "listening", name: "Listening & empathy", tier: "universal" },
-  { key: "objection", name: "Objection handling", tier: "universal" },
-  { key: "confidence", name: "Confidence & leadership", tier: "universal" },
-  { key: "closing", name: "Closing the appt", tier: "universal" },
-];
-
-// Implant/full-arch/denture-specific skills (v1 reference rubric).
-export const IMPLANT_SPECIFIC_SKILLS: SkillDef[] = [
-  { key: "discovery", name: "Discovery — the 'why'", tier: "service_specific" },
-  { key: "painpoint", name: "Pain-point exploration", tier: "service_specific" },
-  { key: "value", name: "Value building", tier: "service_specific" },
-];
-
-// The 8-skill implant rubric, in display order (matches prototype results screen).
-export const IMPLANT_RUBRIC: SkillDef[] = [
-  UNIVERSAL_SKILLS[0], // rapport
-  UNIVERSAL_SKILLS[1], // listening
-  IMPLANT_SPECIFIC_SKILLS[0], // discovery
-  IMPLANT_SPECIFIC_SKILLS[1], // painpoint
-  UNIVERSAL_SKILLS[2], // objection
-  UNIVERSAL_SKILLS[3], // confidence
-  IMPLANT_SPECIFIC_SKILLS[2], // value
-  UNIVERSAL_SKILLS[4], // closing
-];
-
-const ALL_SKILLS: SkillDef[] = [
-  ...UNIVERSAL_SKILLS,
-  ...IMPLANT_SPECIFIC_SKILLS,
-];
-
-const SKILL_BY_KEY = new Map(ALL_SKILLS.map((s) => [s.key, s]));
+export const UNIVERSAL_SKILLS: SkillDef[] = IMPLANT_RUBRIC.filter((s) => s.tier === "universal");
+export const IMPLANT_SPECIFIC_SKILLS: SkillDef[] = IMPLANT_RUBRIC.filter((s) => s.tier === "service_specific");
 
 export function skillName(key: string): string {
-  return SKILL_BY_KEY.get(key)?.name ?? key;
+  return skillDef(key)?.name ?? key;
 }
 
 export function skillTier(key: string): SkillTierKey {
-  return SKILL_BY_KEY.get(key)?.tier ?? "universal";
+  return skillDef(key)?.tier ?? "universal";
 }
 
-// Compact labels for dense grids (the location×skill heatmap matrix headers).
-const SKILL_SHORT: Record<string, string> = {
-  rapport: "Rapport",
-  listening: "Listening",
-  discovery: "Discovery",
-  painpoint: "Pain-point",
-  objection: "Objection",
-  confidence: "Confidence",
-  value: "Value",
-  closing: "Closing",
-};
+/** Compact label for dense grids (the setter×skill heatmap headers). */
 export function skillShort(key: string): string {
-  return SKILL_SHORT[key] ?? skillName(key);
+  return skillDef(key)?.short ?? skillName(key);
 }
 
-// The ordered rubric for a given service type. v1 only ships implant/denture.
+/** The ordered rubric for a given service type — what a NEW call is graded on. */
 export function rubricFor(serviceType: string): SkillDef[] {
-  switch (serviceType) {
-    case "IMPLANT":
-    case "DENTURE":
-      return IMPLANT_RUBRIC;
-    default:
-      return IMPLANT_RUBRIC;
-  }
+  return rubricForService(serviceType).skills;
+}
+
+/** The ordered rubric a SCORED call was graded on. Readers that render stored
+ *  skills should use this, so a call keeps rendering the way it was graded. */
+export function rubricForEvaluation(rubricId: string | null | undefined): SkillDef[] {
+  return rubricById(rubricId).skills;
 }
 
 // Maps an ElevenLabs agent evaluation-criteria/category key to a skill key.
-// Default: identity (the agent emits our skill keys). Override per service as
-// the agents are finalized (the spec's RubricMapping concept).
+// Default: identity (the agent emits our skill keys). Only the implant agent
+// emits these — other services are scored from the transcript only.
 const CATEGORY_TO_SKILL: Record<string, string> = {
   rapport: "rapport",
   rapport_warmth: "rapport",
@@ -102,5 +63,5 @@ const CATEGORY_TO_SKILL: Record<string, string> = {
 
 export function categoryToSkillKey(category: string): string | null {
   const norm = category.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  return CATEGORY_TO_SKILL[norm] ?? (SKILL_BY_KEY.has(norm) ? norm : null);
+  return CATEGORY_TO_SKILL[norm] ?? (skillDef(norm) ? norm : null);
 }

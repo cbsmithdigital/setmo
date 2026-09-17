@@ -621,6 +621,7 @@ model Evaluation {
   recommendedNextScenario String?  @map("recommended_next_scenario")
   rawPayload              Json?    @map("raw_payload")
   booked                  Boolean? // did the lead actually schedule a consult on this call (independent of score)
+  rubricId                String?  @map("rubric_id") // which rubric version graded this call, e.g. "implant.v1" (null = pre-pinning, all implant)
   liveOutcome             Json?    @map("live_outcome") // LIVE calls only: extended outcome taxonomy {disposition, leadStates[{state,evidence}], primaryBlocker, bookedQuality, recoverable, nextAction, transcriptQuality}
   scoredAt                DateTime? @map("scored_at") // null = transcript captured but not yet scored
   createdAt               DateTime @default(now()) @map("created_at")
@@ -704,8 +705,13 @@ model GhlInboundEvent {
 
 model SetterMemory {
   setterId        String     @id @map("setter_id")
-  summary         String?
+  summary         String? // implant (kept as the legacy top-level view)
   difficultyFloor Difficulty @default(ADAPTIVE) @map("difficulty_floor")
+  // Per-service memory: { IMPLANT: "...", DENTURE: "..." }. A setter's skill on
+  // one kind of call says nothing about another, so difficulty and the coaching
+  // summary are tracked per service. The columns above mirror IMPLANT.
+  summaries       Json?      @map("summaries")
+  floors          Json?      @map("floors")
   updatedAt       DateTime   @updatedAt @map("updated_at")
 
   setter User @relation(fields: [setterId], references: [id], onDelete: Cascade)

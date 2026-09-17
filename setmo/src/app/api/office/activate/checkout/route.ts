@@ -1,14 +1,15 @@
 import { z } from "zod";
 import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
-import { createActivationCheckout, createAccessCheckout, isStripeConfigured, MIN_MINUTES, MAX_MINUTES } from "@/lib/stripe";
+import { createActivationCheckout, createAccessCheckout, isStripeConfigured } from "@/lib/stripe";
 import { getPlatformConfig, promoBonusMinutes } from "@/lib/config";
 import { prisma } from "@/lib/db";
+import { checkMinutes } from "@/lib/minute-limits";
 import { error, json } from "@/lib/api";
 
 // minutes: 0 = access-only activation (sign-up promo — the bonus tokens are the
-// starter balance); otherwise the usual starter-token range applies.
+// starter balance); otherwise the starter-token range from the live config.
 const Body = z.object({
-  minutes: z.number().int().min(0).max(MAX_MINUTES).refine((m) => m === 0 || m >= MIN_MINUTES, "Below the starter minimum"),
+  minutes: z.number().int().min(0),
   plan: z.enum(["monthly", "annual"]).optional(),
 });
 
@@ -23,6 +24,8 @@ export async function POST(req: Request) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid request", 422);
+  const bounds = await checkMinutes(parsed.data.minutes, { allowZero: true });
+  if (!bounds.ok) return error(bounds.message, bounds.status, bounds.code ? { code: bounds.code } : undefined);
 
   // Already active → activation is a no-op; send them to the top-up flow instead.
   const existing = await prisma.subscription.findUnique({ where: { officeId: user.officeId }, select: { status: true } });

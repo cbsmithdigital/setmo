@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { ensureRecording } from "@/lib/storage";
 import { getMinuteBalance, lastPurchasedMinutes } from "@/lib/usage";
 import { callShowRate } from "@/lib/audit";
-import { skillName, skillTier, rubricFor, type SkillTierKey } from "@/lib/skills";
+import { skillName, skillTier, rubricFor, rubricForEvaluation, type SkillTierKey } from "@/lib/skills";
 import { SERVICE_META, SERVICE_ORDER } from "@/lib/service-meta";
 import { fullName, initialsOf } from "@/lib/format";
 import type { ServiceKey } from "@/generated/prisma/client";
@@ -655,7 +655,9 @@ export async function getSharedRecording(token: string) {
   if (session.kind === "LIVE") return null;
 
   const e = session.evaluation;
-  const order = rubricFor(session.serviceType).map((s) => s.key);
+  // Order by the rubric this call was GRADED on, not whatever the service uses
+  // today — an old call keeps reading the way it was scored.
+  const order = rubricForEvaluation(e.rubricId).map((s) => s.key);
   const skills = evalSkills(e.skills).sort((a, b) => order.indexOf(a.skillKey) - order.indexOf(b.skillKey));
 
   const raw = e.rawPayload as { data?: { transcript?: unknown[] } } | null;
@@ -756,7 +758,7 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer, 
   const audioPath = opts.hydrateAudio ? await ensureRecording(session) : session.audioPath;
 
   const e = session.evaluation;
-  const rubricKeys = rubricFor(session.serviceType).map((s) => s.key);
+  const rubricKeys = rubricForEvaluation(e.rubricId).map((s) => s.key);
   const skills = evalSkills(e.skills).sort(
     (a, b) => rubricKeys.indexOf(a.skillKey) - rubricKeys.indexOf(b.skillKey)
   );

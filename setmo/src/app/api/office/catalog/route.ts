@@ -17,7 +17,9 @@ const Body = z.object({
 });
 
 // PUT /api/office/catalog — save offered services + the practice details the
-// agent role-plays with. Only services with a LIVE agent can be enabled.
+// agent role-plays with. The admin's choice is stored as given: a service whose
+// agent isn't live yet stays saved and shows as "Soon", and starts working the
+// day it goes live (session creation is what gates on agent status).
 export async function PUT(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
@@ -29,10 +31,6 @@ export async function PUT(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid catalog payload", 422);
   const { profile, services } = parsed.data;
-
-  const liveAgents = new Set(
-    (await prisma.agent.findMany({ where: { status: "LIVE" } })).map((a) => a.serviceType)
-  );
 
   await prisma.$transaction(async (tx) => {
     await tx.office.update({
@@ -48,8 +46,7 @@ export async function PUT(req: Request) {
 
     for (const key of SERVICE_KEYS) {
       if (!(key in services)) continue;
-      // Can't offer a service that has no live agent.
-      const enabled = services[key] && liveAgents.has(key);
+      const enabled = Boolean(services[key]);
       await tx.officeService.upsert({
         where: { officeId_serviceType: { officeId: user.officeId!, serviceType: key } },
         update: { enabled },

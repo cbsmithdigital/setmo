@@ -11,13 +11,23 @@ function periodKey(d = new Date()): string {
 
 const DEFAULT_SERVICE: ServiceKey = "IMPLANT";
 
-/** Office scope: rank the office's own setters by average score. */
+/** Office scope: rank the office's own setters by average score. Call-center
+ *  agents practise FOR this office but belong to the call center, so they're
+ *  ranked on their own center's boards, not against the practice's staff. */
 export async function recomputeOfficeLeaderboard(
   officeId: string,
   serviceType: ServiceKey = DEFAULT_SERVICE
 ): Promise<void> {
   const sessions = await prisma.session.findMany({
-    where: { officeId, serviceType, kind: "PRACTICE", status: "SCORED", evaluation: { isNot: null } },
+    where: {
+      officeId,
+      serviceType,
+      kind: "PRACTICE",
+      status: "SCORED",
+      isAudit: false,
+      callCenterOrgId: null,
+      evaluation: { isNot: null },
+    },
     include: { evaluation: { select: { overallScore: true } } },
   });
 
@@ -36,12 +46,24 @@ export async function recomputeOfficeLeaderboard(
   await materialize("OFFICE", "SETTER", serviceType, ranked, { officeId });
 }
 
-/** Global scope: rank offices by their average score (privacy-respecting). */
+/** Global scope: rank offices by their average score (privacy-respecting).
+ *  Excluded: audit calls and prospect offices (a stranger's trial call has no
+ *  place on a customer board), and call-center agent calls — those are the call
+ *  center's reps, and crediting them to the served practice would publish
+ *  practices that have no SetMo users of their own. */
 export async function recomputeGlobalLeaderboard(
   serviceType: ServiceKey = DEFAULT_SERVICE
 ): Promise<void> {
   const sessions = await prisma.session.findMany({
-    where: { serviceType, kind: "PRACTICE", status: "SCORED", evaluation: { isNot: null } },
+    where: {
+      serviceType,
+      kind: "PRACTICE",
+      status: "SCORED",
+      isAudit: false,
+      callCenterOrgId: null,
+      office: { isProspect: false },
+      evaluation: { isNot: null },
+    },
     include: { evaluation: { select: { overallScore: true } } },
   });
 

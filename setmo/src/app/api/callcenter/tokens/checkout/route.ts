@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { getCurrentUser, getActiveRole } from "@/lib/auth";
-import { createCallCenterTokenCheckout, isStripeConfigured, MIN_MINUTES, MAX_MINUTES } from "@/lib/stripe";
+import { createCallCenterTokenCheckout, isStripeConfigured } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
+import { checkMinutes } from "@/lib/minute-limits";
 import { error, json } from "@/lib/api";
 
-const Body = z.object({ minutes: z.number().int().min(MIN_MINUTES).max(MAX_MINUTES) });
+const Body = z.object({ minutes: z.number().int().min(1) });
 
 // POST /api/callcenter/tokens/checkout — senior manager funds the pooled
 // call-center practice balance. Card is saved for one-click top-ups.
@@ -16,6 +17,8 @@ export async function POST(req: Request) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid request", 422);
+  const bounds = await checkMinutes(parsed.data.minutes);
+  if (!bounds.ok) return error(bounds.message, bounds.status, bounds.code ? { code: bounds.code } : undefined);
 
   const org = await prisma.organization.findUnique({ where: { id: user.organizationId }, select: { stripeCustomerId: true } });
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;

@@ -114,8 +114,8 @@ async function main() {
   }
   await prisma.setterMemory.upsert({
     where: { setterId: sam.id },
-    update: { summary: "Sam is on a clear upward trend (overall ~3.3 → 4.1). Strong rapport, confidence, and closing. Pain-point exploration and value building still lag — escalate discovery-heavy, price-objection personas.", difficultyFloor: "WARM" },
-    create: { setterId: sam.id, summary: "Sam is on a clear upward trend. Strong rapport and closing; pain-point and value building lag.", difficultyFloor: "WARM" },
+    update: { summary: "Sam is on a clear upward trend (overall ~3.3 → 4.1). Strong rapport, confidence, and closing. Pain-point exploration and value building still lag — escalate discovery-heavy, price-objection personas.", difficultyFloor: "ADAPTIVE" },
+    create: { setterId: sam.id, summary: "Sam is on a clear upward trend. Strong rapport and closing; pain-point and value building lag.", difficultyFloor: "ADAPTIVE" },
   });
 
   // Office leaderboard — curated demo ladder so Sam sits mid-pack and rising

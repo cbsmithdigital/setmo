@@ -105,13 +105,18 @@ export function CatalogClient({
                     {s.name}
                     {!s.live && (
                       <span className="chip" style={{ padding: "1px 8px", fontSize: 10.5 }}>
-                        Agent soon
+                        {s.enabled ? "Coming soon" : "Soon"}
                       </span>
                     )}
                   </div>
-                  <div className="muted" style={{ fontSize: 12.5 }}>{s.desc}</div>
+                  <div className="muted" style={{ fontSize: 12.5 }}>
+                    {s.desc}
+                    {!s.live && s.enabled ? " · Saved — your team can practise these the day it opens." : ""}
+                  </div>
                 </div>
-                <Toggle on={s.enabled} disabled={!s.live} onClick={() => toggle(s.key)} />
+                {/* A service that isn't open yet can still be switched on: the choice
+                    is saved and starts working the day the call type goes live. */}
+                <Toggle on={s.enabled} onClick={() => toggle(s.key)} />
               </div>
             ))}
           </div>

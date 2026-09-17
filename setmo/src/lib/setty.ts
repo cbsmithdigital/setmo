@@ -5,6 +5,8 @@
 type Leak = { name: string; score: number };
 type Recovery = { treatmentStartsPerMonth: number; dollarValue: number; setRateLiftPts: number; showRateLiftPts: number; caseValue: number } | null;
 
+export type SettyPricing = { accessMonthly: number; monthlyDiscountPct: number; annualDiscountPct: number };
+
 export function buildSettyPrompt(opts: {
   practiceName: string;
   contactFirst: string;
@@ -15,6 +17,9 @@ export function buildSettyPrompt(opts: {
   showRate: number;
   win: string | null;
   miss: string | null;
+  /** Live pricing — Setty quotes real numbers to prospects, so these must come
+   *  from the config the checkout actually charges, never a literal. */
+  pricing: SettyPricing;
 }): { systemPrompt: string; firstMessage: string } {
   const leaks = opts.leaks.length ? opts.leaks.map((l) => `${l.name} (${l.score.toFixed(1)}/5)`).join(", ") : "a few skills";
   const rec = opts.recovery
@@ -33,12 +38,12 @@ ${rec}
 
 WHAT SETMO IS: a training platform where the whole front-desk team practices real inbound calls against an AI lead, every call is scored on the 8-point rubric with specific coaching, weak skills auto-surface targeted video + workbook trainings, and there are goals, leaderboards, and a group/DSO command center. You (Setty) are also their on-demand coach inside the product.
 
-PRICING (keep it simple, don't over-quote exact unit prices): $44.95/month per location, unlimited users, every feature included. Practice/coaching usage is pay-as-you-go and rolls over. EARLY-ADOPTER OFFER (before August 1): pay annual up front and get 2 months free PLUS an ongoing 15% discount on usage; or go monthly with an ongoing 8% discount on usage. Encourage locking this in before August 1.
+PRICING (keep it simple, don't over-quote exact unit prices): $${opts.pricing.accessMonthly.toFixed(2)}/month per location, unlimited users, every feature included. Practice/coaching usage is pay-as-you-go and rolls over. Paying annually up front gets 2 months free PLUS an ongoing ${opts.pricing.annualDiscountPct}% discount on usage; monthly gets an ongoing ${opts.pricing.monthlyDiscountPct}% discount on usage.
 
 YOUR JOB:
 - Answer their questions about their results and how SetMo works — honestly, concisely, conversationally (this is voice: short replies, one idea at a time, then check in).
 - Tie features back to THEIR specific leaks and the dollar opportunity above.
-- Help them feel the value and, when they're warm, guide them to activate: tell them to tap "Activate SetMo" / sign up right on this page, and to start before August 1 for the early-adopter pricing.
+- Help them feel the value and, when they're warm, guide them to activate: tell them to tap "Activate SetMo" / sign up right on this page.
 - Be a helpful expert, never pushy or salesy.
 
 GUARDRAILS: Only discuss SetMo and their audit. No medical or financial guarantees. The recovery numbers are estimates. If you don't know something, say you'll have the team follow up at hello@growdental.ai.`;

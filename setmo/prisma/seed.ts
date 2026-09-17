@@ -125,7 +125,9 @@ async function main() {
   for (const a of agentsData) {
     await prisma.agent.upsert({
       where: { serviceType: a.serviceType },
-      update: { status: a.status, version: a.version ?? null, personaCount: a.personaCount, note: a.note },
+      // Never overwrite a service's live status on a re-seed: rollout state is
+      // decided in the platform console, not in this file.
+      update: { version: a.version ?? null, personaCount: a.personaCount, note: a.note },
       create: {
         serviceType: a.serviceType,
         name: a.name,
@@ -308,13 +310,13 @@ async function main() {
     update: {
       summary:
         "Sam is improving fast on objection handling (2.9 → 4.0). Strongest on value building. Pain-point exploration lags under 4.0 — escalate discovery-heavy personas.",
-      difficultyFloor: "WARM",
+      difficultyFloor: "ADAPTIVE",
     },
     create: {
       setterId: samId,
       summary:
         "Sam is improving fast on objection handling (2.9 → 4.0). Strongest on value building. Pain-point exploration lags under 4.0 — escalate discovery-heavy personas.",
-      difficultyFloor: "WARM",
+      difficultyFloor: "ADAPTIVE",
     },
   });
 

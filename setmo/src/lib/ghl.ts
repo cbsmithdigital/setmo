@@ -296,7 +296,9 @@ export async function processGhlInbound(eventId: string): Promise<void> {
 
     // Live calls feed TRAINING RECOMMENDATIONS (real weaknesses = best signal)
     // but not memory/leaderboards/goals/metering — those stay practice-only.
-    await recomputeRecommendations(setterId).catch(() => {});
+    // Scoped to the service the call was scored on (today every real call is
+    // graded as an implant call — call-type detection comes with the packs).
+    await recomputeRecommendations(setterId, "IMPLANT").catch(() => {});
     await prisma.ghlIntegration.update({ where: { id: event.integrationId }, data: { lastCallAt: new Date() } }).catch(() => {});
   } catch (e) {
     await fail("ERROR", e instanceof Error ? e.message.slice(0, 400) : "Unknown error");

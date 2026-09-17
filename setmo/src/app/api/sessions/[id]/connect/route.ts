@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { agentIdFor, getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
 import { generatePersona, buildLeadPrompt, personaLabel, type Difficulty } from "@/lib/personas";
+import { memoryForService } from "@/lib/memory";
 import { error, json } from "@/lib/api";
 import type { ServiceKey } from "@/generated/prisma/client";
 
@@ -21,11 +22,35 @@ export async function POST(
   });
   if (!session) return error("Session not found", 404);
 
+  // A finished call is never reopened (that used to strand a SCORED session back
+  // in IN_PROGRESS). A call already under way may only reconnect — the browser
+  // dropped the mic or the socket — and then it reuses the SAME lead, so the
+  // setter can't reroll a persona by reloading.
+  if (session.status === "SCORED" || session.status === "COMPLETED" || session.status === "FAILED") {
+    return error("This call is already finished.", 409);
+  }
+  // Long enough to cover a drop late in a long call, short enough that an
+  // abandoned session can't be picked up later as a free second call.
+  const RECONNECT_WINDOW_MS = 30 * 60 * 1000;
+  const seed = session.personaSeed as Record<string, unknown> | null;
+  const isReconnect =
+    session.status === "IN_PROGRESS" &&
+    !session.elevenlabsConversationId &&
+    !session.completedAt && // the browser already reported this call as ended
+    Boolean(seed && seed.hidden !== true && typeof seed.name === "string") &&
+    Date.now() - session.startedAt.getTime() < RECONNECT_WINDOW_MS;
+  if (session.status === "IN_PROGRESS" && !isReconnect) {
+    return error("This call already started.", 409);
+  }
+
   // The office is the one this call is FOR (session.officeId) — for a normal
   // setter that's their own office; for a call-center agent it's the chosen
   // served practice, so they role-play with THAT account's offer/script.
   const office = await prisma.office.findUnique({ where: { id: session.officeId }, include: { services: true } });
-  const memory = await prisma.setterMemory.findUnique({ where: { setterId: user.id } });
+  const memoryRow = await prisma.setterMemory.findUnique({ where: { setterId: user.id } });
+  // Difficulty and continuity are per service — an implant veteran starts fresh
+  // on their first emergency call.
+  const memory = memoryForService(memoryRow, session.serviceType);
   const enabledServices = (office?.services ?? [])
     .filter((s) => s.enabled)
     .map((s) => s.serviceType)
@@ -35,7 +60,7 @@ export async function POST(
   // ADAPTIVE escalates to the setter's memory floor (rises as they improve). This
   // drives BOTH the persona (skewed objection/tone) and the lead-prompt directive.
   const effectiveDifficulty: Difficulty =
-    session.difficulty === "ADAPTIVE" ? (memory?.difficultyFloor ?? "ADAPTIVE") : session.difficulty;
+    session.difficulty === "ADAPTIVE" ? memory.difficultyFloor : session.difficulty;
 
   // Server-built overrides (the office + setter context the agent role-plays with).
   const dynamicVariables: Record<string, string> = {
@@ -48,33 +73,40 @@ export async function POST(
     appointment_framing: office?.appointmentFraming ?? "",
     deposit_policy: office?.depositPolicy ?? "",
     allowed_services: enabledServices,
-    memory_summary: memory?.summary ?? "",
+    memory_summary: memory.summary ?? "",
     difficulty: effectiveDifficulty,
   };
 
-  // Compose a fresh lead + matching voice, loaded as overrides so every rep is
-  // a different person with a different voice (not the agent's self-randomization).
-  // Difficulty shapes how hard this lead is to win over.
-  const persona = await generatePersona(effectiveDifficulty);
-  const systemPrompt = buildLeadPrompt(persona, office ?? {}, user.firstName, effectiveDifficulty);
-  const firstMessage = persona.openingLine;
-
-  await prisma.session.update({
-    where: { id: session.id },
-    data: {
-      status: "IN_PROGRESS",
-      startedAt: new Date(),
-      personaSeed: { persona: personaLabel(persona), resolvedDifficulty: effectiveDifficulty, ...persona },
-    },
-  });
-
+  // Resolve the voice agent BEFORE composing a lead or touching the session, so a
+  // service with no agent wired up can't burn a persona call or strand the
+  // session half-started (that's how the orphaned denture session happened).
   if (!isElevenLabsConfigured()) {
     return json({ configured: false, dynamicVariables });
   }
-
   const agentId = agentIdFor(session.serviceType as ServiceKey);
   if (!agentId) {
     return json({ configured: false, dynamicVariables, reason: "agent id not set" });
+  }
+
+  // Compose a fresh lead + matching voice, loaded as overrides so every rep is
+  // a different person with a different voice (not the agent's self-randomization).
+  // Difficulty shapes how hard this lead is to win over. A reconnect reuses the
+  // lead already composed for this session.
+  const persona = isReconnect
+    ? (seed as unknown as Awaited<ReturnType<typeof generatePersona>>)
+    : await generatePersona(effectiveDifficulty);
+  const systemPrompt = buildLeadPrompt(persona, office ?? {}, user.firstName, effectiveDifficulty);
+  const firstMessage = persona.openingLine;
+
+  if (!isReconnect) {
+    await prisma.session.update({
+      where: { id: session.id },
+      data: {
+        status: "IN_PROGRESS",
+        startedAt: new Date(),
+        personaSeed: { persona: personaLabel(persona), resolvedDifficulty: effectiveDifficulty, ...persona },
+      },
+    });
   }
 
   try {

@@ -108,9 +108,9 @@ function SessionInner({
         return;
       }
       if (!cfg.configured) {
-        setErrMsg(
-          "The voice agent isn't configured yet. Add ELEVENLABS_API_KEY and ELEVENLABS_AGENT_IMPLANT to .env.local to run a live call."
-        );
+        // A setter should never read a developer message. This happens when a
+        // call type has no voice agent wired up yet.
+        setErrMsg("This call type isn't ready yet — we've been told. Your minutes weren't used.");
         setPhase("error");
         return;
       }

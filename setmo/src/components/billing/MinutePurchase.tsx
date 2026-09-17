@@ -117,7 +117,7 @@ export function MinutePurchase({
           <p className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
             {plan === "annual"
               ? `$${annualAccess.toLocaleString()}/year (2 months free) + ${annualDiscountPct}% off all tokens.`
-              : `$${accessMonthly.toFixed(2)}/month + ${monthlyDiscountPct}% off all tokens.`} Early-adopter pricing through Aug 1.
+              : `$${accessMonthly.toFixed(2)}/month + ${monthlyDiscountPct}% off all tokens.`}
           </p>
         </div>
       )}
