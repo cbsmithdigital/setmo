@@ -35,11 +35,14 @@ export async function POST(
   // abandoned session can't be picked up later as a free second call.
   const RECONNECT_WINDOW_MS = 30 * 60 * 1000;
   const seed = session.personaSeed as Record<string, unknown> | null;
+  // A lead has actually been composed for this session: either the implant
+  // generator's persona (has a name) or a pack lead (has its skeleton).
+  const hasLead = Boolean(seed && seed.hidden !== true && (typeof seed.name === "string" || seed.skeleton));
   const isReconnect =
     session.status === "IN_PROGRESS" &&
     !session.elevenlabsConversationId &&
     !session.completedAt && // the browser already reported this call as ended
-    Boolean(seed && seed.hidden !== true && typeof seed.name === "string") &&
+    hasLead &&
     Date.now() - session.startedAt.getTime() < RECONNECT_WINDOW_MS;
   if (session.status === "IN_PROGRESS" && !isReconnect) {
     return error("This call already started.", 409);
