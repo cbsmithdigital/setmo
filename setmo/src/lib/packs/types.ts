@@ -1,4 +1,5 @@
 import type { ServiceKey } from "@/generated/prisma/client";
+import type { PersonaSpec } from "@/lib/realism/sampler";
 
 // ---------------------------------------------------------------------------
 // Service packs: everything that makes one kind of dental call its own thing —
@@ -42,7 +43,13 @@ export interface ServicePack {
   blurb: string;
   /** Indicative case value, for the picker and outcome projections. */
   caseValue: string;
+  /** One line describing what the caller is phoning about, in their terms —
+   *  goes into the lead prompt. */
+  callAbout?: string;
   rubric: Rubric;
+  /** How this service's leads are built. The implant pack has none — it keeps
+   *  its original generator untouched. */
+  persona?: PersonaSpec;
 }
 
 export const SKILL_TIER_DB = {

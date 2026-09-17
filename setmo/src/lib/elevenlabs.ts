@@ -9,9 +9,16 @@ const AGENT_ENV: Partial<Record<ServiceKey, string>> = {
   IMPLANT: "ELEVENLABS_AGENT_IMPLANT",
 };
 
+/** The voice agent for a service. One shared agent runs every kind of call —
+ *  the lead's prompt, first line and voice are all overridden per call — so a
+ *  service only needs its own agent id if it ever needs different agent-level
+ *  settings. Without this fallback a new service connects to nothing, which is
+ *  exactly how denture calls died silently. */
 export function agentIdFor(serviceType: ServiceKey): string | null {
   const env = AGENT_ENV[serviceType];
-  return (env && process.env[env]) || null;
+  const specific = env && process.env[env];
+  if (specific) return specific;
+  return process.env.ELEVENLABS_AGENT_LEAD || process.env.ELEVENLABS_AGENT_IMPLANT || null;
 }
 
 // The separate ElevenLabs agent used for voice coaching role-play (accepts

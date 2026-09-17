@@ -3,6 +3,7 @@ import { ensureRecording } from "@/lib/storage";
 import { getMinuteBalance, lastPurchasedMinutes } from "@/lib/usage";
 import { callShowRate } from "@/lib/audit";
 import { skillName, skillTier, rubricFor, rubricForEvaluation, type SkillTierKey } from "@/lib/skills";
+import { packFor } from "@/lib/packs/registry";
 import { SERVICE_META, SERVICE_ORDER } from "@/lib/service-meta";
 import { fullName, initialsOf } from "@/lib/format";
 import type { ServiceKey } from "@/generated/prisma/client";
@@ -27,15 +28,20 @@ export async function getServiceOptions(officeId: string) {
 
   return SERVICE_ORDER.map((key) => {
     const agent = agentBy.get(key);
-    const skills = Array.isArray(agent?.rubricSkills)
-      ? (agent!.rubricSkills as unknown[]).length
-      : 0;
+    const pack = packFor(key);
+    // A pack is the source of truth for what a call type is and how many skills
+    // it grades; SERVICE_META still covers the ones not built yet.
+    const skills = pack
+      ? pack.rubric.skills.length
+      : Array.isArray(agent?.rubricSkills)
+        ? (agent!.rubricSkills as unknown[]).length
+        : 0;
     const live = agent?.status === "LIVE" && enabled.has(key);
     return {
       key,
-      name: SERVICE_META[key].name,
-      desc: SERVICE_META[key].desc,
-      value: SERVICE_META[key].value,
+      name: pack?.name ?? SERVICE_META[key].name,
+      desc: pack?.blurb ?? SERVICE_META[key].desc,
+      value: pack?.caseValue ?? SERVICE_META[key].value,
       skills,
       live,
     };

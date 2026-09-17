@@ -113,6 +113,7 @@ export async function scoreSession(
       turns,
       durationSeconds: duration,
       office: { name: office?.name, city: office?.city, offerFraming: office?.offerFraming },
+      rubric: rubricForService(session.serviceType),
     });
     if (scored) {
       skills = scored.skills;

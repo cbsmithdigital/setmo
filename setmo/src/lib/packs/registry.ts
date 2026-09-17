@@ -1,6 +1,7 @@
 import type { ServiceKey } from "@/generated/prisma/client";
 import type { Rubric, RubricSkill, ServicePack } from "@/lib/packs/types";
 import { IMPLANT_PACK, IMPLANT_RUBRIC_V1 } from "@/lib/packs/implant";
+import { GENERAL_NEW_PATIENT_PACK, GENERAL_NP_RUBRIC_V1 } from "@/lib/packs/general-new-patient";
 
 // The service catalog. One pack per dental service SetMo can run calls for.
 // Services without a pack yet aren't startable — the Agent row's status decides
@@ -8,6 +9,7 @@ import { IMPLANT_PACK, IMPLANT_RUBRIC_V1 } from "@/lib/packs/implant";
 // anything that isn't LIVE.
 const PACKS: Partial<Record<ServiceKey, ServicePack>> = {
   IMPLANT: IMPLANT_PACK,
+  GENERAL: GENERAL_NEW_PATIENT_PACK,
 };
 
 // Every rubric that has ever scored a call, by id. Evaluations store their
@@ -15,6 +17,7 @@ const PACKS: Partial<Record<ServiceKey, ServicePack>> = {
 // newer version takes over.
 const RUBRICS: Record<string, Rubric> = {
   [IMPLANT_RUBRIC_V1.id]: IMPLANT_RUBRIC_V1,
+  [GENERAL_NP_RUBRIC_V1.id]: GENERAL_NP_RUBRIC_V1,
 };
 
 /** The rubric a NEW call on this service is graded against. Falls back to the
@@ -35,6 +38,11 @@ export function packFor(serviceType: string): ServicePack | null {
 
 export function hasPack(serviceType: string): boolean {
   return Boolean(PACKS[serviceType as ServiceKey]);
+}
+
+/** Packs that generate their own leads — what the offline realism gate checks. */
+export function PACKS_WITH_PERSONA(): ServicePack[] {
+  return Object.values(PACKS).filter((p): p is ServicePack => Boolean(p?.persona));
 }
 
 // Registry-wide skill lookup: every skill key in every rubric. Keys are unique

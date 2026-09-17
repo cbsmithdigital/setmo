@@ -2,6 +2,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { IMPLANT_RUBRIC } from "@/lib/skills";
+import type { Rubric } from "@/lib/packs/types";
+
+const IMPLANT_RUBRIC_ID = "implant.v1";
 
 // SetMo's own scorer: reads the call transcript and grades the 8-skill rubric.
 // Authoritative + reliable (structured JSON, no prose parsing), and works
@@ -93,8 +96,14 @@ export async function scoreTranscript(opts: {
   turns: ScoreTurn[];
   durationSeconds: number;
   office: { name?: string | null; city?: string | null; offerFraming?: string | null };
+  /** The rubric to grade against. Omitted (or implant) keeps the original
+   *  implant request byte-for-byte — every stored implant score came from it. */
+  rubric?: Rubric;
 }): Promise<TranscriptScore | null> {
   if (!isScorerConfigured()) return null;
+  if (opts.rubric && opts.rubric.id !== IMPLANT_RUBRIC_ID) {
+    return scoreWithRubric({ ...opts, rubric: opts.rubric });
+  }
 
   const transcriptText = opts.turns
     .map((t) => `${t.speaker === "you" ? "SETTER" : "LEAD"}: ${t.text}`)
@@ -158,6 +167,106 @@ ${transcriptText}`;
         skillFromKey("value", o.value),
         skillFromKey("closing", o.closing),
       ],
+      wins: o.wins.slice(0, 4),
+      misses: o.misses.slice(0, 4),
+      phrases: o.replacement_phrases.filter((p) => p.from && p.to).slice(0, 3),
+      personaCoaching: o.persona_coaching || null,
+      recommendedNextScenario: o.next_scenario || null,
+      narrative: o.narrative || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Scoring any other service's call. Same structure and the same anchors as the
+// implant scorer — the five shared skills are graded on identical wording, so a
+// 4.0 on listening means the same thing whatever the call was about. Only the
+// service's own skills and the booking definition change.
+// ---------------------------------------------------------------------------
+
+const RubricScoreZ = z.object({
+  overall: z.number(),
+  skills: z.array(z.object({ key: z.string(), score: z.number(), reasoning: z.string() })),
+  wins: z.array(z.string()),
+  misses: z.array(z.string()),
+  replacement_phrases: z.array(z.object({ from: z.string(), to: z.string() })),
+  persona_coaching: z.string(),
+  next_scenario: z.string(),
+  narrative: z.string(),
+  booked: z.boolean(),
+});
+
+async function scoreWithRubric(opts: {
+  turns: ScoreTurn[];
+  durationSeconds: number;
+  office: { name?: string | null; city?: string | null; offerFraming?: string | null };
+  rubric: Rubric;
+}): Promise<TranscriptScore | null> {
+  const transcriptText = opts.turns
+    .map((t) => `${t.speaker === "you" ? "SETTER" : "LEAD"}: ${t.text}`)
+    .join("\n");
+  if (!transcriptText.trim()) return null;
+
+  const guide = opts.rubric.skills
+    .map((s, i) => `${i + 1}. ${s.key} (${s.name}, ${s.tier === "universal" ? "universal" : "specific to this call type"}): ${s.guide}`)
+    .join("\n");
+
+  const system = `You are SetMo's call-scoring evaluator for dental appointment setters. You grade how well the SETTER (the human trainee) handled a practice call against a fictional AI LEAD. Score each of the ${opts.rubric.skills.length} rubric skills from 1.0 to 5.0 (one decimal allowed). Be fair but encouraging — this is training. Base scores ONLY on the live appointment-setting conversation. If the transcript contains a post-call feedback/coaching segment by the agent, IGNORE it for scoring. If the call ended early, score only what actually happened.
+
+Rubric:
+${guide}
+
+Return one entry in "skills" for each rubric key above, using the key exactly as written.
+
+Also write: 2-3 specific "wins" (what the setter did well, concrete), 2-3 "misses" (specific growth areas), 1-3 replacement_phrases ({from: what they said, to: a stronger line}), persona_coaching (how to handle this lead type), next_scenario (a tougher rep to try), and a one-sentence encouraging narrative headline. overall = your holistic 1-5 for the call.
+
+booked: ${opts.rubric.bookedDefinition} Set true only if that actually happened by the end of the call. This is independent of how well the call was handled — a low-scoring call can still book, and a high-scoring call can fail to book.`;
+
+  const user = `Practice: ${opts.office.name ?? "a dental practice"}${opts.office.city ? ` (${opts.office.city})` : ""}. Offer framing: ${opts.office.offerFraming ?? "n/a"}. Call duration: ${Math.round(opts.durationSeconds)}s.
+
+Delivery metrics: ${deliveryMetrics(opts.turns)}
+
+Transcript:
+${transcriptText}`;
+
+  try {
+    const res = await new Anthropic().messages.parse({
+      model: MODEL,
+      max_tokens: 4096,
+      thinking: { type: "adaptive" },
+      output_config: {
+        format: zodOutputFormat(RubricScoreZ),
+        effort: (process.env.SETMO_SCORER_EFFORT as "low" | "medium" | "high" | undefined) || "medium",
+      },
+      system,
+      messages: [{ role: "user", content: user }],
+    });
+    const o = res.parsed_output;
+    if (!o) return null;
+
+    // Trust the rubric, not the model, for which skills exist: a key the rubric
+    // doesn't define is dropped, and one it does define but the model skipped
+    // would leave the call partially graded, so we refuse it.
+    const byKey = new Map(o.skills.map((s) => [s.key, s]));
+    const skills = opts.rubric.skills.map((def) => {
+      const cell = byKey.get(def.key);
+      return cell
+        ? {
+            skillKey: def.key,
+            tier: def.tier === "universal" ? ("UNIVERSAL" as const) : ("SERVICE_SPECIFIC" as const),
+            score: clamp(cell.score),
+            reasoning: cell.reasoning,
+          }
+        : null;
+    });
+    if (skills.some((s) => s === null)) return null;
+
+    return {
+      overallScore: clamp(o.overall),
+      booked: o.booked,
+      skills: skills as TranscriptScore["skills"],
       wins: o.wins.slice(0, 4),
       misses: o.misses.slice(0, 4),
       phrases: o.replacement_phrases.filter((p) => p.from && p.to).slice(0, 3),

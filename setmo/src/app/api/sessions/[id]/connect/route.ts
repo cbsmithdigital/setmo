@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { agentIdFor, getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
-import { generatePersona, buildLeadPrompt, personaLabel, type Difficulty } from "@/lib/personas";
+import { type Difficulty } from "@/lib/personas";
 import { memoryForService } from "@/lib/memory";
+import { packFor } from "@/lib/packs/registry";
+import { buildImplantLead, buildPackLead } from "@/lib/realism/build-lead";
 import { error, json } from "@/lib/api";
 import type { ServiceKey } from "@/generated/prisma/client";
 
@@ -92,11 +94,26 @@ export async function POST(
   // a different person with a different voice (not the agent's self-randomization).
   // Difficulty shapes how hard this lead is to win over. A reconnect reuses the
   // lead already composed for this session.
-  const persona = isReconnect
-    ? (seed as unknown as Awaited<ReturnType<typeof generatePersona>>)
-    : await generatePersona(effectiveDifficulty);
-  const systemPrompt = buildLeadPrompt(persona, office ?? {}, user.firstName, effectiveDifficulty);
-  const firstMessage = persona.openingLine;
+  //
+  // Services with their own pack use the lead engine — facts sampled in code
+  // from compatible options only, then checked. Implant keeps the original
+  // generator, untouched.
+  const pack = packFor(session.serviceType);
+  const lead = pack?.persona
+    ? await buildPackLead({
+        pack,
+        seed: session.id,
+        difficulty: effectiveDifficulty,
+        office: office ?? {},
+        setterFirstName: user.firstName,
+        stored: isReconnect ? (seed as Record<string, unknown>) : null,
+      })
+    : await buildImplantLead({
+        difficulty: effectiveDifficulty,
+        office: office ?? {},
+        setterFirstName: user.firstName,
+        stored: isReconnect ? (seed as Record<string, unknown>) : null,
+      });
 
   if (!isReconnect) {
     await prisma.session.update({
@@ -104,7 +121,7 @@ export async function POST(
       data: {
         status: "IN_PROGRESS",
         startedAt: new Date(),
-        personaSeed: { persona: personaLabel(persona), resolvedDifficulty: effectiveDifficulty, ...persona },
+        personaSeed: { ...lead.seed, resolvedDifficulty: effectiveDifficulty },
       },
     });
   }
@@ -116,10 +133,10 @@ export async function POST(
       signedUrl,
       dynamicVariables,
       setterId: user.id,
-      systemPrompt,
-      firstMessage,
-      voiceId: persona.voice.id,
-      personaName: persona.name,
+      systemPrompt: lead.systemPrompt,
+      firstMessage: lead.firstMessage,
+      voiceId: lead.voiceId,
+      personaName: lead.personaName,
     });
   } catch (e) {
     return error(e instanceof Error ? e.message : "Failed to start conversation", 502);
