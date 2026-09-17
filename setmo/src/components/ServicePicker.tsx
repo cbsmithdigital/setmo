@@ -11,6 +11,7 @@ type ServiceOption = {
   value: string;
   skills: number;
   live: boolean;
+  beta?: boolean;
 };
 
 const DIFFICULTIES: [string, string, string][] = [
@@ -128,7 +129,11 @@ export function ServicePicker({ services = [], accounts }: { services?: ServiceO
                 >
                   <Icon name="target" size={22} />
                 </div>
-                {s.live ? (
+                {s.live && s.beta ? (
+                  <span className="chip purple" style={{ padding: "3px 9px" }} title="New call type — your practice is trying it early. Scores stay off the leaderboard while it's in beta.">
+                    Beta
+                  </span>
+                ) : s.live ? (
                   <span className="chip mint" style={{ padding: "3px 9px" }}>
                     Live
                   </span>

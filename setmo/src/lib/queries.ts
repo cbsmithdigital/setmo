@@ -25,6 +25,8 @@ export async function getServiceOptions(officeId: string) {
   const enabled = new Set(
     officeServices.filter((s) => s.enabled).map((s) => s.serviceType)
   );
+  // Offices piloting a call type can run it while it's still in beta.
+  const pilot = new Set(officeServices.filter((s) => s.pilot).map((s) => s.serviceType));
 
   return SERVICE_ORDER.map((key) => {
     const agent = agentBy.get(key);
@@ -36,7 +38,8 @@ export async function getServiceOptions(officeId: string) {
       : Array.isArray(agent?.rubricSkills)
         ? (agent!.rubricSkills as unknown[]).length
         : 0;
-    const live = agent?.status === "LIVE" && enabled.has(key);
+    const open = agent?.status === "LIVE" || (agent?.status === "BETA" && pilot.has(key));
+    const live = open && enabled.has(key);
     return {
       key,
       name: pack?.name ?? SERVICE_META[key].name,
@@ -44,6 +47,7 @@ export async function getServiceOptions(officeId: string) {
       value: pack?.caseValue ?? SERVICE_META[key].value,
       skills,
       live,
+      beta: agent?.status === "BETA" && pilot.has(key),
     };
   });
 }

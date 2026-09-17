@@ -8,11 +8,13 @@ import { SERVICE_META, SERVICE_ORDER } from "@/lib/service-meta";
 
 export default async function PlatformConfigPage() {
   await requireRole("PLATFORM_ADMIN"); // Super-Admin only
-  const [config, agents, officeCounts, sessionCounts] = await Promise.all([
+  const [config, agents, officeCounts, sessionCounts, pilotRows, offices] = await Promise.all([
     getPlatformConfig(),
     prisma.agent.findMany({ select: { serviceType: true, status: true } }),
     prisma.officeService.groupBy({ by: ["serviceType"], where: { enabled: true }, _count: true }),
     prisma.session.groupBy({ by: ["serviceType"], where: { kind: "PRACTICE", status: "SCORED" }, _count: true }),
+    prisma.officeService.findMany({ where: { pilot: true }, select: { serviceType: true, officeId: true, office: { select: { name: true } } } }),
+    prisma.office.findMany({ where: { isProspect: false }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
   const statusBy = new Map(agents.map((a) => [a.serviceType, a.status]));
@@ -25,6 +27,7 @@ export default async function PlatformConfigPage() {
     hasPack: hasPack(key),
     offices: officesBy.get(key) ?? 0,
     sessions: sessionsBy.get(key) ?? 0,
+    pilots: pilotRows.filter((p) => p.serviceType === key).map((p) => ({ officeId: p.officeId, name: p.office.name })),
   }));
 
   return (
@@ -36,7 +39,7 @@ export default async function PlatformConfigPage() {
         </div>
       </div>
       <div className="content" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        <ServiceCatalog services={services} />
+        <ServiceCatalog services={services} offices={offices} />
         <ConfigEditor config={config} />
       </div>
     </>

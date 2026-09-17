@@ -60,12 +60,14 @@ export async function POST(req: Request) {
     officeId = resolved;
   }
 
-  // The (served) office must offer this service and the agent must be live.
+  // The (served) office must offer this call type, and the call type must be
+  // open: LIVE for everyone, or BETA for the offices piloting it.
   const [officeService, agent] = await Promise.all([
     prisma.officeService.findUnique({ where: { officeId_serviceType: { officeId, serviceType } } }),
     prisma.agent.findUnique({ where: { serviceType } }),
   ]);
-  if (!officeService?.enabled || agent?.status !== "LIVE") {
+  const open = agent?.status === "LIVE" || (agent?.status === "BETA" && officeService?.pilot);
+  if (!officeService?.enabled || !open) {
     return error("That service isn't available for this office yet", 403);
   }
 

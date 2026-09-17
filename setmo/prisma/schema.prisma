@@ -86,6 +86,7 @@ enum ServiceKey {
 
 enum AgentStatus {
   LIVE
+  BETA // runnable only at offices flagged as pilots (OfficeService.pilot)
   DRAFT
   PLANNED
 }
@@ -518,6 +519,7 @@ model OfficeService {
   officeId    String     @map("office_id")
   serviceType ServiceKey @map("service_type")
   enabled     Boolean    @default(true)
+  pilot       Boolean    @default(false) // may run this call type while it's still in BETA
 
   office Office @relation(fields: [officeId], references: [id], onDelete: Cascade)
 
