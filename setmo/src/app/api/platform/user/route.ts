@@ -24,7 +24,7 @@ export async function POST(req: Request) {
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { firstName: true, lastName: true, email: true, role: true, status: true, office: { select: { name: true } }, organization: { select: { name: true } } },
+    select: { firstName: true, lastName: true, email: true, role: true, status: true, partnerId: true, office: { select: { name: true } }, organization: { select: { name: true } } },
   });
   if (!target) return error("User not found", 404);
   if (isPlatformRole(target.role)) return error("Can't modify internal staff here", 403);
@@ -32,6 +32,14 @@ export async function POST(req: Request) {
 
   if (action === "resend_invite") {
     if (target.status !== "INVITED") return error("That user has already accepted their invite.", 409);
+    // Partner people get the partner setup email, not a "join this practice" one.
+    if (target.partnerId) {
+      const { resendPartnerInvite } = await import("@/lib/partner-portal");
+      const r = await resendPartnerInvite(userId);
+      if (!r.ok) return error("Couldn't mint an invite link. Try again.", 502);
+      await logAdminAction(actor, { action: "user.resend_invite", summary: `Re-sent partner invite to ${name}`, targetType: "user", targetId: userId, detail: { emailed: !r.previewLink } });
+      return json({ ok: true, emailed: !r.previewLink, previewLink: r.previewLink ?? null });
+    }
     const { resendInvite } = await import("@/lib/invites");
     const actorUser = await prisma.user.findUnique({ where: { id: actor.id }, select: { firstName: true, lastName: true } });
     const inviterName = fullName(actorUser?.firstName, actorUser?.lastName) || "the SetMo team";

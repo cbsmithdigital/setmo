@@ -30,15 +30,17 @@ export async function GET(req: Request) {
   if (!dryRun && !isEmailConfigured()) return error("Email not configured", 503);
 
   const since = new Date(Date.now() - 7 * 86400_000);
+  // Demo / test accounts get no digest (their users are partners and staff, not
+  // a practice team). On hold until the digest is reworked.
   const recent = await prisma.session.findMany({
-    where: { kind: "PRACTICE", status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: since } },
+    where: { kind: "PRACTICE", status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: since }, office: { isDemo: false } },
     select: { officeId: true, setterId: true },
   });
   const officeIds = [...new Set(recent.map((r) => r.officeId))];
   const setterIds = [...new Set(recent.map((r) => r.setterId))];
 
   const orgIds = officeIds.length
-    ? [...new Set((await prisma.office.findMany({ where: { id: { in: officeIds }, organizationId: { not: null } }, select: { organizationId: true } })).map((o) => o.organizationId!))]
+    ? [...new Set((await prisma.office.findMany({ where: { id: { in: officeIds }, organizationId: { not: null }, organization: { isDemo: false } }, select: { organizationId: true } })).map((o) => o.organizationId!))]
     : [];
 
   const summary = { offices: { built: 0, sent: 0 }, groups: { built: 0, sent: 0 }, setters: { built: 0, sent: 0 } };

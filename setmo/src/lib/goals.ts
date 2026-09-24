@@ -300,8 +300,14 @@ export async function decideReward(participantId: string, action: "approve" | "m
   await prisma.goalParticipant.update({ where: { id: participantId }, data: { rewardStatus: "APPROVED", approvedById: byUserId } });
 
   // Custom (non-cash) incentives like PTO can't be transmitted by a vendor —
-  // approving them just records manual fulfillment.
-  if (action === "marksent" || p.goal.rewardType === "CUSTOM") {
+  // approving them just records manual fulfillment. A demo account never sends a
+  // real gift card either: approving there is recorded, never transmitted.
+  const demo = p.goal.officeId
+    ? Boolean((await prisma.office.findUnique({ where: { id: p.goal.officeId }, select: { isDemo: true } }))?.isDemo)
+    : p.goal.organizationId
+      ? Boolean((await prisma.organization.findUnique({ where: { id: p.goal.organizationId }, select: { isDemo: true } }))?.isDemo)
+      : false;
+  if (action === "marksent" || p.goal.rewardType === "CUSTOM" || demo) {
     await prisma.goalParticipant.update({ where: { id: participantId }, data: { rewardStatus: "SENT", sentAt: new Date(), providerRef: "manual" } });
     return { ok: true, status: "SENT" };
   }

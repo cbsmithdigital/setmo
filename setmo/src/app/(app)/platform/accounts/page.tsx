@@ -9,13 +9,19 @@ export default async function PlatformAccountsPage() {
   await requireRole("PLATFORM_ADMIN", "SUPPORT");
   const accounts = await getPlatformAccounts();
   const cols = "2fr 1.1fr 0.8fr 1fr 1fr 1fr 0.8fr 24px";
+  // Demo / test accounts are listed (to manage and top up) but never counted.
+  const real = accounts.filter((a) => !a.isDemo);
+  const demoCount = accounts.length - real.length;
 
   return (
     <>
       <div className="topbar">
         <div className="tb-greet">
           <h1>Accounts</h1>
-          <p>{accounts.length} accounts · {accounts.reduce((a, x) => a + x.locations, 0)} locations</p>
+          <p>
+            {real.length} accounts · {real.reduce((a, x) => a + x.locations, 0)} locations
+            {demoCount > 0 ? ` · ${demoCount} demo` : ""}
+          </p>
         </div>
       </div>
 
@@ -32,9 +38,12 @@ export default async function PlatformAccountsPage() {
                   <div style={{ fontWeight: 600, fontSize: 14.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.name}</div>
                   <div className="muted" style={{ fontSize: 12 }}>Active {relativeShort(a.lastActivity)}</div>
                 </div>
-                <div><span className="chip" style={{ padding: "2px 9px", fontSize: 11 }}>{a.type}</span></div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <span className="chip" style={{ padding: "2px 9px", fontSize: 11 }}>{a.type}</span>
+                  {a.isDemo && <span className="chip purple" style={{ padding: "2px 9px", fontSize: 11 }}>Demo</span>}
+                </div>
                 <div style={{ fontSize: 14 }}>{a.activeAccess}/{a.locations}</div>
-                <div className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 15 }}>{usd(a.mrr)}</div>
+                <div className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 15 }}>{a.isDemo ? <span className="muted" style={{ fontWeight: 400 }}>—</span> : usd(a.mrr)}</div>
                 <div style={{ fontSize: 14, color: a.balanceMin < 0 ? "var(--amber)" : "var(--text-1)" }}>{a.balanceMin.toLocaleString()} min</div>
                 <div style={{ fontSize: 14 }}>{usd(a.cashLifetime)}</div>
                 <div style={{ fontSize: 14, color: a.daysToEmpty != null && a.daysToEmpty < 14 ? "var(--amber)" : "var(--muted)" }}>{a.daysToEmpty != null ? `${a.daysToEmpty}d` : "—"}</div>

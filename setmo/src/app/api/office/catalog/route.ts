@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getActiveRole } from "@/lib/auth";
 import { error, json } from "@/lib/api";
 
 const SERVICE_KEYS = ["IMPLANT", "DENTURE", "COSMETIC", "ORTHO", "WISDOM", "GENERAL"] as const;
@@ -23,7 +23,7 @@ const Body = z.object({
 export async function PUT(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
-  if (!["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(user.role)) {
+  if (!["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(getActiveRole(user))) {
     return error("Only admins can edit the catalog", 403);
   }
   if (!user.officeId) return error("No office assigned", 400);

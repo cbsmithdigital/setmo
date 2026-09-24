@@ -189,6 +189,10 @@ model Organization {
   // for them (resolved office→org at accrual time, so later-added locations count).
   referredByPartnerId String? @map("referred_by_partner_id")
   referralCode        String? @map("referral_code")
+  referredAt          DateTime? @map("referred_at")
+  // Demo / test organization (see Office.isDemo). Needed at the org level too
+  // because group-coach and call-center money hangs off the org, not an office.
+  isDemo              Boolean @default(false) @map("is_demo")
 
   offices           Office[]
   users             User[]
@@ -277,8 +281,14 @@ model Office {
   seatCount        Int      @default(1) @map("seat_count")
   stripeCustomerId String?  @map("stripe_customer_id")
   isProspect       Boolean  @default(false) @map("is_prospect") // created by a pre-sale Setter Audit, not yet a customer
+  // A demo / test account (partner demo orgs, the Meridian marketing demo, internal
+  // test offices). Kept OUT of platform business metrics, the global leaderboard and
+  // weekly digests; still gets low-balance alerts and comp minute grants; can never
+  // open a Stripe checkout or invite outside users.
+  isDemo           Boolean  @default(false) @map("is_demo")
   referredByPartnerId String? @map("referred_by_partner_id") // first-touch partner attribution
   referralCode     String?  @map("referral_code")
+  referredAt       DateTime? @map("referred_at") // when the attribution was recorded
   autoTopUp        Boolean  @default(false) @map("auto_top_up") // auto-buy minutes when the balance dips below 25
   minuteAlertStage Int      @default(0) @map("minute_alert_stage") // 0 healthy · 1 sent 100-min alert · 2 sent 60-min alert
   lastAutoTopUpAt  DateTime? @map("last_auto_top_up_at")
@@ -413,6 +423,13 @@ model Partner {
   approvedAt    DateTime?           @map("approved_at")
   approvedById  String?             @map("approved_by_id")
   notes         String?
+  // false = a TRACKING-ONLY partner: referrals are attributed and visible, but no
+  // commission accrues, no payout runs, and the portal shows referral counts
+  // instead of earnings. Flip on when a commission deal is signed.
+  commissionsEnabled Boolean        @default(true) @map("commissions_enabled")
+  // The partner's demo organization (showcase practices for learning + demos).
+  // Partner users get demo access to it; reps inherit it when invited.
+  demoOrganizationId String?        @map("demo_organization_id")
   createdAt     DateTime            @default(now()) @map("created_at")
 
   users           User[]

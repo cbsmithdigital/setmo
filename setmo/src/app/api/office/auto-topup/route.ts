@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
 import { error, json } from "@/lib/api";
+import { inDemoAccount, DEMO_BILLING_MESSAGE } from "@/lib/demo-shared";
 
 const Body = z.object({ enabled: z.boolean() });
 
@@ -9,6 +10,7 @@ const Body = z.object({ enabled: z.boolean() });
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
+  if (inDemoAccount(user)) return error(DEMO_BILLING_MESSAGE, 403);
   if (!isManagerRole(getActiveRole(user))) return error("Only admins can change billing", 403);
   if (!user.officeId) return error("No office assigned", 400);
 

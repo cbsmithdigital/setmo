@@ -17,7 +17,7 @@ export async function sweepAssessmentInvites(origin: string, dryRun = false): Pr
       OR: [{ lastInviteAt: null }, { lastInviteAt: { lte: cutoff } }],
     },
     orderBy: { createdAt: "desc" },
-    select: { id: true, email: true, emailDomain: true, practiceName: true },
+    select: { id: true, email: true, emailDomain: true, practiceName: true, office: { select: { referralCode: true } } },
   });
 
   const seen = new Set<string>();
@@ -26,7 +26,10 @@ export async function sweepAssessmentInvites(origin: string, dryRun = false): Pr
   let sent = 0;
   if (!dryRun) {
     for (const r of due) {
-      const ok = await sendAssessmentInvite({ to: r.email, practiceName: r.practiceName, link: `${origin}/audit` });
+      // Keep the referring partner's code on the link, so a practice a partner sent
+      // us is still credited to them if they come back through this email.
+      const link = r.office?.referralCode ? `${origin}/audit?ref=${encodeURIComponent(r.office.referralCode)}` : `${origin}/audit`;
+      const ok = await sendAssessmentInvite({ to: r.email, practiceName: r.practiceName, link });
       if (ok) {
         await prisma.setterAudit.update({ where: { id: r.id }, data: { lastInviteAt: new Date() } });
         sent++;

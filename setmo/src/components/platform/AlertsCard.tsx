@@ -2,9 +2,9 @@ import Link from "next/link";
 import { Icon } from "@/components/ui/Icon";
 
 type Alerts = {
-  lowBalance: { accountId: string; name: string; daysToEmpty: number | null; balanceMin: number }[];
-  idle: { accountId: string; name: string; lastActivity: Date | string | null }[];
-  topBurners: { accountId: string; name: string; burnPerDay: number }[];
+  lowBalance: { officeId: string; accountId: string; name: string; daysToEmpty: number | null; balanceMin: number; isDemo: boolean }[];
+  idle: { officeId: string; accountId: string; name: string; lastActivity: Date | string | null }[];
+  topBurners: { officeId: string; accountId: string; name: string; burnPerDay: number }[];
   liability: { total: number; over: boolean; ceiling: number };
   count: number;
 };
@@ -25,9 +25,13 @@ export function AlertsCard({ alerts }: { alerts: Alerts }) {
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--amber)", marginBottom: 8 }}>Low balance ({alerts.lowBalance.length})</div>
           {alerts.lowBalance.length === 0 && <p className="muted" style={{ fontSize: 12.5 }}>None.</p>}
           {alerts.lowBalance.slice(0, 4).map((a) => (
-            <Link key={a.accountId} href={`/platform/accounts/${a.accountId}`} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "3px 0" }}>
-              <span style={{ color: "var(--text-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.name}</span>
-              <b style={{ color: "var(--amber)" }}>{a.daysToEmpty}d</b>
+            <Link key={a.officeId} href={`/platform/accounts/${a.accountId}`} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "3px 0" }}>
+              <span style={{ color: "var(--text-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {a.name}
+                {a.isDemo && <span className="chip" style={{ fontSize: 10, padding: "0 6px", marginLeft: 6 }}>Demo</span>}
+              </span>
+              {/* A demo account is flagged on its balance, not a burn forecast. */}
+              <b style={{ color: "var(--amber)" }}>{a.isDemo ? `${a.balanceMin} min` : `${a.daysToEmpty}d`}</b>
             </Link>
           ))}
         </div>
@@ -35,13 +39,13 @@ export function AlertsCard({ alerts }: { alerts: Alerts }) {
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 8 }}>Idle ({alerts.idle.length})</div>
           {alerts.idle.length === 0 && <p className="muted" style={{ fontSize: 12.5 }}>None.</p>}
           {alerts.idle.slice(0, 4).map((a) => (
-            <Link key={a.accountId} href={`/platform/accounts/${a.accountId}`} style={{ display: "block", fontSize: 12.5, padding: "3px 0", color: "var(--text-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.name}</Link>
+            <Link key={a.officeId} href={`/platform/accounts/${a.accountId}`} style={{ display: "block", fontSize: 12.5, padding: "3px 0", color: "var(--text-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.name}</Link>
           ))}
         </div>
         <div>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--mint)", marginBottom: 8 }}>Top burners</div>
           {alerts.topBurners.slice(0, 4).map((a) => (
-            <Link key={a.accountId} href={`/platform/accounts/${a.accountId}`} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "3px 0" }}>
+            <Link key={a.officeId} href={`/platform/accounts/${a.accountId}`} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "3px 0" }}>
               <span style={{ color: "var(--text-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.name}</span>
               <b className="mint-text">{a.burnPerDay.toFixed(1)}/d</b>
             </Link>

@@ -4,6 +4,7 @@ import { createMinuteCheckout, isStripeConfigured } from "@/lib/stripe";
 import { accountTokenDiscountPct } from "@/lib/usage";
 import { checkMinutes } from "@/lib/minute-limits";
 import { error, json } from "@/lib/api";
+import { inDemoAccount, DEMO_BILLING_MESSAGE } from "@/lib/demo-shared";
 
 const Body = z.object({ minutes: z.number().int().min(1) });
 
@@ -11,6 +12,7 @@ const Body = z.object({ minutes: z.number().int().min(1) });
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
+  if (inDemoAccount(user)) return error(DEMO_BILLING_MESSAGE, 403);
   if (!isManagerRole(getActiveRole(user))) return error("Only admins can purchase minutes", 403);
   if (!user.officeId) return error("No office assigned", 400);
   if (!isStripeConfigured()) return error("Billing isn't configured yet", 503);

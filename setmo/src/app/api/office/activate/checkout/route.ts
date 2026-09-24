@@ -5,6 +5,7 @@ import { getPlatformConfig, promoBonusMinutes } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { checkMinutes } from "@/lib/minute-limits";
 import { error, json } from "@/lib/api";
+import { inDemoAccount, DEMO_BILLING_MESSAGE } from "@/lib/demo-shared";
 
 // minutes: 0 = access-only activation (sign-up promo — the bonus tokens are the
 // starter balance); otherwise the starter-token range from the live config.
@@ -18,6 +19,7 @@ const Body = z.object({
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
+  if (inDemoAccount(user)) return error(DEMO_BILLING_MESSAGE, 403);
   if (!isManagerRole(getActiveRole(user))) return error("Only admins can activate the practice", 403);
   if (!user.officeId) return error("No office assigned", 400);
   if (!isStripeConfigured()) return error("Billing isn't configured yet", 503);

@@ -1,12 +1,14 @@
 import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
 import { createBillingPortalSession, isStripeConfigured } from "@/lib/stripe";
 import { error, json } from "@/lib/api";
+import { inDemoAccount, DEMO_BILLING_MESSAGE } from "@/lib/demo-shared";
 
 // POST /api/office/billing-portal — open the Stripe customer portal so an admin
 // can cancel, update their card, or download invoices.
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
+  if (inDemoAccount(user)) return error(DEMO_BILLING_MESSAGE, 403);
   if (!isManagerRole(getActiveRole(user))) return error("Only admins can manage billing", 403);
   if (!isStripeConfigured()) return error("Billing isn't configured yet", 503);
 

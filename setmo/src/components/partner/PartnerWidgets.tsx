@@ -62,6 +62,26 @@ export function ConnectButton({ onboarded }: { onboarded: boolean }) {
   );
 }
 
+/** Remove a rep from the partner team (confirmed). */
+export function RemoveMember({ userId, name }: { userId: string; name: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  async function remove() {
+    if (!window.confirm(`Remove ${name}? They lose access to SetMo and the demo account. Practices that already have their link are still credited to your team.`)) return;
+    setBusy(true);
+    const res = await fetch("/api/partner/members", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId }) });
+    const j = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) { window.alert(j.error ?? "Couldn't remove that rep."); return; }
+    router.refresh();
+  }
+  return (
+    <button className="btn btn-ghost" onClick={remove} disabled={busy} style={{ padding: "5px 11px", fontSize: 12, color: "var(--amber)" }}>
+      {busy ? "Removing…" : "Remove"}
+    </button>
+  );
+}
+
 export function InviteMember() {
   const router = useRouter();
   const [email, setEmail] = useState("");

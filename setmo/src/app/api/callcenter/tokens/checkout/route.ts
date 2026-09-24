@@ -4,6 +4,7 @@ import { createCallCenterTokenCheckout, isStripeConfigured } from "@/lib/stripe"
 import { prisma } from "@/lib/db";
 import { checkMinutes } from "@/lib/minute-limits";
 import { error, json } from "@/lib/api";
+import { inDemoAccount, DEMO_BILLING_MESSAGE } from "@/lib/demo-shared";
 
 const Body = z.object({ minutes: z.number().int().min(1) });
 
@@ -12,6 +13,7 @@ const Body = z.object({ minutes: z.number().int().min(1) });
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
+  if (inDemoAccount(user)) return error(DEMO_BILLING_MESSAGE, 403);
   if (getActiveRole(user) !== "CALL_CENTER_ADMIN" || !user.organizationId) return error("Call-center admins only", 403);
   if (!isStripeConfigured()) return error("Billing isn't configured yet", 503);
 

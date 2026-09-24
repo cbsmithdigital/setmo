@@ -2,7 +2,9 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { emailDomainOf, emailUsedRecently } from "@/lib/audit";
-import { partnerIdForCode } from "@/lib/partners";
+import { cookies } from "next/headers";
+import { resolveReferral } from "@/lib/partners";
+import { REF_COOKIE } from "@/lib/referral-cookie";
 import { sendAuditVerifyEmail } from "@/lib/email";
 import { error, json } from "@/lib/api";
 
@@ -37,10 +39,15 @@ export async function POST(req: Request) {
   const [firstName, ...rest] = contactName.trim().split(/\s+/);
 
   // First-touch partner attribution (carries from the prospect office through the
-  // account conversion later).
-  const refPartnerId = ref ? await partnerIdForCode(ref) : null;
+  // account conversion later): the link's code, else the cookie from an earlier
+  // visit. A partner or rep running an audit on themselves is never credited.
+  const referral = await resolveReferral({ code: ref, cookieCode: (await cookies()).get(REF_COOKIE)?.value, email });
   const office = await prisma.office.create({
-    data: { name: practiceName, isProspect: true, ...(refPartnerId ? { referredByPartnerId: refPartnerId, referralCode: ref!.trim().toLowerCase() } : {}) },
+    data: {
+      name: practiceName,
+      isProspect: true,
+      ...(referral ? { referredByPartnerId: referral.partnerId, referralCode: referral.code, referredAt: new Date() } : {}),
+    },
   });
   const prospect = await prisma.user.create({
     data: {

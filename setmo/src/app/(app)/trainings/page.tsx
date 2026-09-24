@@ -9,7 +9,9 @@ export default async function TrainingsPage() {
   // Call-center agents have no office pool — show the shared call-center balance.
   const allowanceFor = user.callCenterPodId
     ? (async () => { const org = await callCenterOrgForAgent(user.id); return org ? await getCallCenterBalance(org) : { remainingMin: 0, purchasedMin: 0, usedMin: 0 }; })()
-    : getAllowance(user.officeId!);
+    : user.officeId
+      ? getAllowance(user.officeId)
+      : Promise.resolve({ remainingMin: 0, purchasedMin: 0, usedMin: 0 }); // no practice (e.g. a partner rep) — trainings still open
   const [trainings, allowance, operations] = await Promise.all([
     getSetterTrainings(user.id),
     allowanceFor,

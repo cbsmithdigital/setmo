@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getActiveRole } from "@/lib/auth";
 import { isAdminConfigured } from "@/lib/supabase/admin";
 import { inviteUsers, splitName } from "@/lib/invites";
 import { error, json } from "@/lib/api";
+import { inDemoAccount, DEMO_INVITE_MESSAGE } from "@/lib/demo-shared";
 
 const Body = z.object({
   invitees: z.array(z.object({ email: z.string().email(), name: z.string().max(160).optional() })).min(1).max(25),
@@ -15,7 +16,8 @@ const Body = z.object({
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
-  if (!["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(user.role)) {
+  if (inDemoAccount(user)) return error(DEMO_INVITE_MESSAGE, 403);
+  if (!["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(getActiveRole(user))) {
     return error("Only admins can invite users", 403);
   }
   if (!user.officeId) return error("No office assigned", 400);

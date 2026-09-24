@@ -61,7 +61,9 @@ export default function InvitePage() {
         setLoading(false);
         return;
       }
-      router.replace("/dashboard");
+      // /go sends each person to their own home — a partner to their partner
+      // dashboard, a manager to theirs — rather than assuming everyone's a setter.
+      router.replace("/go");
       router.refresh();
     } catch {
       setErr("Couldn't finish setup. Try again.");

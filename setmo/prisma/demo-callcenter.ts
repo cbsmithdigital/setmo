@@ -10,7 +10,7 @@ config();
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { pickCall, transcriptPayload } from "./demo-content";
+import { pickCall, transcriptPayload } from "../src/lib/demo-content";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
 const DEMO_PASSWORD = "SetMo-demo-2026";

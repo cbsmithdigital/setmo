@@ -7,8 +7,9 @@ import { ROLE_LABEL } from "@/lib/format";
 
 // Shown only for multi-role users. Switching flips the active-role cookie;
 // nav, data, and the available agent all follow automatically.
-export function RoleSwitcher({ roles, activeRole }: { roles: string[]; activeRole: string }) {
+export function RoleSwitcher({ roles, demoRoles = [], activeRole }: { roles: string[]; demoRoles?: string[]; activeRole: string }) {
   const router = useRouter();
+  const label = (r: string) => `${ROLE_LABEL[r as keyof typeof ROLE_LABEL] ?? r}${demoRoles.includes(r) ? " · Demo" : ""}`;
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -22,10 +23,12 @@ export function RoleSwitcher({ roles, activeRole }: { roles: string[]; activeRol
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ role }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         router.push(data.home ?? "/");
         router.refresh();
+      } else {
+        window.alert(data.error ?? "Couldn't switch roles. Try again.");
       }
     } finally {
       setBusy(false);
@@ -45,7 +48,7 @@ export function RoleSwitcher({ roles, activeRole }: { roles: string[]; activeRol
         <Icon name="team" size={15} style={{ color: "var(--purple-2)" }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", color: "var(--muted)", letterSpacing: ".03em" }}>Viewing as</div>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>{ROLE_LABEL[activeRole as keyof typeof ROLE_LABEL] ?? activeRole}</div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{label(activeRole)}</div>
         </div>
         <Icon name="arrow" size={14} style={{ color: "var(--muted)", transform: open ? "rotate(-90deg)" : "rotate(90deg)" }} />
       </button>
@@ -66,7 +69,7 @@ export function RoleSwitcher({ roles, activeRole }: { roles: string[]; activeRol
                 color: r === activeRole ? "var(--text)" : "var(--text-2)",
               }}
             >
-              {ROLE_LABEL[r as keyof typeof ROLE_LABEL] ?? r}
+              {label(r)}
               {r === activeRole && <Icon name="check" size={13} sw={3} style={{ marginLeft: "auto", color: "var(--mint)" }} />}
             </button>
           ))}

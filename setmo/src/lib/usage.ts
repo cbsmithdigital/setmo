@@ -96,12 +96,28 @@ export async function lastPurchasedMinutes(officeId: string): Promise<number> {
 
 /** Active office admins (incl. group admins) who should get billing alerts. */
 async function officeAdminEmails(officeId: string): Promise<string[]> {
+  const office = await prisma.office.findUnique({ where: { id: officeId }, select: { organizationId: true } });
+  // Admin hats count only when scoped to THIS office / its group (a hat left over
+  // from another office must not route this practice's billing alerts).
+  const hats = [
+    { role: "OFFICE_ADMIN" as const, scopeId: officeId },
+    ...(office?.organizationId ? [{ role: "GROUP_ADMIN" as const, scopeId: office.organizationId }] : []),
+  ];
   const admins = await prisma.user.findMany({
     where: {
       officeId,
       status: "ACTIVE",
-      OR: [{ role: { in: ["OFFICE_ADMIN", "GROUP_ADMIN"] } }, { memberships: { some: { role: { in: ["OFFICE_ADMIN", "GROUP_ADMIN"] } } } }],
+      OR: [{ role: { in: ["OFFICE_ADMIN", "GROUP_ADMIN"] } }, { memberships: { some: { OR: hats } } }],
     },
+    select: { email: true },
+  });
+  return Array.from(new Set(admins.map((a) => a.email).filter(Boolean)));
+}
+
+/** Active super-admins — who tops up demo accounts. */
+async function platformAdminEmails(): Promise<string[]> {
+  const admins = await prisma.user.findMany({
+    where: { status: "ACTIVE", OR: [{ role: "PLATFORM_ADMIN" }, { memberships: { some: { role: "PLATFORM_ADMIN" } } }] },
     select: { email: true },
   });
   return Array.from(new Set(admins.map((a) => a.email).filter(Boolean)));
@@ -116,7 +132,7 @@ async function officeAdminEmails(officeId: string): Promise<string[]> {
 export async function evaluateMinuteThresholds(officeId: string): Promise<void> {
   const office = await prisma.office.findUnique({
     where: { id: officeId },
-    select: { id: true, name: true, stripeCustomerId: true, autoTopUp: true, minuteAlertStage: true, lastAutoTopUpAt: true },
+    select: { id: true, name: true, isDemo: true, stripeCustomerId: true, autoTopUp: true, minuteAlertStage: true, lastAutoTopUpAt: true },
   });
   if (!office) return;
 
@@ -125,6 +141,18 @@ export async function evaluateMinuteThresholds(officeId: string): Promise<void> 
   // Pool is healthy again → reset so a future drop re-alerts.
   if (remainingMin > ALERT_100) {
     if (office.minuteAlertStage !== 0) await prisma.office.update({ where: { id: officeId }, data: { minuteAlertStage: 0 } });
+    return;
+  }
+
+  // A demo account never buys anything: no auto top-up, and the alert goes to the
+  // SetMo team (who top it up by hand), once per dip.
+  if (office.isDemo) {
+    if (office.minuteAlertStage < 1) {
+      const to = await platformAdminEmails();
+      const { sendDemoMinuteLowEmail } = await import("@/lib/email");
+      await sendDemoMinuteLowEmail({ to, practiceName: office.name, officeId, remaining: remainingMin }).catch(() => {});
+      await prisma.office.update({ where: { id: officeId }, data: { minuteAlertStage: 1 } });
+    }
     return;
   }
 
@@ -265,7 +293,7 @@ async function groupAdminEmails(orgId: string): Promise<string[]> {
 /** Run after a group-coach call (and as a daily sweep): email group admins to add
  *  a card / buy more once the wallet falls to the alert threshold; reset above it. */
 export async function evaluateOrgCoachThreshold(orgId: string): Promise<void> {
-  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { id: true, name: true, coachAlertStage: true } });
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { id: true, name: true, isDemo: true, coachAlertStage: true } });
   if (!org) return;
   const { remainingMin } = await getOrgCoachBalance(orgId);
 
@@ -274,10 +302,12 @@ export async function evaluateOrgCoachThreshold(orgId: string): Promise<void> {
     return;
   }
   if (org.coachAlertStage < 1) {
-    const to = await groupAdminEmails(orgId);
+    // A demo group can't buy tokens, so its "wallet low" note goes to the SetMo
+    // team (who top it up with a grant), never to the partner using the demo.
+    const to = org.isDemo ? await platformAdminEmails() : await groupAdminEmails(orgId);
     if (to.length) {
       const { sendGroupCoachLowEmail } = await import("@/lib/email");
-      await sendGroupCoachLowEmail({ to, orgName: org.name, remaining: remainingMin }).catch(() => {});
+      await sendGroupCoachLowEmail({ to, orgName: org.isDemo ? `${org.name} (demo account)` : org.name, remaining: remainingMin }).catch(() => {});
     }
     await prisma.organization.update({ where: { id: orgId }, data: { coachAlertStage: 1 } });
   }

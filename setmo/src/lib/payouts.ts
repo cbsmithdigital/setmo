@@ -48,7 +48,8 @@ export type PayoutReportRow = { partner: string; method: string; amountCents: nu
  *  rows are touched and flipped to PAID). */
 export async function runPartnerPayouts(dryRun = false): Promise<{ runKey: string; rows: PayoutReportRow[]; paidCents: number }> {
   const runKey = new Date().toISOString().slice(0, 10);
-  const partners = await prisma.partner.findMany({ where: { status: "APPROVED" }, select: { id: true, name: true, payoutMethod: true, stripeConnectId: true, connectOnboarded: true } });
+  // Tracking-only partners (commissionsEnabled=false) are never paid.
+  const partners = await prisma.partner.findMany({ where: { status: "APPROVED", commissionsEnabled: true }, select: { id: true, name: true, payoutMethod: true, stripeConnectId: true, connectOnboarded: true } });
   const rows: PayoutReportRow[] = [];
 
   for (const p of partners) {
@@ -56,6 +57,9 @@ export async function runPartnerPayouts(dryRun = false): Promise<{ runKey: strin
     if (!earned.length) continue;
     const amountCents = earned.reduce((a, c) => a + c.commissionCents, 0);
     const ids = earned.map((e) => e.id);
+    // Nothing owed → nothing to pay (a $0 batch used to write a payout row and
+    // grant a minimum 1 credit minute).
+    if (amountCents <= 0) continue;
 
     if (dryRun) {
       rows.push({ partner: p.name, method: p.payoutMethod, amountCents, count: ids.length, status: "DRY" });
@@ -80,7 +84,12 @@ export async function runPartnerPayouts(dryRun = false): Promise<{ runKey: strin
         }
       }
     } else {
-      const linked = await prisma.user.findFirst({ where: { partnerId: p.id, officeId: { not: null } }, select: { officeId: true } });
+      // Credit lands in the partner ADMIN's own real practice — never a demo
+      // account, and never whichever rep Prisma happens to return first.
+      const linked = await prisma.user.findFirst({
+        where: { partnerId: p.id, officeId: { not: null }, office: { isDemo: false }, OR: [{ role: "PARTNER_ADMIN" }, { memberships: { some: { role: "PARTNER_ADMIN" } } }] },
+        select: { officeId: true },
+      });
       if (!linked?.officeId) {
         note = "no linked practice for credit";
       } else {

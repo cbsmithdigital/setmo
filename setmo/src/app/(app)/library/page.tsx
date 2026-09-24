@@ -7,7 +7,7 @@ import { whenLabel, mmss } from "@/lib/format";
 export default async function LibraryPage() {
   const user = await requireUser();
   const rows = await getSavedRecordings(user);
-  const isAdmin = ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(user.role);
+  const isAdmin = ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(user.activeRole ?? user.role);
 
   return (
     <>

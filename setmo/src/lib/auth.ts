@@ -56,8 +56,12 @@ async function loadCurrentUser() {
     }
   }
 
-  // Roles the user can act as — their primary role plus any extra memberships.
-  const roles = Array.from(new Set<Role>([user.role, ...user.memberships.map((m) => m.role)]));
+  // Roles the user can act as — their primary role plus any extra memberships that
+  // belong to the practice / group they're in NOW. Permission checks key on the
+  // active role plus user.officeId / organizationId, so a hat left over from
+  // another office (a partner's demo, a previous practice) must never turn into
+  // admin rights over the current one.
+  const roles = Array.from(new Set<Role>([user.role, ...user.memberships.filter((m) => membershipInScope(m, user)).map((m) => m.role)]));
 
   // Active role from a cookie (validated against held roles); while impersonating,
   // always show the impersonated user's own default role.
@@ -74,6 +78,19 @@ async function loadCurrentUser() {
   return { ...user, email: user.email ?? (impersonatedBy ? user.email : authUser.email) ?? "", roles, activeRole, impersonatedBy };
 }
 
+/** An office hat (setter / office admin) counts only in the office it was given
+ *  for, a group-admin hat only in its group. Other roles (multi-practice admin,
+ *  partner, platform) carry their own scoping. */
+function membershipInScope(
+  m: { role: Role; scopeType: string; scopeId: string | null },
+  user: { officeId: string | null; organizationId: string | null }
+): boolean {
+  if (!m.scopeId) return true;
+  if (m.role === "SETTER" || m.role === "OFFICE_ADMIN") return m.scopeType !== "OFFICE" || m.scopeId === user.officeId;
+  if (m.role === "GROUP_ADMIN") return m.scopeType !== "GROUP" || m.scopeId === user.organizationId;
+  return true;
+}
+
 /** The real internal-staff actor (ignores impersonation). Null if not platform. */
 export async function getPlatformActor() {
   if (!isSupabaseConfigured()) return null;
@@ -87,10 +104,15 @@ export async function getPlatformActor() {
   return u;
 }
 
-/** Returns the current user or null. Never throws on missing config. */
+/** Returns the current user or null. Never throws on missing config. A disabled
+ *  account is treated as signed out for API calls too (pages already redirect via
+ *  requireUser) — otherwise a removed user's still-valid session could keep
+ *  starting calls. Platform staff viewing-as a disabled user still see them. */
 export async function getCurrentUser() {
   try {
-    return await loadCurrentUser();
+    const user = await loadCurrentUser();
+    if (user && user.status === "DISABLED" && !user.impersonatedBy) return null;
+    return user;
   } catch {
     return null;
   }
@@ -98,7 +120,9 @@ export async function getCurrentUser() {
 
 /** Requires an authenticated, active user; redirects to /login otherwise. */
 export async function requireUser() {
-  const user = await getCurrentUser();
+  // Load directly (not via getCurrentUser, which hides disabled accounts) so a
+  // disabled user gets the "account disabled" login message, not a bare login.
+  const user = await loadCurrentUser().catch(() => null);
   if (!user) redirect("/login");
   // Disabled accounts lose app access (can't re-enable themselves).
   if (user.status === "DISABLED" && !user.impersonatedBy) redirect("/login?disabled=1");

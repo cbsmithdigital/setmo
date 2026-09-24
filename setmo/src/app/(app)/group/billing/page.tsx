@@ -4,6 +4,7 @@ import { getOrgCoachBalance } from "@/lib/usage";
 import { getPlatformConfig, getPricingConfig } from "@/lib/config";
 import { GroupTokenPurchase } from "@/components/billing/GroupTokenPurchase";
 import { GroupManageCardButton } from "@/components/billing/GroupManageCardButton";
+import { inDemoAccount, DEMO_BILLING_MESSAGE } from "@/lib/demo-shared";
 
 export default async function GroupBillingPage() {
   const user = await requireRole("GROUP_ADMIN");
@@ -66,7 +67,12 @@ export default async function GroupBillingPage() {
           </div>
         </div>
 
-        <GroupTokenPurchase cfg={pricing} discountPct={cfg.groupTokenDiscountPct} />
+        {/* A demo account has nothing to buy — the SetMo team tops it up. */}
+        {inDemoAccount(user) ? (
+          <div className="card card-pad muted" style={{ fontSize: 14 }}>{DEMO_BILLING_MESSAGE}</div>
+        ) : (
+          <GroupTokenPurchase cfg={pricing} discountPct={cfg.groupTokenDiscountPct} />
+        )}
       </div>
     </>
   );

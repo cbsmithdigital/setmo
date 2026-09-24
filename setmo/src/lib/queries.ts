@@ -619,12 +619,48 @@ export async function getOfficeLeaderboard(officeId: string, viewerId: string) {
   });
 }
 
+/** The office-ranked board computed live over demo offices only, in the same
+ *  shape as the materialized GLOBAL rows (same scoring rule as the real board). */
+async function demoGlobalBoard(): Promise<{ subjectId: string; rank: number; value: number; movement: number }[]> {
+  const sessions = await prisma.session.findMany({
+    where: {
+      serviceType: "IMPLANT",
+      kind: "PRACTICE",
+      status: "SCORED",
+      isAudit: false,
+      callCenterOrgId: null,
+      office: { isDemo: true },
+      evaluation: { isNot: null },
+    },
+    select: { officeId: true, evaluation: { select: { overallScore: true } } },
+  });
+  const byOffice = new Map<string, number[]>();
+  for (const s of sessions) {
+    if (s.evaluation?.overallScore == null) continue;
+    const arr = byOffice.get(s.officeId) ?? [];
+    arr.push(Number(s.evaluation.overallScore));
+    byOffice.set(s.officeId, arr);
+  }
+  return [...byOffice.entries()]
+    .map(([subjectId, scores]) => ({ subjectId, value: scores.reduce((a, b) => a + b, 0) / scores.length }))
+    .sort((a, b) => b.value - a.value)
+    .map((r, i) => ({ ...r, rank: i + 1, movement: 0 }));
+}
+
 // ---------- global leaderboard (privacy: office/group standings only) ----------
 export async function getGlobalLeaderboard(viewerOfficeId: string | null) {
-  const board = await prisma.leaderboardEntry.findMany({
-    where: { scope: "GLOBAL", serviceType: "IMPLANT" },
-    orderBy: { rank: "asc" },
-  });
+  // A demo account sees a board of demo accounts only. Two reasons: demo offices
+  // are kept off the real board, and a partner demoing to a prospect must never
+  // put real customers' practice names on screen.
+  const viewerIsDemo = viewerOfficeId
+    ? Boolean((await prisma.office.findUnique({ where: { id: viewerOfficeId }, select: { isDemo: true } }))?.isDemo)
+    : false;
+  const board = viewerIsDemo
+    ? await demoGlobalBoard()
+    : await prisma.leaderboardEntry.findMany({
+        where: { scope: "GLOBAL", serviceType: "IMPLANT" },
+        orderBy: { rank: "asc" },
+      });
   const offices = await prisma.office.findMany({
     where: { id: { in: board.map((b) => b.subjectId) } },
     include: { organization: true },
@@ -696,8 +732,9 @@ export async function getSharedRecording(token: string) {
 }
 
 // ---------- saved recordings (Library) ----------
-export async function getSavedRecordings(user: { id: string; role: string; officeId: string | null }) {
-  const isAdmin = ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(user.role);
+export async function getSavedRecordings(user: { id: string; role: string; activeRole?: string; officeId: string | null }) {
+  // The role the user is acting as (multi-role users switch hats).
+  const isAdmin = ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(user.activeRole ?? user.role);
   const where = isAdmin
     ? { officeId: user.officeId ?? "", saved: true, kind: "PRACTICE" as const }
     : { setterId: user.id, saved: true, kind: "PRACTICE" as const };
@@ -724,7 +761,7 @@ export async function getSavedRecordings(user: { id: string; role: string; offic
 }
 
 // ---------- session result ----------
-type ResultViewer = { id: string; role: string; officeId: string | null; organizationId?: string | null; callCenterPodId?: string | null };
+type ResultViewer = { id: string; role: string; activeRole?: string; officeId: string | null; organizationId?: string | null; callCenterPodId?: string | null };
 
 export async function getSessionResult(sessionId: string, viewer: ResultViewer, opts: { hydrateAudio?: boolean } = {}) {
   const session = await prisma.session.findUnique({
@@ -734,15 +771,18 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer, 
   // The transcript is captured (evaluation row created) before scoring finishes;
   // only treat the call as ready once it's actually been scored.
   if (!session || !session.evaluation || !session.evaluation.scoredAt) return null;
+  // Permissions follow the role the viewer is ACTING as, not their primary role —
+  // a multi-role user (e.g. a partner demoing as office admin) switches hats.
+  const role = viewer.activeRole ?? viewer.role;
 
   // The setter owns their call; office admins may view any call in their office;
   // a GROUP_ADMIN any call in their organization's offices (the group drill-in
   // links across the whole org); platform admins any call.
   const isOwner = session.setterId === viewer.id;
-  const isOfficeManager = ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(viewer.role) && session.officeId === viewer.officeId;
-  const isPlatform = viewer.role === "PLATFORM_ADMIN";
+  const isOfficeManager = ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(role) && session.officeId === viewer.officeId;
+  const isPlatform = role === "PLATFORM_ADMIN";
   const isGroupView = Boolean(
-    viewer.role === "GROUP_ADMIN" && viewer.organizationId && session.office?.organizationId === viewer.organizationId
+    role === "GROUP_ADMIN" && viewer.organizationId && session.office?.organizationId === viewer.organizationId
   );
   // A call-center senior manager can view any of the call center's agent calls; a
   // floor manager only their own pod's agents.
@@ -750,14 +790,14 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer, 
     session.callCenterOrgId &&
     viewer.organizationId &&
     viewer.organizationId === session.callCenterOrgId &&
-    (viewer.role === "CALL_CENTER_ADMIN" ||
-      (viewer.role === "CALL_CENTER_MANAGER" && viewer.callCenterPodId != null && viewer.callCenterPodId === session.setter?.callCenterPodId))
+    (role === "CALL_CENTER_ADMIN" ||
+      (role === "CALL_CENTER_MANAGER" && viewer.callCenterPodId != null && viewer.callCenterPodId === session.setter?.callCenterPodId))
   );
   // A Multi Practice Admin may view calls for any office in their assigned set —
   // membership PLUS the office still belonging to their org (fail-closed, matching
   // mpaOfficeIds' re-validation).
   const isMpaView =
-    viewer.role === "MULTI_PRACTICE_ADMIN" &&
+    role === "MULTI_PRACTICE_ADMIN" &&
     Boolean(viewer.organizationId && session.office?.organizationId === viewer.organizationId) &&
     Boolean(await prisma.membership.findFirst({ where: { userId: viewer.id, role: "MULTI_PRACTICE_ADMIN", scopeType: "OFFICE", scopeId: session.officeId } }));
   const canView = isOwner || isOfficeManager || isPlatform || isGroupView || isCallCenterView || isMpaView;
@@ -820,6 +860,9 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer, 
     nextScenario: e.recommendedNextScenario,
     transcript,
     audioAvailable: Boolean(audioPath),
+    // Without a conversation id there's nothing to recover, so no recording is
+    // coming (e.g. a seeded demo call) — the page shouldn't say "processing".
+    audioPending: !audioPath && Boolean(session.elevenlabsConversationId),
     saved: session.saved,
     shareToken: session.shareToken,
     kind: session.kind,

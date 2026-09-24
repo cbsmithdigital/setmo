@@ -1,6 +1,7 @@
 import { getCurrentUser, getActiveRole } from "@/lib/auth";
 import { createBillingPortalSession, isStripeConfigured } from "@/lib/stripe";
 import { error, json } from "@/lib/api";
+import { inDemoAccount, DEMO_BILLING_MESSAGE } from "@/lib/demo-shared";
 
 // POST /api/group/billing-portal — open the Stripe customer portal for the group's
 // coach-token wallet customer, so a group/DSO admin can update or remove their card
@@ -8,6 +9,7 @@ import { error, json } from "@/lib/api";
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
+  if (inDemoAccount(user)) return error(DEMO_BILLING_MESSAGE, 403);
   if (getActiveRole(user) !== "GROUP_ADMIN" || !user.organizationId) return error("Group admins only", 403);
   if (!isStripeConfigured()) return error("Billing isn't configured yet", 503);
 

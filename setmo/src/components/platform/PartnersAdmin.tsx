@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { PartnerRow } from "@/lib/partners";
 
@@ -52,28 +53,39 @@ export function PartnersAdmin({ partners, isSuper, appUrl }: { partners: Partner
           <div key={p.id} style={{ padding: "14px 0", borderTop: i ? "1px solid var(--line-soft)" : "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{ fontWeight: 600, fontSize: 14.5 }}>{p.name}
+                <div style={{ fontWeight: 600, fontSize: 14.5 }}>
+                  <Link href={`/platform/partners/${p.id}`}>{p.name}</Link>
                   <span className={"chip " + (p.status === "APPROVED" ? "mint" : "")} style={{ padding: "2px 8px", fontSize: 11, marginLeft: 8 }}>{p.status === "APPROVED" ? "Active" : "Disabled"}</span>
+                  {!p.commissionsEnabled && <span className="chip purple" style={{ padding: "2px 8px", fontSize: 11, marginLeft: 6 }}>Tracking only</span>}
+                  {p.hasDemo && <span className="chip" style={{ padding: "2px 8px", fontSize: 11, marginLeft: 6 }}>Demo account</span>}
                 </div>
-                <div className="muted" style={{ fontSize: 12 }}>{p.contactName} · {p.email} · {p.track === "REFERRAL" ? "Referral" : "Distribution"} · {p.activeAccounts} active acct{p.activeAccounts === 1 ? "" : "s"}</div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  {p.contactName} · {p.email} · {p.track === "REFERRAL" ? "Referral" : "Distribution"} · {p.referredAccounts} referred · {p.activeAccounts} active
+                </div>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 18 }} className="mint-text">{p.rateNow}%</div>
-                <div className="muted" style={{ fontSize: 11 }}>{p.payoutMethod === "CREDIT" ? "credit" : "cash"}{p.customRatePct != null ? " · custom" : ""}</div>
-              </div>
+              {p.commissionsEnabled ? (
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 18 }} className="mint-text">{p.rateNow}%</div>
+                  <div className="muted" style={{ fontSize: 11 }}>{p.payoutMethod === "CREDIT" ? "credit" : "cash"}{p.customRatePct != null ? " · custom" : ""}</div>
+                </div>
+              ) : (
+                <Link className="btn btn-ghost" href={`/platform/partners/${p.id}`} style={{ padding: "6px 12px", fontSize: 12.5 }}>Open →</Link>
+              )}
             </div>
 
             {p.code && (
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                Link: <code style={{ color: "var(--text-1)" }}>{appUrl}/audit?ref={p.code}</code>
+                Tracking link: <code style={{ color: "var(--text-1)" }}>{appUrl}/?ref={p.code}</code>
               </div>
             )}
 
-            <div style={{ display: "flex", gap: 16, fontSize: 12.5, marginTop: 8, flexWrap: "wrap" }}>
-              <span className="muted">Pending <b style={{ color: "var(--text-1)" }}>{usd(p.pendingCents)}</b></span>
-              <span className="muted">Earned <b className="mint-text">{usd(p.earnedCents)}</b></span>
-              <span className="muted">Paid <b style={{ color: "var(--text-1)" }}>{usd(p.paidCents)}</b></span>
-            </div>
+            {p.commissionsEnabled && (
+              <div style={{ display: "flex", gap: 16, fontSize: 12.5, marginTop: 8, flexWrap: "wrap" }}>
+                <span className="muted">Pending <b style={{ color: "var(--text-1)" }}>{usd(p.pendingCents)}</b></span>
+                <span className="muted">Earned <b className="mint-text">{usd(p.earnedCents)}</b></span>
+                <span className="muted">Paid <b style={{ color: "var(--text-1)" }}>{usd(p.paidCents)}</b></span>
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
               <select className="input" value={p.track} disabled={busy === p.id} onChange={(e) => call({ action: "terms", partnerId: p.id, track: e.target.value }, p.id)} style={{ fontSize: 12, padding: "5px 8px" }}>

@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getActiveRole } from "@/lib/auth";
 import { isAdminConfigured } from "@/lib/supabase/admin";
 import { inviteUsers, splitName } from "@/lib/invites";
 import { error, json } from "@/lib/api";
+import { inDemoAccount, DEMO_INVITE_MESSAGE } from "@/lib/demo-shared";
 
 const Body = z.object({
   invitees: z.array(z.object({ email: z.string().email(), name: z.string().max(160).optional() })).min(1).max(25),
@@ -16,7 +17,8 @@ const Body = z.object({
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
-  if (!["GROUP_ADMIN", "PLATFORM_ADMIN"].includes(user.role)) return error("Only group admins can invite here", 403);
+  if (inDemoAccount(user)) return error(DEMO_INVITE_MESSAGE, 403);
+  if (!["GROUP_ADMIN", "PLATFORM_ADMIN"].includes(getActiveRole(user))) return error("Only group admins can invite here", 403);
   if (!user.organizationId) return error("No group assigned", 400);
   if (!isAdminConfigured()) return error("Auth isn't configured yet", 503);
 

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getActiveRole } from "@/lib/auth";
 import { downloadRecording, ensureRecording } from "@/lib/storage";
 import { error } from "@/lib/api";
 
@@ -18,23 +18,23 @@ export async function GET(
 
   const isOwner = session.setterId === user.id;
   const isOfficeAdmin =
-    ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(user.role) &&
+    ["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(getActiveRole(user)) &&
     user.officeId === session.officeId;
-  const isPlatform = user.role === "PLATFORM_ADMIN";
+  const isPlatform = getActiveRole(user) === "PLATFORM_ADMIN";
   // Group leaders may play any call in their organization's offices.
-  const isGroup = Boolean(user.role === "GROUP_ADMIN" && user.organizationId && session.office?.organizationId === user.organizationId);
+  const isGroup = Boolean(getActiveRole(user) === "GROUP_ADMIN" && user.organizationId && session.office?.organizationId === user.organizationId);
   // Call-center managers: senior = any of the center's agent calls; floor = pod only.
   const isCallCenter = Boolean(
     session.callCenterOrgId &&
     user.organizationId &&
     user.organizationId === session.callCenterOrgId &&
-    (user.role === "CALL_CENTER_ADMIN" ||
-      (user.role === "CALL_CENTER_MANAGER" && user.callCenterPodId != null && user.callCenterPodId === session.setter?.callCenterPodId))
+    (getActiveRole(user) === "CALL_CENTER_ADMIN" ||
+      (getActiveRole(user) === "CALL_CENTER_MANAGER" && user.callCenterPodId != null && user.callCenterPodId === session.setter?.callCenterPodId))
   );
   // A Multi Practice Admin may play calls for any office in their assigned set —
   // membership PLUS an org check (fail-closed, matching mpaOfficeIds).
   const isMpa =
-    user.role === "MULTI_PRACTICE_ADMIN" &&
+    getActiveRole(user) === "MULTI_PRACTICE_ADMIN" &&
     Boolean(user.organizationId && session.office?.organizationId === user.organizationId) &&
     Boolean(await prisma.membership.findFirst({ where: { userId: user.id, role: "MULTI_PRACTICE_ADMIN", scopeType: "OFFICE", scopeId: session.officeId } }));
   if (!isOwner && !isOfficeAdmin && !isPlatform && !isGroup && !isCallCenter && !isMpa) return error("Forbidden", 403);

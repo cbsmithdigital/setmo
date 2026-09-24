@@ -140,6 +140,7 @@ export function Sidebar({
   roleLabel,
   initials,
   roles = [],
+  demoRoles = [],
   isAgent = false,
 }: {
   role: string;
@@ -147,6 +148,7 @@ export function Sidebar({
   roleLabel: string;
   initials: string;
   roles?: string[];
+  demoRoles?: string[];
   isAgent?: boolean;
 }) {
   const pathname = usePathname();
@@ -220,7 +222,7 @@ export function Sidebar({
       </nav>
 
       <div className="sb-foot">
-        {roles.length > 1 && <RoleSwitcher roles={roles} activeRole={role} />}
+        {roles.length > 1 && <RoleSwitcher roles={roles} demoRoles={demoRoles} activeRole={role} />}
         <div className="sb-user" role="button" tabIndex={0} onClick={logout} title="Sign out">
           <div className="av">{initials}</div>
           <div style={{ minWidth: 0 }}>

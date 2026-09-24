@@ -20,6 +20,12 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Name is required", 422);
 
+  // A disabled (removed) account must not be able to turn itself back on with a
+  // still-valid session or an old setup link.
+  const current = await prisma.user.findUnique({ where: { id: authUser.id }, select: { status: true } });
+  if (!current) return error("Account not found", 404);
+  if (current.status === "DISABLED") return error("This account has been disabled.", 403);
+
   await prisma.user.update({
     where: { id: authUser.id },
     data: {

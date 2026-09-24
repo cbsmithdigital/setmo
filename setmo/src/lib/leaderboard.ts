@@ -61,7 +61,9 @@ export async function recomputeGlobalLeaderboard(
       status: "SCORED",
       isAudit: false,
       callCenterOrgId: null,
-      office: { isProspect: false },
+      // Demo / test accounts never rank against customers (see getGlobalLeaderboard
+      // for the demo-only board their own users see instead).
+      office: { isProspect: false, isDemo: false },
       evaluation: { isNot: null },
     },
     include: { evaluation: { select: { overallScore: true } } },

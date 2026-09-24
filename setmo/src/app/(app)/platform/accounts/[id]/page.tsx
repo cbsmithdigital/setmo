@@ -19,8 +19,26 @@ export default async function PlatformAccountDetailPage({ params }: { params: Pr
       <div className="topbar">
         <div className="tb-greet">
           <Link className="btn btn-ghost" href="/platform/accounts" style={{ marginBottom: 12, padding: "7px 14px", fontSize: 13.5 }}>← Accounts</Link>
-          <h1>{a.name}</h1>
-          <p>{a.kind === "group" ? "Group / DSO" : "Single practice"} · {a.locations.length} location{a.locations.length === 1 ? "" : "s"} · {a.users.length} users</p>
+          <h1>
+            {a.name}
+            {a.isDemo && <span className="chip purple" style={{ fontSize: 12, marginLeft: 10, verticalAlign: "middle" }}>Demo account</span>}
+          </h1>
+          <p>
+            {a.kind === "group" ? "Group / DSO" : "Single practice"} · {a.locations.length} location{a.locations.length === 1 ? "" : "s"} · {a.users.length} users
+            {a.referral && (
+              <>
+                {" · referred by "}
+                <Link href={`/platform/partners/${a.referral.partnerId}`}>{a.referral.partnerName}</Link>
+                {a.referral.repName ? ` (${a.referral.repName})` : ""}
+                {a.referral.at ? ` on ${new Date(a.referral.at).toLocaleDateString()}` : ""}
+              </>
+            )}
+          </p>
+          {a.isDemo && (
+            <p className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>
+              Kept out of revenue, platform metrics and the leaderboard. Its users can&apos;t buy anything — top it up with &quot;Grant minutes&quot; below.
+            </p>
+          )}
         </div>
       </div>
 

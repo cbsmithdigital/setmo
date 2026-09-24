@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { minuteQuote, type PricingConfig } from "@/lib/pricing";
 import { getPricingConfig, getPlatformConfig } from "@/lib/config";
 import { fullName } from "@/lib/format";
+import { DEMO_OFFSET_PREFIX, DEMO_LOW_BALANCE_MIN } from "@/lib/demo-shared";
 
 // Internal financials for the platform/super-admin console. Two framings drive
 // everything (per the spec): (1) the same minute is COGS for a paying account but
@@ -46,12 +47,14 @@ function bucketMinutes(sessions: SessionLite[], isProspect: (officeId: string) =
 
 export async function getPlatformOverview() {
   const [offices, bundles, orgBundles, sessions, audits] = await Promise.all([
-    prisma.office.findMany({ select: { id: true, organizationId: true, isProspect: true, subscription: { select: { status: true } } } }),
-    prisma.conversationBundle.findMany({ select: { officeId: true, minutesPurchased: true, amountCents: true, purchasedAt: true } }),
+    // Demo / test accounts (partner demos, the marketing demo, internal test
+    // offices) are left out of every business number below.
+    prisma.office.findMany({ where: { isDemo: false }, select: { id: true, organizationId: true, isProspect: true, subscription: { select: { status: true } } } }),
+    prisma.conversationBundle.findMany({ where: { office: { isDemo: false } }, select: { officeId: true, minutesPurchased: true, amountCents: true, purchasedAt: true } }),
     // Group/DSO coach-token purchases — a second token-revenue stream.
-    prisma.orgTokenBundle.findMany({ select: { minutesPurchased: true, amountCents: true, purchasedAt: true } }),
-    prisma.session.findMany({ where: { durationSeconds: { not: null }, kind: { not: "LIVE" } }, select: { officeId: true, durationSeconds: true, isAudit: true, startedAt: true } }),
-    prisma.setterAudit.findMany({ select: { status: true, office: { select: { isProspect: true } } } }),
+    prisma.orgTokenBundle.findMany({ where: { organization: { isDemo: false } }, select: { minutesPurchased: true, amountCents: true, purchasedAt: true } }),
+    prisma.session.findMany({ where: { durationSeconds: { not: null }, kind: { not: "LIVE" }, office: { isDemo: false } }, select: { officeId: true, durationSeconds: true, isAudit: true, startedAt: true } }),
+    prisma.setterAudit.findMany({ where: { office: { isDemo: false } }, select: { status: true, office: { select: { isProspect: true } } } }),
   ]);
   const cfg = await getPricingConfig();
   const orgCashOf = (b: { amountCents: number | null }) => (b.amountCents ?? 0) / 100;
@@ -130,18 +133,18 @@ export async function getPlatformOverview() {
 }
 
 // ---- per-office stats (shared by directory + detail) ----
-type OfficeStat = { id: string; name: string; city: string | null; organizationId: string | null; accountId: string; accessActive: boolean; purchasedMin: number; consumedMin: number; balanceMin: number; burnPerDay: number; daysToEmpty: number | null; cashLifetime: number; lastActivity: Date | null; hasCard: boolean; recurringUsageMin: number; renewsOn: Date | null; contactEmail: string | null };
+type OfficeStat = { id: string; name: string; city: string | null; organizationId: string | null; accountId: string; isDemo: boolean; accessActive: boolean; purchasedMin: number; consumedMin: number; balanceMin: number; burnPerDay: number; daysToEmpty: number | null; cashLifetime: number; lastActivity: Date | null; hasCard: boolean; recurringUsageMin: number; renewsOn: Date | null; contactEmail: string | null };
 
 async function officeStats(where: object): Promise<OfficeStat[]> {
   const offices = await prisma.office.findMany({
     where,
-    select: { id: true, name: true, city: true, organizationId: true, stripeCustomerId: true, subscription: { select: { status: true, usageMinutes: true, currentPeriodEnd: true } } },
+    select: { id: true, name: true, city: true, organizationId: true, isDemo: true, stripeCustomerId: true, subscription: { select: { status: true, usageMinutes: true, currentPeriodEnd: true } } },
   });
   const ids = offices.map((o) => o.id);
   if (ids.length === 0) return [];
   const cfg = await getPricingConfig();
   const [bundles, sessions, admins] = await Promise.all([
-    prisma.conversationBundle.findMany({ where: { officeId: { in: ids } }, select: { officeId: true, minutesPurchased: true, amountCents: true } }),
+    prisma.conversationBundle.findMany({ where: { officeId: { in: ids } }, select: { officeId: true, minutesPurchased: true, amountCents: true, stripePaymentIntent: true } }),
     // Exclude sessions metered against another pool (group/DSO coach organizationId,
     // and call-center agents' callCenterOrgId) so they don't inflate a served
     // office's burn/balance — the office never bought those minutes.
@@ -155,8 +158,12 @@ async function officeStats(where: object): Promise<OfficeStat[]> {
   return offices.map((o) => {
     const ob = bundles.filter((b) => b.officeId === o.id);
     const os = sessions.filter((s) => s.officeId === o.id);
-    const purchasedMin = ob.reduce((a, b) => a + b.minutesPurchased, 0);
-    const consumedMin = os.reduce((a, s) => a + (s.durationSeconds ?? 0), 0) / 60;
+    // A demo account's offset row cancels its seeded call history. Take it out of
+    // BOTH sides so purchased shows real grants and consumed shows real use; the
+    // balance is unchanged.
+    const offsetMin = ob.filter((b) => b.stripePaymentIntent?.startsWith(DEMO_OFFSET_PREFIX)).reduce((a, b) => a + b.minutesPurchased, 0);
+    const purchasedMin = ob.reduce((a, b) => a + b.minutesPurchased, 0) - offsetMin;
+    const consumedMin = os.reduce((a, s) => a + (s.durationSeconds ?? 0), 0) / 60 - offsetMin;
     const last30 = os.filter((s) => s.startedAt >= since30).reduce((a, s) => a + (s.durationSeconds ?? 0), 0) / 60;
     const burnPerDay = last30 / 30;
     const balanceMin = purchasedMin - consumedMin;
@@ -166,6 +173,7 @@ async function officeStats(where: object): Promise<OfficeStat[]> {
       city: o.city,
       organizationId: o.organizationId,
       accountId: o.organizationId ?? o.id,
+      isDemo: o.isDemo,
       accessActive: o.subscription?.status === "ACTIVE",
       purchasedMin: Math.round(purchasedMin),
       consumedMin: Math.round(consumedMin),
@@ -202,27 +210,50 @@ export async function getPlatformAccounts() {
     };
   };
 
-  const accounts: { id: string; name: string; kind: "group" | "single"; type: string; locations: number; activeAccess: number; mrr: number; balanceMin: number; cashLifetime: number; burnPerDay: number; daysToEmpty: number | null; lastActivity: Date | null }[] = [];
+  const accounts: { id: string; name: string; kind: "group" | "single"; type: string; isDemo: boolean; locations: number; activeAccess: number; mrr: number; balanceMin: number; cashLifetime: number; burnPerDay: number; daysToEmpty: number | null; lastActivity: Date | null }[] = [];
+
+  // Demo accounts stay listed (so they can be managed and topped up) but sort to
+  // the bottom and are marked, and the page leaves them out of its totals.
+  const allDemo = (ids: string[]) => ids.every((id) => byId.get(id)?.isDemo);
 
   for (const org of orgs) {
     const ids = offices.filter((o) => o.organizationId === org.id).map((o) => o.id);
     if (ids.length === 0) continue;
     const r = roll(ids);
-    accounts.push({ id: org.id, name: org.name, kind: "group", type: ids.length > 1 ? "Group / DSO" : "Group", ...r, daysToEmpty: r.burnPerDay > 0 ? Math.round(r.balanceMin / r.burnPerDay) : null });
+    accounts.push({ id: org.id, name: org.name, kind: "group", type: ids.length > 1 ? "Group / DSO" : "Group", isDemo: allDemo(ids), ...r, daysToEmpty: r.burnPerDay > 0 ? Math.round(r.balanceMin / r.burnPerDay) : null });
   }
   for (const o of offices.filter((x) => !x.organizationId)) {
     const r = roll([o.id]);
     const st = byId.get(o.id);
-    accounts.push({ id: o.id, name: st?.name ?? "Practice", kind: "single", type: "Single practice", ...r, daysToEmpty: r.burnPerDay > 0 ? Math.round(r.balanceMin / r.burnPerDay) : null });
+    accounts.push({ id: o.id, name: st?.name ?? "Practice", kind: "single", type: "Single practice", isDemo: Boolean(st?.isDemo), ...r, daysToEmpty: r.burnPerDay > 0 ? Math.round(r.balanceMin / r.burnPerDay) : null });
   }
-  return accounts.sort((a, b) => b.mrr - a.mrr || b.cashLifetime - a.cashLifetime);
+  return accounts.sort((a, b) => Number(a.isDemo) - Number(b.isDemo) || b.mrr - a.mrr || b.cashLifetime - a.cashLifetime);
 }
 
 export async function getPlatformAccountDetail(id: string) {
-  const org = await prisma.organization.findUnique({ where: { id }, select: { id: true, name: true, type: true } });
+  const org = await prisma.organization.findUnique({ where: { id }, select: { id: true, name: true, type: true, isDemo: true, referredByPartnerId: true, referralCode: true, referredAt: true } });
   const officeWhere = org ? { organizationId: org.id, isProspect: false } : { id, isProspect: false };
   const locations = await officeStats(officeWhere);
   if (locations.length === 0 && !org) return null;
+
+  // Who referred this account (the office's own attribution, else its org's) and
+  // through which code — so a partner's rep shows by name.
+  const office = org ? null : await prisma.office.findUnique({ where: { id }, select: { referredByPartnerId: true, referralCode: true, referredAt: true } });
+  const refPartnerId = office?.referredByPartnerId ?? org?.referredByPartnerId ?? null;
+  const refCode = office?.referralCode ?? org?.referralCode ?? null;
+  let referral: { partnerId: string; partnerName: string; code: string | null; repName: string | null; at: Date | null } | null = null;
+  if (refPartnerId) {
+    const partner = await prisma.partner.findUnique({ where: { id: refPartnerId }, select: { name: true, codes: { select: { code: true, memberUserId: true } } } });
+    const repId = partner?.codes.find((c) => c.code === refCode)?.memberUserId ?? null;
+    const rep = repId ? await prisma.user.findUnique({ where: { id: repId }, select: { firstName: true, lastName: true, email: true } }) : null;
+    referral = {
+      partnerId: refPartnerId,
+      partnerName: partner?.name ?? "Unknown partner",
+      code: refCode,
+      repName: rep ? fullName(rep.firstName, rep.lastName) || rep.email : null,
+      at: office?.referredAt ?? org?.referredAt ?? null,
+    };
+  }
 
   const officeIds = locations.map((l) => l.id);
   const [users, recentBundles] = await Promise.all([
@@ -232,7 +263,13 @@ export async function getPlatformAccountDetail(id: string) {
       where: org ? { OR: [{ officeId: { in: officeIds } }, { organizationId: org.id, officeId: null }] } : { officeId: { in: officeIds } },
       select: { id: true, firstName: true, lastName: true, email: true, role: true, status: true, officeId: true },
     }),
-    prisma.conversationBundle.findMany({ where: { officeId: { in: officeIds } }, orderBy: { purchasedAt: "desc" }, take: 12, select: { officeId: true, minutesPurchased: true, amountCents: true, purchasedAt: true } }),
+    // The demo builder's internal balance-offset row is bookkeeping, not a purchase.
+    prisma.conversationBundle.findMany({
+      where: { officeId: { in: officeIds }, OR: [{ stripePaymentIntent: null }, { NOT: { stripePaymentIntent: { startsWith: DEMO_OFFSET_PREFIX } } }] },
+      orderBy: { purchasedAt: "desc" },
+      take: 12,
+      select: { officeId: true, minutesPurchased: true, amountCents: true, purchasedAt: true },
+    }),
   ]);
   const officeName = new Map(locations.map((l) => [l.id, l.name]));
   const cfg = await getPricingConfig();
@@ -241,6 +278,8 @@ export async function getPlatformAccountDetail(id: string) {
     id,
     name: org?.name ?? locations[0]?.name ?? "Account",
     kind: org ? ("group" as const) : ("single" as const),
+    isDemo: locations.length > 0 ? locations.every((l) => l.isDemo) : Boolean(org?.isDemo),
+    referral,
     mrr: r2(locations.filter((l) => l.accessActive).length * cfg.accessMonthly),
     balanceMin: locations.reduce((a, l) => a + l.balanceMin, 0),
     cashLifetime: r2(locations.reduce((a, l) => a + l.cashLifetime, 0)),
@@ -253,21 +292,32 @@ export async function getPlatformAccountDetail(id: string) {
 // ---- alerts (push, don't make them dig) ----
 export async function getPlatformAlerts() {
   const cfg = await getPlatformConfig();
-  const stats = await officeStats({ isProspect: false });
+  const all = await officeStats({ isProspect: false });
+  // Demo accounts idle between demos and their balances aren't a liability, so
+  // they're left out of everything EXCEPT low balance — that's how the super-admin
+  // knows to top a demo account up.
+  const stats = all.filter((s) => !s.isDemo);
   const idleCut = Date.now() - cfg.alertZeroUsageDays * 86400_000;
 
-  const lowBalance = stats
+  const realLow = stats
     .filter((s) => s.balanceMin > 0 && s.daysToEmpty != null && s.daysToEmpty <= cfg.alertLowBalanceDays)
-    .sort((a, b) => (a.daysToEmpty ?? 0) - (b.daysToEmpty ?? 0))
-    .map((s) => ({ accountId: s.accountId, name: s.name, daysToEmpty: s.daysToEmpty, balanceMin: s.balanceMin }));
+    .sort((a, b) => (a.daysToEmpty ?? 0) - (b.daysToEmpty ?? 0));
+  // A demo account is used in bursts, so a burn-rate forecast misses it: alert on
+  // the balance itself, including one already at or below zero. Only demo offices
+  // that run on their own granted minutes — a call-center demo's served practices
+  // never hold a balance. Real customers always list first.
+  const demoLow = all
+    .filter((s) => s.isDemo && s.purchasedMin > 0 && s.balanceMin <= DEMO_LOW_BALANCE_MIN)
+    .sort((a, b) => a.balanceMin - b.balanceMin);
+  const lowBalance = [...realLow, ...demoLow].map((s) => ({ officeId: s.id, accountId: s.accountId, name: s.name, daysToEmpty: s.daysToEmpty, balanceMin: s.balanceMin, isDemo: s.isDemo }));
   const idle = stats
     .filter((s) => s.accessActive && (!s.lastActivity || s.lastActivity.getTime() < idleCut))
-    .map((s) => ({ accountId: s.accountId, name: s.name, lastActivity: s.lastActivity }));
+    .map((s) => ({ officeId: s.id, accountId: s.accountId, name: s.name, lastActivity: s.lastActivity }));
   const topBurners = [...stats]
     .filter((s) => s.burnPerDay > 0)
     .sort((a, b) => b.burnPerDay - a.burnPerDay)
     .slice(0, 5)
-    .map((s) => ({ accountId: s.accountId, name: s.name, burnPerDay: s.burnPerDay }));
+    .map((s) => ({ officeId: s.id, accountId: s.accountId, name: s.name, burnPerDay: s.burnPerDay }));
 
   const outstandingMin = stats.reduce((a, s) => a + Math.max(0, s.balanceMin), 0);
   const liabilityTotal = outstandingMin * MINUTE_COST_USD;
@@ -286,9 +336,9 @@ export async function getPlatformAlerts() {
 export async function getPlatformProjections() {
   const cfg = await getPlatformConfig();
   const [stats, orgs, audits] = await Promise.all([
-    officeStats({ isProspect: false }),
+    officeStats({ isProspect: false, isDemo: false }),
     prisma.organization.findMany({ select: { id: true, name: true } }),
-    prisma.setterAudit.findMany({ select: { status: true, office: { select: { isProspect: true } } } }),
+    prisma.setterAudit.findMany({ where: { office: { isDemo: false } }, select: { status: true, office: { select: { isProspect: true } } } }),
   ]);
   const orgName = new Map(orgs.map((o) => [o.id, o.name]));
 

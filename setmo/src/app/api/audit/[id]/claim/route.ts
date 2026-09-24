@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { cookies } from "next/headers";
+import { REF_COOKIE } from "@/lib/referral-cookie";
 import { loadAuditByCookie } from "@/lib/audit-auth";
 import { isAdminConfigured } from "@/lib/supabase/admin";
 import { provisionAccount } from "@/lib/provision";
@@ -25,6 +27,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     email: audit.email,
     password: parsed.data.password,
     claimOfficeId: audit.officeId, // flip the prospect office to a real account
+    // A partner link followed since the audit credits it, if the audit had no partner.
+    cookieReferralCode: (await cookies()).get(REF_COOKIE)?.value ?? null,
   });
   if (!res.ok) return error(res.error, res.code);
   return json({ ok: true, email: audit.email });

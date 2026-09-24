@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getActiveRole } from "@/lib/auth";
 import { error, json } from "@/lib/api";
 
 const Body = z.object({ enabled: z.boolean() });
@@ -19,7 +19,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const canManage =
     session.setterId === user.id ||
-    (["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(user.role) && user.officeId === session.officeId);
+    (["OFFICE_ADMIN", "GROUP_ADMIN", "PLATFORM_ADMIN"].includes(getActiveRole(user)) && user.officeId === session.officeId);
   if (!canManage) return error("Forbidden", 403);
 
   const parsed = Body.safeParse(await req.json().catch(() => null));

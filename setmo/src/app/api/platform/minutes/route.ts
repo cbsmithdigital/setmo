@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getPlatformActor } from "@/lib/auth";
 import { logAdminAction } from "@/lib/platform";
+import { evaluateMinuteThresholds } from "@/lib/usage";
 import { error, json } from "@/lib/api";
 
 const Body = z.object({ officeId: z.string().min(1), minutes: z.number().int().min(1).max(100000), note: z.string().max(300).optional().nullable() });
@@ -22,5 +23,8 @@ export async function POST(req: Request) {
     data: { officeId, minutesPurchased: minutes, minutesRemaining: minutes, hours: Math.round(minutes / 60), amountCents: 0 },
   });
   await logAdminAction(actor, { action: "minutes.grant", summary: `Granted ${minutes.toLocaleString()} comp minutes to ${office.name}`, targetType: "office", targetId: officeId, detail: { minutes, note: note ?? null } });
+  // Re-arm the low-balance alerts now, not at the next call or the daily sweep —
+  // otherwise a topped-up account stays "already alerted" and the next dip is silent.
+  await evaluateMinuteThresholds(officeId).catch(() => {});
   return json({ ok: true });
 }

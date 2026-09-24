@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/db";
+import { cleanRefCode, refCodesFromCookie } from "@/lib/referral-cookie";
 
 // Partner / distribution program. Two tracks (Referral, Distribution), recurring
 // rev-share on access + minutes, cash by default or credit (+5%).
@@ -79,6 +80,7 @@ export async function activeAccountCount(partnerId: string): Promise<number> {
   return prisma.office.count({
     where: {
       isProspect: false,
+      isDemo: false,
       subscription: { status: "ACTIVE" },
       OR: [{ referredByPartnerId: partnerId }, { organization: { referredByPartnerId: partnerId } }],
     },
@@ -96,7 +98,10 @@ export type PartnerRow = {
   audience: string | null;
   payoutMethod: Payout;
   customRatePct: number | null;
+  commissionsEnabled: boolean;
+  hasDemo: boolean;
   code: string | null;
+  referredAccounts: number;
   activeAccounts: number;
   rateNow: number;
   pendingCents: number;
@@ -109,9 +114,10 @@ export async function listPartners(): Promise<PartnerRow[]> {
   const partners = await prisma.partner.findMany({ orderBy: [{ status: "asc" }, { createdAt: "desc" }], include: { codes: true } });
   const out: PartnerRow[] = [];
   for (const p of partners) {
-    const [active, sums] = await Promise.all([
+    const [active, sums, referred] = await Promise.all([
       activeAccountCount(p.id),
       prisma.partnerCommission.groupBy({ by: ["status"], where: { partnerId: p.id }, _sum: { commissionCents: true } }),
+      prisma.office.count({ where: { isDemo: false, OR: [{ referredByPartnerId: p.id }, { organization: { referredByPartnerId: p.id } }] } }),
     ]);
     const sumOf = (s: string) => sums.find((x) => x.status === s)?._sum.commissionCents ?? 0;
     out.push({
@@ -125,7 +131,11 @@ export async function listPartners(): Promise<PartnerRow[]> {
       audience: p.audience,
       payoutMethod: p.payoutMethod as Payout,
       customRatePct: p.customRatePct,
-      code: p.codes[0]?.code ?? null,
+      commissionsEnabled: p.commissionsEnabled,
+      hasDemo: Boolean(p.demoOrganizationId),
+      // The partner's own code, not a rep's.
+      code: (p.codes.find((c) => !c.memberUserId) ?? p.codes[0])?.code ?? null,
+      referredAccounts: referred,
       activeAccounts: active,
       rateNow: effectiveRatePct({ track: p.track as Track, customRatePct: p.customRatePct, payoutMethod: p.payoutMethod as Payout }, active),
       pendingCents: sumOf("PENDING"),
@@ -137,10 +147,69 @@ export async function listPartners(): Promise<PartnerRow[]> {
   return out;
 }
 
+/** A referral code as stored: lowercase letters, digits and dashes only. Links
+ *  get pasted into texts and emails, which tack on punctuation ("teamcare."), and
+ *  a code that doesn't match exactly is silently unattributed. */
+export function normalizeRefCode(code: string | null | undefined): string | null {
+  return cleanRefCode(code);
+}
+
+// Consumer / ISP mail domains. A partner on one of these shares its domain with
+// countless unrelated practices, so the "same domain as the partner" self-referral
+// check must not apply to it.
+const PUBLIC_EMAIL_DOMAINS = new Set([
+  "gmail.com", "googlemail.com", "yahoo.com", "ymail.com", "rocketmail.com", "yahoo.co.uk", "yahoo.ca",
+  "outlook.com", "hotmail.com", "hotmail.co.uk", "live.com", "msn.com", "passport.com",
+  "icloud.com", "me.com", "mac.com", "aol.com", "aim.com", "proton.me", "protonmail.com", "pm.me",
+  "gmx.com", "gmx.us", "mail.com", "zoho.com", "zohomail.com", "fastmail.com", "hey.com", "yandex.com",
+  "comcast.net", "att.net", "sbcglobal.net", "bellsouth.net", "verizon.net", "cox.net", "charter.net",
+  "spectrum.net", "earthlink.net", "optonline.net", "frontier.com", "frontiernet.net", "windstream.net",
+  "centurylink.net", "q.com", "juno.com", "netzero.net", "roadrunner.com", "twc.com", "rr.com",
+  "shaw.ca", "rogers.com", "sympatico.ca", "telus.net", "videotron.ca",
+]);
+
 /** Resolve a referral code to its partner (for attribution at signup/assessment). */
 export async function partnerIdForCode(code: string): Promise<string | null> {
-  const row = await prisma.partnerCode.findUnique({ where: { code: code.trim().toLowerCase() }, select: { partnerId: true, partner: { select: { status: true } } } });
+  const normalized = normalizeRefCode(code);
+  if (!normalized) return null;
+  const row = await prisma.partnerCode.findUnique({ where: { code: normalized }, select: { partnerId: true, partner: { select: { status: true } } } });
   return row && row.partner.status === "APPROVED" ? row.partnerId : null;
+}
+
+/**
+ * Resolve the attribution for a new account: the code from the link that brought
+ * them here, else the newest code in the tracking cookie that belongs to a real
+ * partner (codes that match nobody — another site's ?ref= — are skipped, not
+ * fatal). Returns null (no attribution) when the person signing up belongs to the
+ * referring partner themselves — a partner or rep trying their own link must not
+ * become a "referred practice".
+ */
+export async function resolveReferral(opts: { code?: string | null; cookieCode?: string | null; email: string }): Promise<{ partnerId: string; code: string } | null> {
+  const candidates = [normalizeRefCode(opts.code), ...refCodesFromCookie(opts.cookieCode)].filter((c): c is string => Boolean(c));
+  let code: string | null = null;
+  let partnerId: string | null = null;
+  for (const c of new Set(candidates)) {
+    partnerId = await partnerIdForCode(c);
+    if (partnerId) {
+      code = c;
+      break;
+    }
+  }
+  if (!partnerId || !code) return null;
+
+  const email = opts.email.trim().toLowerCase();
+  const [partner, partnerUser] = await Promise.all([
+    prisma.partner.findUnique({ where: { id: partnerId }, select: { email: true } }),
+    prisma.user.findFirst({ where: { email, partnerId: { not: null } }, select: { id: true } }),
+  ]);
+  if (partnerUser) return null;
+  const domain = (e: string | null | undefined) => (e && e.includes("@") ? e.split("@")[1].toLowerCase() : null);
+  const partnerDomain = domain(partner?.email);
+  if (partnerDomain && !PUBLIC_EMAIL_DOMAINS.has(partnerDomain) && domain(email) === partnerDomain) {
+    console.info(`[referral] not crediting ${code}: ${email} shares the partner's email domain`);
+    return null;
+  }
+  return { partnerId, code };
 }
 
 // ---- commission accrual (fed by the Stripe webhook) ----
@@ -158,8 +227,10 @@ export async function accrueCommission(opts: { officeId: string; kind: "ACCESS" 
   // Office-level referral wins; otherwise inherit the group/DSO's referring partner.
   const referrerId = office?.referredByPartnerId ?? office?.organization?.referredByPartnerId ?? null;
   if (!referrerId) return;
-  const partner = await prisma.partner.findUnique({ where: { id: referrerId }, select: { id: true, status: true, track: true, customRatePct: true, payoutMethod: true } });
+  const partner = await prisma.partner.findUnique({ where: { id: referrerId }, select: { id: true, status: true, track: true, customRatePct: true, payoutMethod: true, commissionsEnabled: true } });
   if (!partner || partner.status !== "APPROVED") return;
+  // A tracking-only partner has referrals recorded but earns nothing (yet).
+  if (!partner.commissionsEnabled) return;
   if (await prisma.partnerCommission.findFirst({ where: { stripeRef: opts.stripeRef } })) return; // idempotent
 
   const active = await activeAccountCount(partner.id);

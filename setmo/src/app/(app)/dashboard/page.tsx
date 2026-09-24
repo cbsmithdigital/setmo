@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getSetterHome, getSetterOnboarding } from "@/lib/queries";
 import { OnboardingChecklist } from "@/components/office/OnboardingChecklist";
@@ -47,6 +48,8 @@ export default async function DashboardPage() {
   // Call-center phone agents span many offices (no single officeId) — show their
   // aggregate agent home instead of the single-office setter dashboard.
   if (user.callCenterPodId) return <AgentHome userId={user.id} first={user.firstName ?? "there"} />;
+  // No practice to show (e.g. a partner with no demo access yet) — send them home.
+  if (!user.officeId) redirect("/go");
   const [d, insight, goals, onboarding] = await Promise.all([getSetterHome(user), getInsight("SETTER", user.id), listGoalsForSetter(user.id), getSetterOnboarding(user.id)]);
 
   return (

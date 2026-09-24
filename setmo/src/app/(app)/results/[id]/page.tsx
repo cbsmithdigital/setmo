@@ -338,9 +338,13 @@ export default async function ResultsPage({
               <div className="muted" style={{ fontSize: 13, marginBottom: r.transcript.length ? 18 : 0 }}>
                 Live-call audio stays in your phone system — the transcript below is PII-scrubbed.
               </div>
-            ) : (
+            ) : r.audioPending ? (
               <div className="muted" style={{ fontSize: 13, marginBottom: r.transcript.length ? 18 : 0 }}>
                 The recording will appear here once it finishes processing.
+              </div>
+            ) : (
+              <div className="muted" style={{ fontSize: 13, marginBottom: r.transcript.length ? 18 : 0 }}>
+                No recording for this call — the transcript is below.
               </div>
             )}
 

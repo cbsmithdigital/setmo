@@ -105,12 +105,15 @@ export async function createPod(orgId: string, name: string) {
 
 /** Senior admin: add a served practice (office) to a pod, IMPLANT enabled. */
 export async function createServedOffice(opts: { orgId: string; podId: string; name: string; city?: string }) {
-  const pod = await prisma.pod.findFirst({ where: { id: opts.podId, organizationId: opts.orgId }, select: { id: true } });
+  const pod = await prisma.pod.findFirst({ where: { id: opts.podId, organizationId: opts.orgId }, select: { id: true, organization: { select: { isDemo: true } } } });
   if (!pod) return { ok: false as const, error: "Pod not found in this call center" };
   // The served practice's own wording — a call center books for general,
   // pediatric and specialty practices, not only implant centers.
   const name = opts.name.trim();
-  const office = await prisma.office.create({ data: { name, city: opts.city?.trim() || null, isProspect: false, servedByPodId: opts.podId, offerFraming: defaultOfferFraming(name) } });
+  // A practice added inside a demo call center is demo too (kept out of metrics).
+  const office = await prisma.office.create({
+    data: { name, city: opts.city?.trim() || null, isProspect: false, isDemo: pod.organization.isDemo, servedByPodId: opts.podId, offerFraming: defaultOfferFraming(name) },
+  });
   await seedOfficeServices(office.id);
   return { ok: true as const, officeId: office.id };
 }

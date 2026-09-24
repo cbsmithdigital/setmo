@@ -184,6 +184,43 @@ export async function sendMinuteLowEmail(opts: { to: string[]; practiceName: str
   return sent;
 }
 
+/** A demo account is running low — tells the SetMo team to top it up. Demo
+ *  accounts can't buy anything, so this goes to platform admins, not the demo's
+ *  own users, and points at the platform console instead of Billing. */
+export async function sendDemoMinuteLowEmail(opts: { to: string[]; practiceName: string; officeId: string; remaining: number }): Promise<number> {
+  const resend = getResend();
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!resend || !from || opts.to.length === 0) return 0;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://setmo.growdental.ai";
+  const console_ = `${appUrl}/platform/accounts`;
+  const remaining = Math.max(0, opts.remaining);
+
+  let sent = 0;
+  for (const to of opts.to) {
+    try {
+      await resend.emails.send({
+        from,
+        to,
+        subject: `Demo account low: ${opts.practiceName} has ${remaining} minutes left`,
+        html: `
+          <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
+            <h2 style="color:#7c3aed">A demo account needs minutes</h2>
+            <p><strong>${opts.practiceName}</strong> is a demo account and is down to <strong>${remaining} minutes</strong>${opts.remaining < 0 ? " (it's overdrawn)" : ""}. Demo calls stop once it runs out.</p>
+            <p style="margin:26px 0">
+              <a href="${console_}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">Open accounts to add minutes</a>
+            </p>
+            <p style="color:#64708a;font-size:13px">Demo usage is real voice-agent spend but isn't counted in revenue or platform metrics.</p>
+          </div>
+        `,
+      });
+      sent++;
+    } catch {
+      /* skip a bad address, keep going */
+    }
+  }
+  return sent;
+}
+
 /** Group/DSO Setty Advisor wallet is low — prompt the leader to add a card / buy more. */
 export async function sendGroupCoachLowEmail(opts: { to: string[]; orgName: string; remaining: number }): Promise<number> {
   const resend = getResend();
@@ -265,18 +302,25 @@ export async function sendAuditApprovalRequest(opts: { practiceName: string; ema
 }
 
 /** Invite a partner (or rep) to set up their SetMo partner-portal login. */
-export async function sendPartnerInvite(opts: { to: string; link: string; partnerName: string; isRep?: boolean }): Promise<boolean> {
+export async function sendPartnerInvite(opts: { to: string; link: string; partnerName: string; isRep?: boolean; trackingOnly?: boolean }): Promise<boolean> {
   const resend = getResend();
   const from = process.env.RESEND_FROM_EMAIL;
   if (!resend || !from) return false;
+  // A tracking-only partner has no commission deal yet, so nothing mentions earnings.
+  const repBody = opts.trackingOnly
+    ? "Set up your login to get your own tracking link, see the practices you've brought in, and practise with the SetMo demo account."
+    : "Set up your login to get your referral link and track your earnings.";
+  const adminBody = opts.trackingOnly
+    ? `Set up your login to get ${opts.partnerName}'s tracking link, see every practice you refer, add your sales reps, and explore SetMo in your own demo account.`
+    : `${opts.partnerName} is approved. Set up your login to grab your referral link, track referred accounts, and see your earnings.`;
   await resend.emails.send({
     from,
     to: opts.to,
-    subject: opts.isRep ? `Join ${opts.partnerName} on the SetMo partner program` : `Your SetMo partner account is approved 🎉`,
+    subject: opts.isRep ? `Join ${opts.partnerName} on SetMo` : opts.trackingOnly ? `Your SetMo partner login for ${opts.partnerName}` : `Your SetMo partner account is approved 🎉`,
     html: `
       <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
-        <h2 style="color:#7c3aed">${opts.isRep ? `You're on the ${opts.partnerName} partner team` : "Welcome to the SetMo partner program"}</h2>
-        <p>${opts.isRep ? "Set up your login to get your referral link and track your earnings." : `${opts.partnerName} is approved. Set up your login to grab your referral link, track referred accounts, and see your earnings.`}</p>
+        <h2 style="color:#7c3aed">${opts.isRep ? `You're on the ${opts.partnerName} team` : "Welcome to the SetMo partner program"}</h2>
+        <p>${opts.isRep ? repBody : adminBody}</p>
         <p style="margin:28px 0"><a href="${opts.link}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">Set up your partner login</a></p>
         <p style="color:#64708a;font-size:13px">If the button doesn't work, paste this link:<br>${opts.link}</p>
       </div>

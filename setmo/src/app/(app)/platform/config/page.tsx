@@ -8,14 +8,23 @@ import { SERVICE_META, SERVICE_ORDER } from "@/lib/service-meta";
 
 export default async function PlatformConfigPage() {
   await requireRole("PLATFORM_ADMIN"); // Super-Admin only
-  const [config, agents, officeCounts, sessionCounts, pilotRows, offices] = await Promise.all([
+  const [config, agents, officeCounts, sessionCounts, pilotRows, officeRows] = await Promise.all([
     getPlatformConfig(),
     prisma.agent.findMany({ select: { serviceType: true, status: true } }),
-    prisma.officeService.groupBy({ by: ["serviceType"], where: { enabled: true }, _count: true }),
-    prisma.session.groupBy({ by: ["serviceType"], where: { kind: "PRACTICE", status: "SCORED" }, _count: true }),
-    prisma.officeService.findMany({ where: { pilot: true }, select: { serviceType: true, officeId: true, office: { select: { name: true } } } }),
-    prisma.office.findMany({ where: { isProspect: false }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    // Real accounts only — demo / test offices don't count toward adoption.
+    prisma.officeService.groupBy({ by: ["serviceType"], where: { enabled: true, office: { isDemo: false } }, _count: true }),
+    prisma.session.groupBy({ by: ["serviceType"], where: { kind: "PRACTICE", status: "SCORED", office: { isDemo: false } }, _count: true }),
+    prisma.officeService.findMany({ where: { pilot: true }, select: { serviceType: true, officeId: true, office: { select: { name: true, isDemo: true, organization: { select: { name: true } } } } } }),
+    prisma.office.findMany({ where: { isProspect: false }, select: { id: true, name: true, isDemo: true, organization: { select: { name: true } } }, orderBy: { name: "asc" } }),
   ]);
+  // Every partner demo pilots New patient under the same practice names, so demo
+  // offices are labelled — and listed after the real ones in the picker.
+  const label = (o: { name: string; isDemo: boolean; organization: { name: string } | null }) =>
+    o.isDemo ? `${o.name} (demo${o.organization ? ` · ${o.organization.name}` : ""})` : o.name;
+  const offices = officeRows
+    .map((o) => ({ id: o.id, name: label(o), isDemo: o.isDemo }))
+    .sort((a, b) => Number(a.isDemo) - Number(b.isDemo))
+    .map(({ id, name }) => ({ id, name }));
 
   const statusBy = new Map(agents.map((a) => [a.serviceType, a.status]));
   const officesBy = new Map(officeCounts.map((o) => [o.serviceType, o._count]));
@@ -27,7 +36,7 @@ export default async function PlatformConfigPage() {
     hasPack: hasPack(key),
     offices: officesBy.get(key) ?? 0,
     sessions: sessionsBy.get(key) ?? 0,
-    pilots: pilotRows.filter((p) => p.serviceType === key).map((p) => ({ officeId: p.officeId, name: p.office.name })),
+    pilots: pilotRows.filter((p) => p.serviceType === key).map((p) => ({ officeId: p.officeId, name: label(p.office) })),
   }));
 
   return (

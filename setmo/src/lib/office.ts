@@ -134,8 +134,12 @@ export type MemberRow = {
 
 /** Everyone attached to the office — any role, any status — for the roster. */
 export async function getOfficeMembers(officeId: string): Promise<MemberRow[]> {
+  // In a partner's demo, the partner's own logins share the office — they aren't
+  // part of the demo team, and their real emails shouldn't sit in a roster that's
+  // shown to prospects.
+  const office = await prisma.office.findUnique({ where: { id: officeId }, select: { isDemo: true } });
   const users = await prisma.user.findMany({
-    where: { officeId },
+    where: { officeId, ...(office?.isDemo ? { partnerId: null } : {}) },
     select: { id: true, email: true, firstName: true, lastName: true, role: true, status: true, memberships: { select: { role: true } } },
     orderBy: [{ firstName: "asc" }, { email: "asc" }],
   });
@@ -275,11 +279,15 @@ export async function getOutcome(officeId: string, periodLabel: string) {
 // First-run activation checklist for a new account. Each step auto-completes from
 // real state; the card hides once everything's done.
 export async function getOnboarding(officeId: string) {
-  const [sub, allowance, setterCount] = await Promise.all([
+  const [sub, allowance, setterCount, office] = await Promise.all([
     prisma.subscription.findUnique({ where: { officeId }, select: { status: true } }),
     getAllowance(officeId),
     prisma.user.count({ where: { officeId, role: "SETTER" } }),
+    prisma.office.findUnique({ where: { id: officeId }, select: { isDemo: true } }),
   ]);
+  // A demo account is set up and funded by SetMo — there's nothing to activate,
+  // buy or invite, so the checklist never shows.
+  if (office?.isDemo) return { steps: [], doneCount: 0, allDone: true };
   // Office-admin setup only — running a practice call is a setter step
   // (see getSetterOnboarding), so it's intentionally not listed here.
   const steps = [

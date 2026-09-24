@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { cookies } from "next/headers";
+import { REF_COOKIE } from "@/lib/referral-cookie";
 import { isAdminConfigured } from "@/lib/supabase/admin";
 import { provisionAccount } from "@/lib/provision";
 import { error, json } from "@/lib/api";
@@ -21,6 +23,9 @@ export async function POST(req: Request) {
   if (!parsed.success) return error("Check the form and try again.", 422);
   const b = parsed.data;
 
+  // The link's code if the form carried one, else the first-touch cookie from an
+  // earlier visit (e.g. they landed on the home page via a partner link).
+  const cookieRef = (await cookies()).get(REF_COOKIE)?.value ?? null;
   const res = await provisionAccount({
     kind: b.kind,
     practiceName: b.practiceName,
@@ -29,6 +34,7 @@ export async function POST(req: Request) {
     email: b.email,
     password: b.password,
     referralCode: b.ref ?? undefined,
+    cookieReferralCode: cookieRef,
   });
   if (!res.ok) return error(res.error, res.code);
   return json({ ok: true });

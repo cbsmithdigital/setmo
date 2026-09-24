@@ -4,9 +4,11 @@ import { getCurrentUser, ACTIVE_ROLE_COOKIE, homeForRole } from "@/lib/auth";
 import { error, json } from "@/lib/api";
 import type { Role } from "@/generated/prisma/client";
 
-const Body = z.object({
-  role: z.enum(["PLATFORM_ADMIN", "DISTRIBUTOR", "CONSULTANT", "GROUP_ADMIN", "OFFICE_ADMIN", "SETTER"]),
-});
+// Any role is accepted here — the real check is below: the user must actually
+// hold it. (A fixed list here used to reject partner, multi-practice and
+// call-center roles, so someone holding one of those plus a practice role could
+// switch away from it and never back.)
+const Body = z.object({ role: z.string().min(1).max(40) });
 
 // POST /api/role — switch the active role for a multi-role user. Validated
 // against the roles they actually hold; persisted in a cookie.
