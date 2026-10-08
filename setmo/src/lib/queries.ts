@@ -8,6 +8,7 @@ import { SERVICE_META, SERVICE_ORDER } from "@/lib/service-meta";
 import { fullName, initialsOf } from "@/lib/format";
 import { leadChoiceOptions } from "@/lib/lead-choice";
 import { leadRevealFromSeed } from "@/lib/realism/lead-card";
+import { leadInPlay } from "@/lib/session-lead";
 import type { ServiceKey } from "@/generated/prisma/client";
 
 // ---------- allowance pool ----------
@@ -845,6 +846,11 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer, 
       t: t.time_in_call_secs ?? 0,
     }));
 
+  // A dropped call whose lead can still be called back keeps the lead's answers
+  // back until the setter has either called them back or chosen feedback.
+  const play = session.kind === "LIVE" ? null : await leadInPlay(session);
+  const held = play?.inPlay ? play : null;
+
   return {
     sessionId: session.id,
     isOwner,
@@ -872,7 +878,16 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer, 
     kind: session.kind,
     liveOutcome: (session.evaluation.liveOutcome ?? null) as import("@/lib/scorer").LiveOutcome | null,
     // Who the lead really was, and whether the setter got to it.
-    reveal: session.kind === "LIVE" ? null : leadRevealFromSeed(session.personaSeed as Record<string, unknown> | null),
-    revealCheck: (e.reveal ?? null) as import("@/lib/reveal").RevealCheck | null,
+    reveal: session.kind === "LIVE" || held ? null : leadRevealFromSeed(session.personaSeed as Record<string, unknown> | null),
+    revealCheck: held ? null : ((e.reveal ?? null) as import("@/lib/reveal").RevealCheck | null),
+    revealHeld: held
+      ? {
+          name: leadRevealFromSeed(session.personaSeed as Record<string, unknown> | null)?.name ?? null,
+          // "choice": this call dropped and waits on the setter (call back, or
+          // see the answers); "callback": they called the lead back.
+          waiting: held.canCallBack ? ("choice" as const) : ("callback" as const),
+          until: held.until.toISOString(),
+        }
+      : null,
   };
 }

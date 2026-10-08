@@ -5,6 +5,7 @@ import { getSessionResult } from "@/lib/queries";
 import { Icon } from "@/components/ui/Icon";
 import { Ring } from "@/components/ui/widgets";
 import { RecordingActions } from "@/components/RecordingActions";
+import { RevealHeld } from "@/components/RevealHeld";
 import { mmss } from "@/lib/format";
 import { showRateColor } from "@/lib/audit";
 import { LIVE_DISPOSITION_LABEL, LIVE_BLOCKER_LABEL, LIVE_LEAD_STATE_LABEL } from "@/lib/ghl";
@@ -165,6 +166,10 @@ export default async function ResultsPage({
 
         {/* the lead, revealed — who they really were, and whether the setter got there */}
         {r.reveal && <LeadReveal reveal={r.reveal} check={r.revealCheck} />}
+        {/* ...unless the call dropped and the lead can still be called back */}
+        {r.revealHeld && (
+          <RevealHeld sessionId={r.sessionId} name={r.revealHeld.name} waiting={r.revealHeld.waiting} until={r.revealHeld.until} isOwner={r.isOwner} />
+        )}
 
         {/* live-call outcome analysis (real calls only) */}
         {isLive && o && (

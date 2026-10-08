@@ -31,6 +31,53 @@ export function hasComposedLead(seed: unknown): boolean {
   return Boolean(s && s.hidden !== true && (typeof s.name === "string" || s.skeleton));
 }
 
+/** How long after a lead's first call the setter can still call them back
+ *  (carried through a chain of callbacks). */
+export const CALLBACK_WINDOW_MS = 30 * 60 * 1000;
+
+/** When the first call to this session's lead started — the callback window
+ *  runs from there, through every callback after it. */
+export function callbackRootStart(session: { startedAt: Date; personaSeed: unknown }): Date {
+  const root = (session.personaSeed as Record<string, unknown> | null)?.callbackRootStartedAt;
+  return typeof root === "string" ? new Date(root) : session.startedAt;
+}
+
+type SessionInPlay = { id: string; setterId: string; kind: string; isAudit: boolean; status: string; startedAt: Date; personaSeed: unknown };
+
+/** Whether a call's lead is still in play: the call dropped and can still be
+ *  called back, or a callback of it is under way. A dropped call is scored on
+ *  its own as soon as its recording arrives (often seconds after the drop), so
+ *  while its lead is in play the results keep the lead's real reason and
+ *  hesitation back — the setter may be about to talk to them again.
+ *  `canCallBack`: this call itself is the one that dropped and is waiting on the
+ *  setter's choice. */
+export async function leadInPlay(session: SessionInPlay): Promise<{ inPlay: boolean; canCallBack: boolean; until: Date }> {
+  const until = new Date(callbackRootStart(session).getTime() + CALLBACK_WINDOW_MS);
+  const seed = (session.personaSeed ?? {}) as Record<string, unknown>;
+  const out = { inPlay: false, canCallBack: false, until };
+  if (session.kind !== "PRACTICE" || session.isAudit || !hasComposedLead(seed) || Date.now() > until.getTime()) return out;
+  if (seed.callbackState === "open") return { inPlay: true, canCallBack: true, until };
+
+  // Called back: follow the callbacks to the newest one. The lead is in play
+  // until that call ends on purpose.
+  let prevId = session.id;
+  let state = seed.callbackState;
+  for (let hop = 0; hop < 10 && state === "used"; hop++) {
+    const next = await prisma.session.findFirst({
+      where: { setterId: session.setterId, personaSeed: { path: ["callbackOf"], equals: prevId } },
+      select: { id: true, status: true, personaSeed: true },
+    });
+    if (!next) return out;
+    state = (next.personaSeed as Record<string, unknown> | null)?.callbackState;
+    // Waiting to start, still connecting, live, or dropped in turn.
+    if (next.status === "CREATED" || (next.status === "IN_PROGRESS" && state === undefined) || state === "open") {
+      return { inPlay: true, canCallBack: false, until };
+    }
+    prevId = next.id;
+  }
+  return out;
+}
+
 /** The challenge level this session's lead plays at. Fixed when the session was
  *  created (adaptive resolves from the setter's level on THIS call type), so the
  *  card, the call and a reconnect all agree. */

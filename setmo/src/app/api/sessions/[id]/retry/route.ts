@@ -1,14 +1,10 @@
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { checkPracticeOpen, callCenterOfficeInScope } from "@/lib/practice-access";
-import { hasComposedLead } from "@/lib/session-lead";
+import { CALLBACK_WINDOW_MS, callbackRootStart, hasComposedLead } from "@/lib/session-lead";
 import { markCallback } from "@/lib/realism/lead-card";
 import { error, json } from "@/lib/api";
 import type { ServiceKey } from "@/generated/prisma/client";
-
-// How long after the ORIGINAL call started the setter can still call the same
-// lead back (carried through a chain of callbacks).
-const CALLBACK_WINDOW_MS = 30 * 60 * 1000;
 
 // POST /api/sessions/:id/retry — "call them back" after a call DROPPED. Starts a
 // NEW session with the SAME lead (same person, same card, told it's a
@@ -16,9 +12,10 @@ const CALLBACK_WINDOW_MS = 30 * 60 * 1000;
 // scored on its own when its transcript arrives, and can't swallow the callback.
 //
 // Only for a call that actually connected and was cut off — never one the setter
-// (or the lead) ended on purpose, never one already scored (its reveal shows the
-// answers), and only once per call. It can't swap leads: the person is copied,
-// not re-drawn.
+// (or the lead) ended on purpose — and only once per call. The dropped call may
+// already be scored (that happens seconds after a drop); its results keep the
+// lead's answers back while it can still be called back (see leadInPlay). It
+// can't swap leads: the person is copied, not re-drawn.
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return error("Unauthorized", 401);
@@ -30,9 +27,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const cantCallBack = (why: string) => error(why, 409);
   if (old.isAudit || old.kind !== "PRACTICE" || !hasComposedLead(seed)) return cantCallBack("This call can't be called back.");
-  if (old.status === "SCORED") return cantCallBack("This call has already been scored — start a new call.");
-  if (old.status !== "IN_PROGRESS" || seed.callbackState !== "open") return cantCallBack("Only a call that dropped can be called back — start a new call.");
-  const rootStart = typeof seed.callbackRootStartedAt === "string" ? new Date(seed.callbackRootStartedAt) : old.startedAt;
+  if (!(old.status === "IN_PROGRESS" || old.status === "SCORED") || seed.callbackState !== "open") {
+    return cantCallBack("Only a call that dropped can be called back — start a new call.");
+  }
+  const rootStart = callbackRootStart(old);
   if (Date.now() - rootStart.getTime() > CALLBACK_WINDOW_MS) return cantCallBack("It's been too long to call this lead back — start a new call.");
 
   // Starting the callback needs everything starting the call did.
@@ -44,7 +42,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   // Once per call: claim the callback before creating it.
   const claimed = await prisma.session.updateMany({
-    where: { id: old.id, status: "IN_PROGRESS", personaSeed: { path: ["callbackState"], equals: "open" } },
+    where: { id: old.id, status: { in: ["IN_PROGRESS", "SCORED"] }, personaSeed: { path: ["callbackState"], equals: "open" } },
     data: { personaSeed: { ...seed, callbackState: "used" } as object },
   });
   if (claimed.count === 0) return cantCallBack("This call was already called back — start a new call.");

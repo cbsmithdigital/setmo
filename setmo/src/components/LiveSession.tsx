@@ -101,16 +101,20 @@ function SessionInner({
     setPhase(p);
   }, []);
 
-  const reportEnded = useCallback(async () => {
-    try {
-      await fetch(`/api/sessions/${sessionId}/ended`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ conversationId: conversationIdRef.current ?? undefined }),
-      });
-    } catch {
-      /* the webhook is authoritative regardless */
-    }
+  // The results wait on this: until the call is reported ended, a call that
+  // dropped looks like it can still be called back, and its results would hold
+  // the lead's answers back.
+  const endedRef = useRef<Promise<void> | null>(null);
+  const reportEnded = useCallback(() => {
+    endedRef.current = fetch(`/api/sessions/${sessionId}/ended`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ conversationId: conversationIdRef.current ?? undefined }),
+    }).then(
+      () => {},
+      () => {} /* the webhook is authoritative regardless */
+    );
+    return endedRef.current;
   }, [sessionId]);
 
   const conversation = useConversation({
@@ -213,6 +217,7 @@ function SessionInner({
     const poll = setInterval(async () => {
       tries++;
       try {
+        await endedRef.current;
         const res = await fetch(`/api/sessions/${sessionId}/result`, { cache: "no-store" });
         if (res.ok) {
           const data = await res.json();
