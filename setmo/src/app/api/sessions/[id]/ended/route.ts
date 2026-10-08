@@ -27,11 +27,15 @@ export async function POST(
   });
   if (!session) return error("Session not found", 404);
 
+  // A call the setter (or the lead) ended on purpose can't be "called back" —
+  // that's for calls that dropped.
+  const seed = (session.personaSeed ?? {}) as Record<string, unknown>;
   await prisma.session.update({
     where: { id: session.id },
     data: {
       completedAt: new Date(),
       ...(conversationId ? { elevenlabsConversationId: conversationId } : {}),
+      ...(seed.callbackState === "open" ? { personaSeed: { ...seed, callbackState: "closed" } as object } : {}),
     },
   });
 

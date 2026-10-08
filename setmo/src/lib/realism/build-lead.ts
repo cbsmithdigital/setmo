@@ -2,12 +2,13 @@ import { generatePersona, buildLeadPrompt, personaLabel, type Difficulty, type P
 import { sampleLead } from "@/lib/realism/sampler";
 import { composeLead, templateProse, type LeadProse } from "@/lib/realism/compose";
 import { buildLeadPromptV2, leadLabel } from "@/lib/realism/prompt";
-import type { LeadSkeleton } from "@/lib/realism/types";
+import type { LeadChoice, LeadSkeleton } from "@/lib/realism/types";
 import type { ServicePack } from "@/lib/packs/types";
 
 // One way in for the call route: hand it a service and get back everything the
-// voice agent needs. Implant goes down its original path untouched; every pack
-// with its own lead generator goes through the checked engine.
+// voice agent needs. Implant goes down its original path; every pack with its
+// own lead generator goes through the checked engine. New leads always come with
+// a lead card (what the practice has on file), and honor "pick your lead".
 
 export type BuiltLead = {
   systemPrompt: string;
@@ -30,8 +31,11 @@ export async function buildImplantLead(opts: {
   office: OfficeFacts;
   setterFirstName?: string | null;
   stored: Record<string, unknown> | null;
+  choice?: LeadChoice | null;
 }): Promise<BuiltLead> {
-  const persona = (opts.stored as unknown as Persona | null) ?? (await generatePersona(opts.difficulty));
+  const persona =
+    (opts.stored as unknown as Persona | null) ??
+    (await generatePersona(opts.difficulty, { choice: opts.choice ?? undefined, card: true }));
   return {
     systemPrompt: buildLeadPrompt(persona, opts.office, opts.setterFirstName, opts.difficulty),
     firstMessage: persona.openingLine,
@@ -48,11 +52,13 @@ export async function buildPackLead(opts: {
   office: OfficeFacts;
   setterFirstName?: string | null;
   stored: Record<string, unknown> | null;
+  choice?: LeadChoice | null;
 }): Promise<BuiltLead> {
   const stored = opts.stored as { skeleton?: LeadSkeleton; prose?: LeadProse } | null;
   const callAbout = opts.pack.callAbout ?? opts.pack.name.toLowerCase();
 
-  const skeleton = stored?.skeleton ?? sampleLead(opts.pack.persona!, opts.seed, { difficulty: opts.difficulty });
+  const skeleton =
+    stored?.skeleton ?? sampleLead(opts.pack.persona!, opts.seed, { difficulty: opts.difficulty, choice: opts.choice ?? undefined });
   const prose =
     stored?.prose ??
     (

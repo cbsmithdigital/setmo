@@ -35,8 +35,8 @@ export function ProgressControls({
   const [cTo, setCTo] = useState(to ?? "");
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-      <div style={{ display: "flex", gap: 5, background: "var(--s1)", border: "1px solid var(--line)", borderRadius: 99, padding: 4, flexWrap: "wrap" }}>
+    <div className="range-controls" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <div className="range-pills" style={{ display: "flex", gap: 5, background: "var(--s1)", border: "1px solid var(--line)", borderRadius: 99, padding: 4, flexWrap: "wrap" }}>
         {presets.map((p) => (
           <button
             key={p.key}
@@ -48,7 +48,7 @@ export function ProgressControls({
           </button>
         ))}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <div className="range-dates" style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <input type="date" value={cFrom} max={cTo || undefined} onChange={(e) => setCFrom(e.target.value)} className="input" style={{ padding: "7px 10px", fontSize: 13, width: 150 }} />
         <span className="muted" style={{ fontSize: 13 }}>→</span>
         <input type="date" value={cTo} min={cFrom || undefined} onChange={(e) => setCTo(e.target.value)} className="input" style={{ padding: "7px 10px", fontSize: 13, width: 150 }} />

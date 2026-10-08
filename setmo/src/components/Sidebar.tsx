@@ -121,6 +121,11 @@ const NAV_AGENT: NavItem[] = [
   { href: "/leaderboard", label: "Leaderboard", icon: "trophy" },
 ];
 
+// On a phone, a setter's four most-used screens sit in a bottom tab bar (thumb
+// reach); everything else stays in the menu behind "More".
+const TAB_HREFS = ["/dashboard", "/practice", "/progress", "/coach"];
+const TAB_LABEL: Record<string, string> = { "/dashboard": "Home", "/coach": "Setty" };
+
 const NAV_BY_ROLE: Record<string, NavItem[]> = {
   SETTER: NAV_SETTER,
   OFFICE_ADMIN: NAV_OFFICE,
@@ -154,6 +159,7 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const nav = isAgent ? NAV_AGENT : NAV_BY_ROLE[role] ?? NAV_SETTER;
+  const tabs = isAgent || role === "SETTER" ? TAB_HREFS.map((h) => nav.find((n) => n.href === h)).filter((n): n is NavItem => Boolean(n)) : [];
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
 
@@ -233,6 +239,36 @@ export function Sidebar({
         </div>
       </div>
       </aside>
+
+      {/* phone bottom tab bar (setters) — hidden on desktop */}
+      {tabs.length > 0 && (
+        <nav className="tabbar" aria-label="Main">
+          {tabs.map((t) => (
+            <Link
+              key={t.href}
+              href={t.href}
+              className={"tab" + (isActive(t.href) ? " on" : "") + (t.href === "/practice" ? " tab-primary" : "")}
+              aria-current={isActive(t.href) ? "page" : undefined}
+            >
+              <span className="tab-ic">
+                <Icon name={t.icon} size={21} />
+              </span>
+              <span>{TAB_LABEL[t.href] ?? t.label}</span>
+            </Link>
+          ))}
+          <button
+            className={"tab" + (open || (activeHref && !TAB_HREFS.includes(activeHref)) ? " on" : "")}
+            onClick={() => setOpen(true)}
+            aria-label="More"
+            aria-expanded={open}
+          >
+            <span className="tab-ic">
+              <Icon name="more" size={21} />
+            </span>
+            <span>More</span>
+          </button>
+        </nav>
+      )}
     </>
   );
 }

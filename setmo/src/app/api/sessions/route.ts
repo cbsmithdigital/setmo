@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { canStartSession, canStartCallCenter, callCenterOrgForAgent } from "@/lib/usage";
+import { callCenterOrgForAgent } from "@/lib/usage";
 import { memoryForService } from "@/lib/memory";
+import { callCenterOfficeInScope, checkPracticeOpen } from "@/lib/practice-access";
+import { leadChoiceLabel, validateLeadChoice } from "@/lib/lead-choice";
 import { error, json } from "@/lib/api";
 
 const Body = z.object({
@@ -10,6 +12,8 @@ const Body = z.object({
   difficulty: z.enum(["ADAPTIVE", "WARM", "TOUGH"]).default("ADAPTIVE"),
   // Call-center agents pick which served office (account) this call is FOR.
   officeId: z.string().optional(),
+  // "Pick your lead" — omitted (or empty) means surprise me.
+  choice: z.unknown().optional(),
 });
 
 // POST /api/sessions — create a session row (the bootstrap). The signed
@@ -21,6 +25,12 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid request body", 422);
   const { serviceType, difficulty } = parsed.data;
+  let choice: ReturnType<typeof validateLeadChoice>;
+  try {
+    choice = validateLeadChoice(serviceType, parsed.data.choice);
+  } catch (e) {
+    return error(e instanceof Error ? e.message : "That lead choice isn't valid.", 422);
+  }
 
   // Practice is open to every user type (setters, office/group admins, and
   // call-center agents + managers) — they all benefit from repping calls + Setty
@@ -38,15 +48,7 @@ export async function POST(req: Request) {
     if (!target) return error("Choose which office you're calling for", 422);
     // Scope: an agent may only call for offices they're assigned; a floor manager
     // for offices their pod serves; a senior for any office in the call center.
-    let inScope: boolean;
-    if (user.role === "SETTER") {
-      inScope = Boolean(await prisma.agentOffice.findUnique({ where: { userId_officeId: { userId: user.id, officeId: target } } }));
-    } else if (user.callCenterPodId) {
-      inScope = Boolean(await prisma.office.findFirst({ where: { id: target, servedByPodId: user.callCenterPodId }, select: { id: true } }));
-    } else {
-      inScope = Boolean(await prisma.office.findFirst({ where: { id: target, servedByPod: { organizationId: orgId } }, select: { id: true } }));
-    }
-    if (!inScope) return error("That office isn't in your call center", 403);
+    if (!(await callCenterOfficeInScope(user, orgId, target))) return error("That office isn't in your call center", 403);
     callCenterOrgId = orgId;
     officeId = target;
   } else {
@@ -60,23 +62,11 @@ export async function POST(req: Request) {
     officeId = resolved;
   }
 
-  // The (served) office must offer this call type, and the call type must be
-  // open: LIVE for everyone, or BETA for the offices piloting it.
-  const [officeService, agent] = await Promise.all([
-    prisma.officeService.findUnique({ where: { officeId_serviceType: { officeId, serviceType } } }),
-    prisma.agent.findUnique({ where: { serviceType } }),
-  ]);
-  const open = agent?.status === "LIVE" || (agent?.status === "BETA" && officeService?.pilot);
-  if (!officeService?.enabled || !open) {
-    return error("That service isn't available for this office yet", 403);
-  }
-
-  // No auto-overage: block if the relevant pool is exhausted (call-center pool for
-  // agents; the office pool for a normal setter).
-  const allowance = callCenterOrgId ? await canStartCallCenter(callCenterOrgId) : await canStartSession(officeId);
-  if (!allowance.ok) {
-    return error(callCenterOrgId ? "Your call center's practice balance is used up." : "Your practice pool is used up. Buy a bundle or wait for the reset.", 402);
-  }
+  // The (served) office must offer this call type, the call type must be open
+  // (LIVE for everyone, or BETA for the offices piloting it), and the pool the
+  // call draws must have time left.
+  const access = await checkPracticeOpen({ officeId, serviceType, callCenterOrgId });
+  if (!access.ok) return error(access.error, access.code);
 
   // Adaptive difficulty escalates from the setter's memory floor FOR THIS
   // SERVICE (connect resolves it the same way).
@@ -90,10 +80,14 @@ export async function POST(req: Request) {
       officeId,
       callCenterOrgId, // set for agents → meters the call-center pool, excluded from the office pool
       serviceType,
-      agentId: agent.id,
+      agentId: access.agentId,
       difficulty,
       status: "CREATED",
-      personaSeed: { resolvedDifficulty, hidden: true },
+      personaSeed: {
+        resolvedDifficulty,
+        hidden: true,
+        ...(choice ? { choice, choiceLabel: leadChoiceLabel(serviceType, choice) } : {}),
+      },
     },
   });
 

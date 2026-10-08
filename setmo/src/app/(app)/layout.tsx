@@ -2,6 +2,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { requireUser, getActiveRole } from "@/lib/auth";
 import { initialsOf, fullName, ROLE_LABEL } from "@/lib/format";
 import { ImpersonationBanner } from "@/components/platform/ImpersonationBanner";
+import { InstallBanner } from "@/components/InstallBanner";
 import { inDemoAccount } from "@/lib/demo-shared";
 
 // Every authenticated screen depends on the request's auth cookies.
@@ -15,11 +16,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Practice / group hats that act inside a demo account are labelled as such, so
   // nobody mistakes the demo for a real practice (or the other way round).
   const demoRoles = inDemoAccount(user) ? user.roles.filter((r) => r === "SETTER" || r === "OFFICE_ADMIN" || r === "GROUP_ADMIN") : [];
+  // Setters (call-center agents included) get a bottom tab bar on phones; the
+  // page leaves room for it.
+  const hasTabbar = activeRole === "SETTER";
 
   return (
     <>
       <div className="app-bg" />
-      <div className="shell">
+      <div className={"shell" + (hasTabbar ? " has-tabbar" : "")}>
         <Sidebar
           role={activeRole}
           roles={user.roles}
@@ -31,6 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         />
         <main className="main">
           {user.impersonatedBy && <ImpersonationBanner email={user.email} />}
+          {!user.impersonatedBy && <InstallBanner />}
           {children}
         </main>
       </div>

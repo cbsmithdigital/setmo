@@ -8,6 +8,8 @@ import { RecordingActions } from "@/components/RecordingActions";
 import { mmss } from "@/lib/format";
 import { showRateColor } from "@/lib/audit";
 import { LIVE_DISPOSITION_LABEL, LIVE_BLOCKER_LABEL, LIVE_LEAD_STATE_LABEL } from "@/lib/ghl";
+import type { LeadReveal as LeadRevealData } from "@/lib/realism/lead-card";
+import type { RevealCheck } from "@/lib/reveal";
 
 function ResultSkill({
   s,
@@ -32,6 +34,66 @@ function ResultSkill({
       <div className="sc" style={{ color: high ? "var(--mint)" : s.score < 4 ? "var(--amber)" : "#fff" }}>
         {s.score.toFixed(1)}
       </div>
+    </div>
+  );
+}
+
+const FOUND: Record<string, { label: string; cls: string }> = {
+  yes: { label: "Found it", cls: "mint" },
+  partly: { label: "Partly", cls: "amber" },
+  no: { label: "Missed it", cls: "rose" },
+};
+const HANDLED: Record<string, { label: string; cls: string }> = {
+  yes: { label: "Handled", cls: "mint" },
+  partly: { label: "Partly handled", cls: "amber" },
+  no: { label: "Not handled", cls: "rose" },
+  not_raised: { label: "Never came up", cls: "" },
+};
+
+/** After the call: the whole person, including what the lead card left out. */
+function LeadReveal({ reveal, check }: { reveal: LeadRevealData; check: RevealCheck | null }) {
+  const found = check ? FOUND[check.why.found] : null;
+  const handled = check ? HANDLED[check.hesitation.handled] : null;
+  return (
+    <div className="card card-pad rise reveal" style={{ marginBottom: 18, animationDelay: ".03s" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+        <h3 style={{ fontSize: 18 }}>Who you were really talking to</h3>
+        {reveal.difficulty && <span className="chip" style={{ fontSize: 11.5 }}>{reveal.difficulty}</span>}
+        {reveal.choice && <span className="chip purple" style={{ fontSize: 11.5 }}>Picked: {reveal.choice}</span>}
+      </div>
+      <div style={{ fontWeight: 700, fontSize: 15.5 }}>
+        {reveal.name}
+        {reveal.age ? <span className="muted" style={{ fontWeight: 400 }}>, {reveal.age}</span> : null}
+        {reveal.forWhom ? <span className="muted" style={{ fontWeight: 400 }}> · {reveal.forWhom}</span> : null}
+      </div>
+      {reveal.situation && (
+        <p className="muted" style={{ fontSize: 13.5, marginTop: 4, marginBottom: 14, maxWidth: "52em" }}>
+          {reveal.situation}
+        </p>
+      )}
+      <div className="grid g-2" style={{ gap: 12 }}>
+        <div className="reveal-item">
+          <div className="reveal-k">
+            Their real reason
+            {found && <span className={"chip " + found.cls} style={{ fontSize: 11, padding: "2px 8px" }}>{found.label}</span>}
+          </div>
+          <div className="reveal-v">&ldquo;{reveal.realReason}&rdquo;</div>
+          {check?.why.note && <div className="reveal-note">{check.why.note}</div>}
+        </div>
+        <div className="reveal-item">
+          <div className="reveal-k">
+            What was holding them back
+            {handled && <span className={"chip " + handled.cls} style={{ fontSize: 11, padding: "2px 8px" }}>{handled.label}</span>}
+          </div>
+          <div className="reveal-v">&ldquo;{reveal.hesitation}&rdquo;</div>
+          {check?.hesitation.note && <div className="reveal-note">{check.hesitation.note}</div>}
+        </div>
+      </div>
+      {reveal.tone && (
+        <div className="muted" style={{ fontSize: 12.5, marginTop: 12 }}>
+          How they came across: {reveal.tone}
+        </div>
+      )}
     </div>
   );
 }
@@ -100,6 +162,9 @@ export default async function ResultsPage({
             {r.narrative && <h2 style={{ fontSize: 24, maxWidth: "22em", lineHeight: 1.2 }}>{r.narrative}</h2>}
           </div>
         </div>
+
+        {/* the lead, revealed — who they really were, and whether the setter got there */}
+        {r.reveal && <LeadReveal reveal={r.reveal} check={r.revealCheck} />}
 
         {/* live-call outcome analysis (real calls only) */}
         {isLive && o && (
@@ -170,7 +235,7 @@ export default async function ResultsPage({
                 </span>
                 <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ width: 7, height: 7, borderRadius: 9, background: "var(--mint)" }} />
-                  Implant-specific
+                  This call type
                 </span>
               </div>
             </div>

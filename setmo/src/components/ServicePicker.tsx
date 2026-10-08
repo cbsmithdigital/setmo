@@ -4,6 +4,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 
+type ChoiceOption = { key: string; label: string };
+type LeadChoices = {
+  ages?: ChoiceOption[];
+  callers?: ChoiceOption[];
+  concerns: ChoiceOption[];
+  concernsByCaller?: Record<string, string[]>;
+  concernsByAge?: Record<string, string[]>;
+};
+
 type ServiceOption = {
   key: string;
   name: string;
@@ -12,7 +21,52 @@ type ServiceOption = {
   skills: number;
   live: boolean;
   beta?: boolean;
+  leadChoices?: LeadChoices | null;
 };
+
+type Pick = { gender?: string; age?: string; caller?: string; concern?: string };
+
+/** One row of choices in "pick your lead". */
+function PickRow({
+  label,
+  options,
+  value,
+  onChange,
+  anyLabel = "Any",
+  disabled = [],
+}: {
+  label: string;
+  options: ChoiceOption[];
+  value: string | undefined;
+  onChange: (v: string | undefined) => void;
+  anyLabel?: string;
+  disabled?: string[];
+}) {
+  return (
+    <div className="pick-row">
+      <div className="pick-label">{label}</div>
+      <div className="pick-opts">
+        {[{ key: "", label: anyLabel }, ...options].map((o) => {
+          const on = (value ?? "") === o.key;
+          const off = disabled.includes(o.key);
+          return (
+            <button
+              key={o.key || "any"}
+              type="button"
+              className={"pick-chip" + (on ? " on" : "")}
+              aria-pressed={on}
+              disabled={off}
+              title={off ? "Doesn't go with what you picked above" : undefined}
+              onClick={() => onChange(o.key || undefined)}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 const DIFFICULTIES: [string, string, string][] = [
   ["ADAPTIVE", "Adaptive", "Tunes to your level"],
@@ -34,8 +88,37 @@ export function ServicePicker({ services = [], accounts }: { services?: ServiceO
   const [diff, setDiff] = useState("ADAPTIVE");
   const [starting, setStarting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [pick, setPick] = useState<Pick>({});
 
   const chosen = svc.find((s) => s.key === sel) ?? svc.find((s) => s.live);
+  const choices = chosen?.leadChoices ?? null;
+  // A concern that can't come with the chosen caller (or, for implants, the
+  // chosen age) is greyed out — the server refuses those too.
+  const concernsFor = (p: Pick): string[] | null => {
+    const byCaller = p.caller && choices?.concernsByCaller ? choices.concernsByCaller[p.caller] ?? [] : null;
+    const byAge = p.age && choices?.concernsByAge ? choices.concernsByAge[p.age] ?? [] : null;
+    if (byCaller && byAge) return byCaller.filter((k) => byAge.includes(k));
+    return byCaller ?? byAge;
+  };
+  const allowedConcerns = concernsFor(pick);
+  const blockedConcerns = allowedConcerns ? (choices?.concerns ?? []).map((c) => c.key).filter((k) => !allowedConcerns.includes(k)) : [];
+  const choice = picking ? Object.fromEntries(Object.entries(pick).filter(([, v]) => v)) : {};
+  const hasChoice = Object.keys(choice).length > 0;
+
+  // A different call type has different people to pick from.
+  function chooseService(key: string) {
+    setSel(key);
+    setPick({});
+  }
+  // Changing who's calling (or the age) drops a concern that no longer fits.
+  function update(change: Pick) {
+    setPick((p) => {
+      const next = { ...p, ...change };
+      const allowed = concernsFor(next);
+      return next.concern && allowed && !allowed.includes(next.concern) ? { ...next, concern: undefined } : next;
+    });
+  }
 
   async function start() {
     setErr(null);
@@ -44,7 +127,12 @@ export function ServicePicker({ services = [], accounts }: { services?: ServiceO
       const res = await fetch("/api/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ serviceType: chosen?.key ?? sel, difficulty: diff, ...(isAgent ? { officeId } : {}) }),
+        body: JSON.stringify({
+          serviceType: chosen?.key ?? sel,
+          difficulty: diff,
+          ...(isAgent ? { officeId } : {}),
+          ...(hasChoice ? { choice } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -76,7 +164,7 @@ export function ServicePicker({ services = [], accounts }: { services?: ServiceO
               return (
                 <button
                   key={a.officeId}
-                  onClick={() => { setOfficeId(a.officeId); const fl = a.services.find((s) => s.live)?.key; if (fl) setSel(fl); }}
+                  onClick={() => { setOfficeId(a.officeId); const fl = a.services.find((s) => s.live)?.key; if (fl) chooseService(fl); }}
                   className="card card-pad"
                   style={{ padding: "12px 16px", textAlign: "left", borderColor: active ? "var(--purple)" : "var(--line)", boxShadow: active ? "0 0 0 1px var(--purple)" : "var(--shadow-card)" }}
                 >
@@ -101,7 +189,7 @@ export function ServicePicker({ services = [], accounts }: { services?: ServiceO
             <button
               key={s.key}
               disabled={!s.live}
-              onClick={() => s.live && setSel(s.key)}
+              onClick={() => s.live && chooseService(s.key)}
               className={"card card-pad" + (active ? " card-glow" : "")}
               style={{
                 textAlign: "left",
@@ -160,8 +248,60 @@ export function ServicePicker({ services = [], accounts }: { services?: ServiceO
         })}
       </div>
 
+      {choices && (
+        <>
+          <div className="eyebrow" style={{ marginBottom: 14 }}>
+            {isAgent ? "3 · Who picks up" : "2 · Who picks up"}
+          </div>
+          <div className="card card-pad" style={{ marginBottom: 30 }}>
+            <div className="seg" role="group" aria-label="Who picks up">
+              <button type="button" aria-pressed={!picking} className={"seg-btn" + (!picking ? " on" : "")} onClick={() => setPicking(false)}>
+                Surprise me
+              </button>
+              <button type="button" aria-pressed={picking} className={"seg-btn" + (picking ? " on" : "")} onClick={() => setPicking(true)}>
+                Pick your lead
+              </button>
+            </div>
+            {!picking ? (
+              <p className="muted" style={{ fontSize: 13.5, marginTop: 12 }}>
+                A different person every call — you&apos;ll see their lead card before you dial.
+              </p>
+            ) : (
+              <div className="pick-grid">
+                {choices.callers && choices.callers.length > 0 && (
+                  <PickRow label="Who's calling" options={choices.callers} value={pick.caller} onChange={(caller) => update({ caller })} />
+                )}
+                <PickRow
+                  label={choices.callers ? "The caller is a" : "Man or woman"}
+                  options={[
+                    { key: "male", label: "Man" },
+                    { key: "female", label: "Woman" },
+                  ]}
+                  value={pick.gender}
+                  onChange={(gender) => update({ gender })}
+                  anyLabel="Either"
+                />
+                {choices.ages && choices.ages.length > 0 && (
+                  <PickRow label="Age" options={choices.ages} value={pick.age} onChange={(age) => update({ age })} />
+                )}
+                <PickRow
+                  label="Main concern"
+                  options={choices.concerns}
+                  value={pick.concern}
+                  onChange={(concern) => update({ concern })}
+                  disabled={blockedConcerns}
+                />
+                <p className="muted" style={{ fontSize: 12.5 }}>
+                  The concern picks which hesitation you&apos;ll face; the challenge below sets how firmly they hold it.
+                </p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       <div className="eyebrow" style={{ marginBottom: 14 }}>
-        {isAgent ? "3 · Set the challenge" : "2 · Set the challenge"}
+        {(isAgent ? 3 : 2) + (choices ? 1 : 0)} · Set the challenge
       </div>
       <div className="card card-pad" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -191,7 +331,7 @@ export function ServicePicker({ services = [], accounts }: { services?: ServiceO
             );
           })}
         </div>
-        <div style={{ textAlign: "right" }}>
+        <div className="picker-start">
           <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
             Practicing <b style={{ color: "var(--text-2)" }}>{chosen?.name}</b>
             {isAgent ? <> for <b style={{ color: "var(--text-2)" }}>{accounts!.find((a) => a.officeId === officeId)?.officeName}</b> · draws the call-center pool</> : <> · ~8 min · draws from your pool</>}

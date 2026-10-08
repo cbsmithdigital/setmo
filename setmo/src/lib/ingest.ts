@@ -8,6 +8,8 @@ import { uploadRecording } from "@/lib/storage";
 import { parsePostCall, extractTranscript } from "@/lib/elevenlabs";
 import { scoreTranscript, isScorerConfigured } from "@/lib/scorer";
 import { rubricForService } from "@/lib/packs/registry";
+import { leadRevealFromSeed } from "@/lib/realism/lead-card";
+import { checkReveal } from "@/lib/reveal";
 
 // Below this, a call is treated as too short to score (hang-ups / interruptions).
 // Under a minute is excluded from scoring + averages.
@@ -133,6 +135,18 @@ export async function scoreSession(
     source = "too-short";
   }
 
+  // The reveal on the results page: did they get to the lead's real reason, and
+  // how did the hesitation go? A separate check from scoring (it never changes a
+  // score), done before the call is marked scored so the page opens with it. A
+  // failure just leaves the reveal without its verdict.
+  let reveal: Awaited<ReturnType<typeof checkReveal>> = null;
+  if (source === "transcript-scorer" && !session.isAudit) {
+    const lead = leadRevealFromSeed(session.personaSeed as Record<string, unknown> | null);
+    if (lead?.realReason) {
+      reveal = await checkReveal({ turns, realReason: lead.realReason, hesitation: lead.hesitation }).catch(() => null);
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.session.update({ where: { id: session.id }, data: { status: "SCORED" } });
     await tx.evaluation.update({
@@ -150,6 +164,7 @@ export async function scoreSession(
         personaCoaching,
         recommendedNextScenario: nextScenario,
         booked,
+        ...(reveal ? { reveal } : {}),
         scoredAt: new Date(),
       },
     });

@@ -1,4 +1,5 @@
 import type { LeadProse } from "@/lib/realism/compose";
+import { onFileBlock } from "@/lib/realism/lead-card";
 import { CALLER_LABEL, COVERAGE_LABEL, type LeadSkeleton } from "@/lib/realism/types";
 import type { Difficulty } from "@/lib/personas";
 
@@ -47,7 +48,7 @@ ${whoYouAre}
 - How you come across: ${s.tone}.
 - Coverage: ${COVERAGE_LABEL[s.coverage]}. Only talk about coverage the way someone with this plan would — you don't know the details perfectly.
 - ${s.yearsSinceLastVisit == null ? "You've never been to a dentist." : s.yearsSinceLastVisit === 0 ? "You were last at a dentist within the past year." : `It's been about ${s.yearsSinceLastVisit} years since you saw a dentist.`}
-
+${s.card ? `\n${onFileBlock({ card: s.card, note: prose.formNote, coverage: s.coverage, interest: s.interest })}\n` : ""}
 WHAT YOU DON'T VOLUNTEER
 - The real reason underneath: "${prose.hiddenWhyInTheirWords}". Don't offer this. Only open up if the setter earns it with genuine curiosity and good questions. If they never dig, stay surface-level.
 - Your hesitation: "${prose.objectionInTheirWords}". Raise it naturally at some point; don't give in easily.

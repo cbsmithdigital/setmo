@@ -106,7 +106,7 @@ export function LeaderboardClient({
           <>
             {/* podium */}
             {podium.length >= 1 && (
-              <div className="grid g-3 rise" style={{ marginBottom: 20, alignItems: "end" }}>
+              <div className="grid g-3 rise lb-podium" style={{ marginBottom: 20, alignItems: "end" }}>
                 {podium.map((p) => {
                   const place = p.rank;
                   const tall = place === 1;

@@ -55,15 +55,16 @@ export function TeamTable({ rows, hrefBase = "/office/team", noun = "setter" }: 
       </div>
 
       <div className="card rise" style={{ overflowX: "auto" }}>
-        <div style={{ minWidth: 680 }}>
+        <div className="tt-inner" style={{ minWidth: 680 }}>
         <div
+          className="tt-row"
           style={{ display: "grid", gridTemplateColumns: cols, gap: 16, padding: "14px 22px", borderBottom: "1px solid var(--line)", fontSize: 11.5, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)" }}
         >
           <div>{nounCap}</div>
-          <div>Usage</div>
-          <div>Sessions</div>
+          <div className="tt-opt">Usage</div>
+          <div className="tt-opt">Sessions</div>
           <div>Avg score</div>
-          <div>Coach next</div>
+          <div className="tt-opt">Coach next</div>
           <div />
         </div>
 
@@ -73,6 +74,7 @@ export function TeamTable({ rows, hrefBase = "/office/team", noun = "setter" }: 
           <Link
             key={t.id}
             href={`${hrefBase}/${t.id}`}
+            className="tt-row"
             style={{ display: "grid", gridTemplateColumns: cols, gap: 16, alignItems: "center", padding: "15px 22px", borderTop: i ? "1px solid var(--line-soft)" : "none" }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
@@ -82,7 +84,7 @@ export function TeamTable({ rows, hrefBase = "/office/team", noun = "setter" }: 
                 <div className="muted" style={{ fontSize: 12 }}>{t.podName ? `${t.podName} · ` : ""}Active {relativeShort(t.lastActive ? new Date(t.lastActive) : null)}</div>
               </div>
             </div>
-            <div>
+            <div className="tt-opt">
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ flex: 1, height: 6, borderRadius: 99, background: "#181828", overflow: "hidden", maxWidth: 90 }}>
                   <div style={{ height: "100%", width: Math.min(100, (t.usageHours / 3) * 100) + "%", background: "var(--grad)", borderRadius: 99 }} />
@@ -90,13 +92,13 @@ export function TeamTable({ rows, hrefBase = "/office/team", noun = "setter" }: 
               </div>
               <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{t.usageHours.toFixed(1)}h used</div>
             </div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{t.sessions}</div>
+            <div className="tt-opt" style={{ fontWeight: 600, fontSize: 14 }}>{t.sessions}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <Sparkline data={t.trend.length > 1 ? t.trend : [t.avg || 0, t.avg || 0]} w={56} h={26} color={trendColor(t.status)} fill={false} />
               <span className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 18 }}>{t.avg ? t.avg.toFixed(1) : "—"}</span>
               <Delta v={t.delta} />
             </div>
-            <div>{t.recSkill ? <span className="chip purple" style={{ padding: "4px 10px", fontSize: 12 }}>{t.recSkill}</span> : <span className="muted" style={{ fontSize: 12.5 }}>—</span>}</div>
+            <div className="tt-opt">{t.recSkill ? <span className="chip purple" style={{ padding: "4px 10px", fontSize: 12 }}>{t.recSkill}</span> : <span className="muted" style={{ fontSize: 12.5 }}>—</span>}</div>
             <div style={{ color: "var(--muted)" }}>›</div>
           </Link>
         ))}

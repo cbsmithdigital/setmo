@@ -31,7 +31,7 @@ export default async function PracticePage() {
         <div className="topbar">
           <div className="tb-greet">
             <h1>Start a practice session</h1>
-            <p>Pick the account you&apos;re calling for, then what to drill. The lead&apos;s persona stays hidden until the call begins.</p>
+            <p>Pick the account you&apos;re calling for, then what to drill. You&apos;ll see the lead&apos;s card before you dial.</p>
           </div>
           <div className="tb-right">
             <AllowanceMeter remainingMin={pool.remainingMin} purchasedMin={pool.purchasedMin} usedMin={pool.usedMin} />
@@ -70,7 +70,7 @@ export default async function PracticePage() {
       <div className="topbar">
         <div className="tb-greet">
           <h1>Start a practice session</h1>
-          <p>Pick what you want to drill. You won&apos;t see the lead&apos;s persona until the call begins.</p>
+          <p>Pick what you want to drill — and, if you like, who picks up. You&apos;ll see their lead card before you dial.</p>
         </div>
         <div className="tb-right">
           <AllowanceMeter remainingMin={allowance.remainingMin} purchasedMin={allowance.purchasedMin} usedMin={allowance.usedMin} />

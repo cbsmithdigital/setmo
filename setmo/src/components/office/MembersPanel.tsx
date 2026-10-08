@@ -44,18 +44,18 @@ function MemberItem({ m, isSelf }: { m: MemberRow; isSelf: boolean }) {
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 4px", borderTop: "1px solid var(--line-soft)" }}>
+    <div className="member-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 4px", borderTop: "1px solid var(--line-soft)" }}>
       <div className="lb-av" style={{ width: 36, height: 36, fontSize: 12.5, flex: "none", opacity: m.status === "DISABLED" ? 0.5 : 1 }}>{m.initials || "?"}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="mr-who" style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.name || m.email}</div>
         <div className="muted" style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.email}</div>
       </div>
-      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 220 }}>
+      <div className="mr-roles" style={{ display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: 220 }}>
         {m.roles.map((r) => (
           <span key={r} className="chip" style={{ padding: "2px 8px", fontSize: 11 }}>{ROLE_LABEL[r as keyof typeof ROLE_LABEL] ?? r}</span>
         ))}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 96, justifyContent: "flex-end" }}>
+      <div className="mr-actions" style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 96, justifyContent: "flex-end" }}>
         {msg && <span className="muted" style={{ fontSize: 12 }}>{msg}</span>}
         {m.status === "INVITED" && (
           <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: 12.5 }} disabled={busy} onClick={resend}>Resend</button>

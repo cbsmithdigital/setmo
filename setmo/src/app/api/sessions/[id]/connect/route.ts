@@ -1,16 +1,15 @@
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { agentIdFor, getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
-import { type Difficulty } from "@/lib/personas";
 import { memoryForService } from "@/lib/memory";
-import { packFor } from "@/lib/packs/registry";
-import { buildImplantLead, buildPackLead } from "@/lib/realism/build-lead";
+import { buildSessionLead, hasComposedLead, resolveDifficulty } from "@/lib/session-lead";
 import { error, json } from "@/lib/api";
 import type { ServiceKey } from "@/generated/prisma/client";
 
 // POST /api/sessions/:id/connect — server bootstrap: mint a fresh signed URL
 // and the dynamic-variable overrides the agent role-plays with. Returns the
-// config for the browser SDK to start the conversation.
+// config for the browser SDK to start the conversation. The lead itself was
+// normally composed already (/prepare, for the lead card) and is reused as-is.
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -34,13 +33,18 @@ export async function POST(
   // Long enough to cover a drop late in a long call, short enough that an
   // abandoned session can't be picked up later as a free second call.
   const RECONNECT_WINDOW_MS = 30 * 60 * 1000;
-  const seed = session.personaSeed as Record<string, unknown> | null;
   // A lead has actually been composed for this session: either the implant
   // generator's persona (has a name) or a pack lead (has its skeleton).
-  const hasLead = Boolean(seed && seed.hidden !== true && (typeof seed.name === "string" || seed.skeleton));
+  const hasLead = hasComposedLead(session.personaSeed);
+  // Only a call that was claimed but never got going (mic blocked, network) is
+  // retried on the same session. One that connected and then dropped is called
+  // back as a NEW session (/retry) — reconnecting it would let the dropped call's
+  // transcript arrive mid-redial and score the session out from under it.
+  const connectedBefore = Boolean((session.personaSeed as Record<string, unknown> | null)?.connectedAt);
   const isReconnect =
     session.status === "IN_PROGRESS" &&
     !session.elevenlabsConversationId &&
+    !connectedBefore &&
     !session.completedAt && // the browser already reported this call as ended
     hasLead &&
     Date.now() - session.startedAt.getTime() < RECONNECT_WINDOW_MS;
@@ -63,9 +67,10 @@ export async function POST(
 
   // Resolve the effective difficulty: an explicit WARM/TOUGH pick is used as-is;
   // ADAPTIVE escalates to the setter's memory floor (rises as they improve). This
-  // drives BOTH the persona (skewed objection/tone) and the lead-prompt directive.
-  const effectiveDifficulty: Difficulty =
-    session.difficulty === "ADAPTIVE" ? memory.difficultyFloor : session.difficulty;
+  // drives BOTH the persona (skewed objection/tone) and the lead-prompt directive,
+  // and was fixed when the session was created, so the lead card, the call and a
+  // reconnect all play at the same level.
+  const effectiveDifficulty = await resolveDifficulty(session);
 
   // Server-built overrides (the office + setter context the agent role-plays with).
   const dynamicVariables: Record<string, string> = {
@@ -93,55 +98,57 @@ export async function POST(
     return json({ configured: false, dynamicVariables, reason: "agent id not set" });
   }
 
-  // Compose a fresh lead + matching voice, loaded as overrides so every rep is
-  // a different person with a different voice (not the agent's self-randomization).
-  // Difficulty shapes how hard this lead is to win over. A reconnect reuses the
-  // lead already composed for this session.
+  // The lead + matching voice, loaded as overrides so every rep is a different
+  // person with a different voice (not the agent's self-randomization). It was
+  // normally composed for the lead card already; a session opened by an older
+  // screen (or whose card failed to load) composes it here instead.
   //
   // Services with their own pack use the lead engine — facts sampled in code
-  // from compatible options only, then checked. Implant keeps the original
-  // generator, untouched.
-  const pack = packFor(session.serviceType);
-  const lead = pack?.persona
-    ? await buildPackLead({
-        pack,
-        seed: session.id,
-        difficulty: effectiveDifficulty,
-        office: office ?? {},
-        setterFirstName: user.firstName,
-        stored: isReconnect ? (seed as Record<string, unknown>) : null,
-      })
-    : await buildImplantLead({
-        difficulty: effectiveDifficulty,
-        office: office ?? {},
-        setterFirstName: user.firstName,
-        stored: isReconnect ? (seed as Record<string, unknown>) : null,
-      });
+  // from compatible options only, then checked. Implant keeps its own generator.
+  const leadInputs = { office: office ?? {}, setterFirstName: user.firstName, difficulty: effectiveDifficulty };
+  let { lead, seedToStore } = await buildSessionLead({ session, ...leadInputs });
 
-  if (!isReconnect) {
-    await prisma.session.update({
-      where: { id: session.id },
-      data: {
-        status: "IN_PROGRESS",
-        startedAt: new Date(),
-        personaSeed: { ...lead.seed, resolvedDifficulty: effectiveDifficulty },
-      },
-    });
-  }
-
+  // The voice link first: if it can't be had, the session is left exactly as it
+  // was (not stranded as a started call that never was).
+  let signedUrl: string;
   try {
-    const signedUrl = await getSignedUrl(agentId);
-    return json({
-      configured: true,
-      signedUrl,
-      dynamicVariables,
-      setterId: user.id,
-      systemPrompt: lead.systemPrompt,
-      firstMessage: lead.firstMessage,
-      voiceId: lead.voiceId,
-      personaName: lead.personaName,
-    });
+    signedUrl = await getSignedUrl(agentId);
   } catch (e) {
     return error(e instanceof Error ? e.message : "Failed to start conversation", 502);
   }
+
+  if (!isReconnect) {
+    // Start the call only if nothing changed underneath: a lead composed HERE
+    // may only be saved while the session still has none, so it can never
+    // replace a lead card the setter is already looking at.
+    const claimed = await prisma.session.updateMany({
+      where: { id: session.id, status: "CREATED", ...(hasLead ? {} : { personaSeed: { path: ["hidden"], equals: true } }) },
+      data: { status: "IN_PROGRESS", startedAt: new Date(), personaSeed: seedToStore as object },
+    });
+    if (claimed.count === 0) {
+      // The lead card was saved meanwhile (or another tab started the call):
+      // go with the saved lead.
+      const fresh = await prisma.session.findUnique({ where: { id: session.id } });
+      if (!fresh || fresh.status !== "CREATED" || !hasComposedLead(fresh.personaSeed)) {
+        return error("This call already started.", 409);
+      }
+      ({ lead, seedToStore } = await buildSessionLead({ session: fresh, ...leadInputs }));
+      const retried = await prisma.session.updateMany({
+        where: { id: session.id, status: "CREATED" },
+        data: { status: "IN_PROGRESS", startedAt: new Date(), personaSeed: seedToStore as object },
+      });
+      if (retried.count === 0) return error("This call already started.", 409);
+    }
+  }
+
+  return json({
+    configured: true,
+    signedUrl,
+    dynamicVariables,
+    setterId: user.id,
+    systemPrompt: lead.systemPrompt,
+    firstMessage: lead.firstMessage,
+    voiceId: lead.voiceId,
+    personaName: lead.personaName,
+  });
 }

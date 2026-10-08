@@ -5,6 +5,9 @@
    (SetMo Marketing.html). Fonts reuse the app's next/font vars.
    ========================================================================== */
 .mkt {
+  /* The app declares a dark color scheme; these pages are light, so form
+     controls (autofill text, sliders) must draw light here. */
+  color-scheme: light;
   --cream: #f6f3ec;
   --cream-2: #efeae0;
   --paper: #ffffff;

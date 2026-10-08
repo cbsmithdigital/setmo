@@ -6,6 +6,8 @@ import { skillName, skillTier, rubricFor, rubricForEvaluation, type SkillTierKey
 import { packFor } from "@/lib/packs/registry";
 import { SERVICE_META, SERVICE_ORDER } from "@/lib/service-meta";
 import { fullName, initialsOf } from "@/lib/format";
+import { leadChoiceOptions } from "@/lib/lead-choice";
+import { leadRevealFromSeed } from "@/lib/realism/lead-card";
 import type { ServiceKey } from "@/generated/prisma/client";
 
 // ---------- allowance pool ----------
@@ -48,6 +50,8 @@ export async function getServiceOptions(officeId: string) {
       skills,
       live,
       beta: agent?.status === "BETA" && pilot.has(key),
+      // "Pick your lead" options (null = surprise only).
+      leadChoices: live ? leadChoiceOptions(key) : null,
     };
   });
 }
@@ -867,5 +871,8 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer, 
     shareToken: session.shareToken,
     kind: session.kind,
     liveOutcome: (session.evaluation.liveOutcome ?? null) as import("@/lib/scorer").LiveOutcome | null,
+    // Who the lead really was, and whether the setter got to it.
+    reveal: session.kind === "LIVE" ? null : leadRevealFromSeed(session.personaSeed as Record<string, unknown> | null),
+    revealCheck: (e.reveal ?? null) as import("@/lib/reveal").RevealCheck | null,
   };
 }

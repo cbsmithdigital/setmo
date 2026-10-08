@@ -1,4 +1,5 @@
 import type { Dentition, LeadSkeleton, Violation } from "@/lib/realism/types";
+import { LEAD_SOURCES, maxAttemptsFor } from "@/lib/realism/lead-card";
 
 // ---------------------------------------------------------------------------
 // The hard rules every generated lead must satisfy, whatever service it's for.
@@ -133,6 +134,28 @@ const RULES: Rule[] = [
       s.caller.role !== "SELF" && s.caller.firstName === s.patient.firstName
         ? "caller and patient share a first name"
         : null,
+  },
+  // The lead card is checked like any other fact: a setter reading it must never
+  // see something the person on the phone would deny.
+  {
+    id: "R-CARD-TIMING",
+    check: (s) => {
+      if (!s.card) return null;
+      if (s.card.attempts > maxAttemptsFor(s.card.optedIn)) return `${s.card.attempts} missed calls on a lead that came in ${s.card.optedIn}`;
+      const allowed = LEAD_SOURCES[s.card.source]?.optIn;
+      return allowed && !allowed.includes(s.card.optedIn) ? `a "${s.card.source}" lead can't have come in ${s.card.optedIn}` : null;
+    },
+  },
+  {
+    id: "R-CARD-SOURCE",
+    check: (s) => {
+      if (!s.card) return null;
+      const src = LEAD_SOURCES[s.card.source];
+      if (!src) return `unknown lead source "${s.card.source}"`;
+      return src.needsCoverage && (s.coverage === "UNINSURED" || s.coverage === "MEDICARE_ONLY")
+        ? `found the practice through an insurer's directory with ${s.coverage}`
+        : null;
+    },
   },
 ];
 

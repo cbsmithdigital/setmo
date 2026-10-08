@@ -75,6 +75,7 @@ export async function proxy(request: NextRequest) {
     path === "/activate" ||
     path === "/reset-password" ||
     path.startsWith("/invite") ||
+    path === "/offline" || // the service worker's no-connection screen
     path.startsWith("/unsubscribe") || // token-signed email unsubscribe (no login)
     path.startsWith("/auth") ||
     // Public read-only shared-recording links (token-gated).
@@ -94,8 +95,10 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Run on all paths except static assets, image optimizer, and the favicon.
+  // Run on all paths except static assets, image optimizer, the favicon, and the
+  // installable-app files (the browser fetches the manifest without cookies, and
+  // the service worker must never be answered with a login redirect).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|setmo-icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|setmo-icon.png|manifest.webmanifest|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
