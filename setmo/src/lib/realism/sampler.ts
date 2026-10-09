@@ -3,7 +3,7 @@ import { pickName } from "@/lib/realism/names";
 import { pickVoiceFor } from "@/lib/realism/voices";
 import { DENTITION_AGE } from "@/lib/realism/rules";
 import { sampleCardFacts } from "@/lib/realism/lead-card";
-import { ageBand, type CallerRole, type Coverage, type Dentition, type LeadChoice, type LeadSkeleton, type Urgency } from "@/lib/realism/types";
+import type { CallerRole, Coverage, Dentition, LeadChoice, LeadSkeleton, Urgency } from "@/lib/realism/types";
 
 // ---------------------------------------------------------------------------
 // Assembling a lead from compatible parts.
@@ -245,7 +245,7 @@ export function sampleLead(spec: PersonaSpec, seed: string, opts: SampleOpts = {
     yearsSinceLastVisit,
     voice: pickVoiceFor(rng, {
       gender: callerGender,
-      band: ageBand(cAge),
+      age: cAge,
       exclude: opts.recentVoiceIds,
     }),
     interest: archetype.interest,

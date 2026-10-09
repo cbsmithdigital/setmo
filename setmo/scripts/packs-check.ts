@@ -20,7 +20,8 @@ delete process.env.ANTHROPIC_API_KEY;
 import { PACKS_WITH_PERSONA } from "../src/lib/packs/registry";
 import { sampleLead, nearestLevel, fitsPlan, situationText, situationCoverage, type Archetype, type PersonaSpec } from "../src/lib/realism/sampler";
 import { checkLead, RULE_IDS } from "../src/lib/realism/rules";
-import { unmatchedBands } from "../src/lib/realism/voices";
+import { voiceGaps } from "../src/lib/realism/voices";
+import { VOICE_CATALOG, voiceSuits } from "../src/lib/voices";
 import { nameFitsAge } from "../src/lib/realism/names";
 import { LEAD_SOURCES, maxAttemptsFor, noteGivesConcernAway } from "../src/lib/realism/lead-card";
 import { templateProse } from "../src/lib/realism/compose";
@@ -32,6 +33,14 @@ const N = Number(process.env.PACKS_CHECK_N ?? 20000);
 const LEVELS = ["ADAPTIVE", "WARM", "TOUGH"] as const;
 
 type Fail = { pack: string; seed: string; rule: string; detail: string };
+
+/** The voice is the caller's: in the roster, their gender, suited to their age. */
+function voiceProblem(voice: { id: string; name: string }, gender: "male" | "female", age: number): string | null {
+  const v = VOICE_CATALOG.find((x) => x.id === voice.id);
+  if (!v) return `voice ${voice.name} (${voice.id}) isn't in the roster`;
+  if (!voiceSuits(v, gender, age)) return `${v.name} (${v.gender}, ${v.ages}) for a ${age}-year-old ${gender} caller`;
+  return null;
+}
 
 /** Everything about a lead that the rules on facts don't cover. */
 function consistency(spec: PersonaSpec, lead: LeadSkeleton, opts: { difficulty?: (typeof LEVELS)[number]; choice?: LeadChoice; callAbout: string }): { rule: string; detail: string }[] {
@@ -49,6 +58,8 @@ function consistency(spec: PersonaSpec, lead: LeadSkeleton, opts: { difficulty?:
   if (lead.card && objection.notSources?.includes(lead.card.source)) {
     out.push({ rule: "OBJECTION-SOURCE", detail: `"${lead.objection}" after "${lead.card.source}"` });
   }
+  const voice = voiceProblem(lead.voice, lead.caller.gender, lead.caller.age);
+  if (voice) out.push({ rule: "VOICE", detail: voice });
   if (!nameFitsAge(lead.caller.firstName, lead.caller.age)) out.push({ rule: "NAME-AGE", detail: `${lead.caller.firstName}, ${lead.caller.age}` });
   if (!nameFitsAge(lead.patient.firstName, lead.patient.age)) out.push({ rule: "NAME-AGE", detail: `${lead.patient.firstName}, ${lead.patient.age}` });
 
@@ -86,7 +97,8 @@ async function run(): Promise<number> {
     const seenArchetypes = new Set<string>();
     const seenRoles = new Set<string>();
     const seenCoverage = new Set<string>();
-    let voiceMismatch = 0;
+    let youngCallers = 0;
+    let youngVoices = 0;
 
     const check = (lead: LeadSkeleton, seed: string, difficulty?: (typeof LEVELS)[number], choice?: LeadChoice) => {
       generated++;
@@ -104,7 +116,10 @@ async function run(): Promise<number> {
           seenArchetypes.add(lead.archetype);
           seenRoles.add(lead.caller.role);
           seenCoverage.add(lead.coverage);
-          if (!lead.voice.bandMatched) voiceMismatch++;
+          if (lead.caller.age <= 35) {
+            youngCallers++;
+            if (VOICE_CATALOG.find((v) => v.id === lead.voice.id)?.ages === "young") youngVoices++;
+          }
         }
         check(lead, seed, difficulty);
       }
@@ -157,10 +172,10 @@ async function run(): Promise<number> {
     }
 
     const unusedArchetypes = spec.archetypes.filter((a) => !seenArchetypes.has(a.key)).map((a) => a.key);
-    const pct = ((voiceMismatch / N) * 100).toFixed(1);
+    const young = youngCallers ? `${Math.round((youngVoices / youngCallers) * 100)}% of callers 35 or under on a young voice` : "no callers 35 or under";
     console.log(
       `${pack.service} (${pack.name}): ${N} leads · ${seenArchetypes.size}/${spec.archetypes.length} storylines · ` +
-        `callers ${[...seenRoles].join(",")} · ${seenCoverage.size} coverage types · voice age unmatched ${pct}%`
+        `callers ${[...seenRoles].join(",")} · ${seenCoverage.size} coverage types · ${young}`
     );
     if (unusedArchetypes.length) {
       console.log(`  ⚠ storylines never sampled: ${unusedArchetypes.join(", ")}`);
@@ -194,6 +209,8 @@ async function run(): Promise<number> {
             }
             if (concern && p.primaryObjection !== IMPLANT_CONCERNS.find((c) => c.key === concern)!.objection) fail("PICK", `asked for ${concern}, got "${p.primaryObjection}"`);
             if (!nameFitsAge(p.name.split(" ")[0], n)) fail("NAME-AGE", `${p.name}, ${n}`);
+            const voice = voiceProblem(p.voice, p.gender, n);
+            if (voice) fail("VOICE", voice);
             if (!p.card) fail("CARD", "no lead card");
             else {
               if (p.card.attempts > maxAttemptsFor(p.card.optedIn)) fail("R-CARD-TIMING", `${p.card.attempts} missed calls, came in ${p.card.optedIn}`);
@@ -326,9 +343,18 @@ async function run(): Promise<number> {
     failures.push({ pack: "coverage", seed: "-", rule, detail: "no negative golden exercises this rule" });
   }
 
-  const gaps = unmatchedBands();
+  // The voice check itself catches the wrong age and the wrong gender.
+  const youngWoman = VOICE_CATALOG.find((v) => v.gender === "female" && v.ages === "young");
+  if (youngWoman && !voiceProblem(youngWoman, "female", 70)) {
+    failures.push({ pack: "voices", seed: youngWoman.name, rule: "VOICE", detail: "a young voice on a 70-year-old caller wasn't caught" });
+  }
+  if (youngWoman && !voiceProblem(youngWoman, "male", 25)) {
+    failures.push({ pack: "voices", seed: youngWoman.name, rule: "VOICE", detail: "a woman's voice on a man wasn't caught" });
+  }
+
+  const gaps = voiceGaps();
   if (gaps.length) {
-    console.log(`\nVoice roster: no voice is tagged for caller ages ${gaps.join(", ")} — those callers borrow an adult voice until the roster is audited.`);
+    console.log(`\nVoice roster: no voice suits callers ${gaps.join(", ")} — they borrow another adult voice of their gender until one is added.`);
   }
 
   console.log(`\n${generated.toLocaleString()} leads generated, ${negatives.length} negative goldens.`);

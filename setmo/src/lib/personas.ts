@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { pickVoice, type Voice } from "@/lib/voices";
+import type { Voice } from "@/lib/voices";
+import { pickVoiceFor } from "@/lib/realism/voices";
 import { rngFrom } from "@/lib/realism/rng";
 import { pickName } from "@/lib/realism/names";
 import { sampleCardFacts, onFileBlock, plainNote, LEAD_SOURCES } from "@/lib/realism/lead-card";
@@ -12,7 +13,8 @@ import type { CardFacts, LeadChoice } from "@/lib/realism/types";
 // ============================================================================
 // AI LEAD persona generation. Just before a call connects we compose a fresh,
 // coherent lead from curated ingredients (so reps never feel same-y), match it
-// to a gender-appropriate voice, and load both into the ElevenLabs overrides.
+// to a voice of their gender that suits their age, and load both into the
+// ElevenLabs overrides.
 // EDIT the pools + the lead prompt here to tune how leads behave.
 // ============================================================================
 
@@ -170,6 +172,9 @@ export async function generatePersona(
   // Patricia or Robert most of the time.
   const { firstName, lastName } = pickName(rng, gender, age);
   const name = `${firstName} ${lastName}`;
+  // And the voice: their gender, suited to their age.
+  const { id: voiceId, name: voiceName } = pickVoiceFor(rng, { gender, age });
+  const voice: Voice = { name: voiceName, id: voiceId };
   const picked = IMPLANT_CONCERNS.find((c) => c.key === choice.concern);
   const situation = sample(SITUATIONS);
   const seed = {
@@ -196,7 +201,7 @@ export async function generatePersona(
     primaryObjection: seed.objection,
     emotionalTone: seed.tone,
     openingLine: "Hello?",
-    voice: pickVoice(gender),
+    voice,
     ...extras,
     ...(plain ? { formNote: plain } : {}),
   };
@@ -226,7 +231,7 @@ export async function generatePersona(
     if (!o) return fallback;
     // Name, gender, age and voice stay the ones picked here, so they always agree.
     const { formNote, ...rest } = o;
-    const persona: Persona = { ...rest, name, gender, age: String(age), voice: pickVoice(gender), ...extras };
+    const persona: Persona = { ...rest, name, gender, age: String(age), voice, ...extras };
     if (!card || !source) return persona;
 
     // The note goes on the setter's lead card: checked against what the call is

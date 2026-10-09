@@ -1,46 +1,43 @@
-import { VOICES, type Voice } from "@/lib/voices";
-import type { AgeBand } from "@/lib/realism/types";
+import { VOICE_CATALOG, voiceSuits, type VoiceMeta } from "@/lib/voices";
+import { ageBand, type AgeBand } from "@/lib/realism/types";
 import type { Rng } from "@/lib/realism/rng";
 
-// Which voices can plausibly carry which caller ages.
-//
-// The existing 16 voices have never been listened to with an age in mind, so
-// they're all marked as the broad adult middle. Nothing claims to be a young
-// adult or an older caller until someone audits them — a wrong claim is worse
-// than none, because it puts a 30-year-old voice on an 82-year-old caller
-// without anyone noticing. `bandMatched: false` on a generated lead marks where
-// the roster still needs filling out.
-const ADULT_MIDDLE: AgeBand[] = ["30-44", "45-59", "60-74"];
+// Voices made for young adults come up more often for a caller that young, so a
+// 25-year-old usually sounds young without every young caller sharing one voice
+// (the any-age voices still come up too).
+const YOUNG_VOICE_WEIGHT = 3;
 
-export type VoiceMeta = Voice & { gender: "male" | "female"; bands: AgeBand[] };
-
-export const VOICE_CATALOG: VoiceMeta[] = [
-  ...VOICES.male.map((v) => ({ ...v, gender: "male" as const, bands: ADULT_MIDDLE })),
-  ...VOICES.female.map((v) => ({ ...v, gender: "female" as const, bands: ADULT_MIDDLE })),
-];
-
-/** A voice for the person actually on the phone. Never a child: a caller is
- *  always an adult, and a child patient never speaks. */
+/** A voice for the person actually on the phone: their gender, suited to their
+ *  age. Never a child — a caller is always an adult, and a child patient never
+ *  speaks. */
 export function pickVoiceFor(
   rng: Rng,
-  opts: { gender: "male" | "female"; band: AgeBand; exclude?: string[] }
+  opts: { gender: "male" | "female"; age: number; exclude?: string[] }
 ): { id: string; name: string; band: AgeBand; bandMatched: boolean } {
-  const sameGender = VOICE_CATALOG.filter((v) => v.gender === opts.gender);
-  const fresh = sameGender.filter((v) => !opts.exclude?.includes(v.id));
-  const pool = fresh.length ? fresh : sameGender;
-
-  const matching = pool.filter((v) => v.bands.includes(opts.band));
-  const chosen = matching.length ? rng.pick(matching) : rng.pick(pool);
-  return {
-    id: chosen.id,
-    name: chosen.name,
-    band: opts.band,
-    bandMatched: matching.length > 0,
-  };
+  const age = Math.max(18, opts.age);
+  const suited = VOICE_CATALOG.filter((v) => voiceSuits(v, opts.gender, age));
+  const fresh = suited.filter((v) => !opts.exclude?.includes(v.id));
+  // Never the wrong gender. Only if no voice suits the age (the any-age voices
+  // make that impossible today) does a caller borrow another adult voice.
+  const pool: VoiceMeta[] = fresh.length ? fresh : suited.length ? suited : VOICE_CATALOG.filter((v) => v.gender === opts.gender);
+  const chosen = rng.weighted(pool.map((v) => ({ item: v, weight: v.ages === "young" ? YOUNG_VOICE_WEIGHT : 1 })));
+  return { id: chosen.id, name: chosen.name, band: ageBand(age), bandMatched: suited.length > 0 };
 }
 
-/** Caller age bands with no voice that can carry them — what to record next. */
-export function unmatchedBands(): AgeBand[] {
-  const covered = new Set(VOICE_CATALOG.flatMap((v) => v.bands));
-  return (["18-29", "30-44", "45-59", "60-74", "75+"] as AgeBand[]).filter((b) => !covered.has(b));
+/** Caller ages no voice suits, per gender, as ranges ("female 76-120") — what to
+ *  record next. Empty while every adult age has a voice. */
+export function voiceGaps(): string[] {
+  const gaps: string[] = [];
+  for (const gender of ["male", "female"] as const) {
+    let start: number | null = null;
+    for (let age = 18; age <= 121; age++) {
+      const covered = age <= 120 && VOICE_CATALOG.some((v) => voiceSuits(v, gender, age));
+      if (!covered && start == null && age <= 120) start = age;
+      if ((covered || age === 121) && start != null) {
+        gaps.push(`${gender} ${start}-${age - 1}`);
+        start = null;
+      }
+    }
+  }
+  return gaps;
 }
