@@ -77,7 +77,7 @@ export async function guardNote(opts: {
 1. the real reason underneath: ${opts.realReason}
 2. the hesitation they'll raise: ${opts.hesitation}
 
-Decide whether the note reveals or clearly hints at either one. Mentioning the surface situation (what's wrong with their teeth, what kind of visit they want) is fine. Naming or hinting at the hesitation's topic is not (for example, any mention of cost when the hesitation is about money; of a spouse when it's about a spouse; of being nervous when it's about nerves; of insurance or networks when it's about insurance).
+Decide whether the note reveals or clearly hints at either one. Mentioning the surface situation (what's wrong with their teeth, what kind of visit they want) is fine. Naming or hinting at the hesitation's topic is not (for example, any mention of cost when the hesitation is about money; of a spouse when it's about a spouse; of being nervous when it's about nerves; of insurance or networks when it's about insurance; of whether the treatment is really necessary, or could be avoided or handled another way, when it's about doubting the need; of how long it takes or how many visits when it's about time; of other offices, cheaper options or at-home kits when it's about shopping around; of looking fake or unnatural when it's about how it will look; of wanting it done at the first visit or the same day when that's the hesitation).
 
 reveals: true or false.
 safeNote: if reveals is false, the note exactly as written. If true, the same note in the same voice with only the revealing part removed — no new facts, still sounding like a real person.`,
