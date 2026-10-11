@@ -2,13 +2,21 @@ import type { ServiceKey } from "@/generated/prisma/client";
 import type { Rubric, RubricSkill, ServicePack } from "@/lib/packs/types";
 import { IMPLANT_PACK, IMPLANT_RUBRIC_V1 } from "@/lib/packs/implant";
 import { GENERAL_NEW_PATIENT_PACK, GENERAL_NP_RUBRIC_V1 } from "@/lib/packs/general-new-patient";
+import { DENTURE_PACK, DENTURE_RUBRIC_V1 } from "@/lib/packs/denture";
+import { COSMETIC_PACK, COSMETIC_RUBRIC_V1 } from "@/lib/packs/cosmetic";
+import { ORTHO_PACK, ORTHO_RUBRIC_V1 } from "@/lib/packs/ortho";
+import { WISDOM_PACK, WISDOM_RUBRIC_V1 } from "@/lib/packs/wisdom";
 
 // The service catalog. One pack per dental service SetMo can run calls for.
 // Services without a pack yet aren't startable — the Agent row's status decides
-// what clients see (LIVE / DRAFT / PLANNED), and session creation refuses
-// anything that isn't LIVE.
+// what clients see (LIVE / BETA / DRAFT / PLANNED), and session creation refuses
+// anything that isn't open.
 const PACKS: Partial<Record<ServiceKey, ServicePack>> = {
   IMPLANT: IMPLANT_PACK,
+  DENTURE: DENTURE_PACK,
+  COSMETIC: COSMETIC_PACK,
+  ORTHO: ORTHO_PACK,
+  WISDOM: WISDOM_PACK,
   GENERAL: GENERAL_NEW_PATIENT_PACK,
 };
 
@@ -18,6 +26,10 @@ const PACKS: Partial<Record<ServiceKey, ServicePack>> = {
 const RUBRICS: Record<string, Rubric> = {
   [IMPLANT_RUBRIC_V1.id]: IMPLANT_RUBRIC_V1,
   [GENERAL_NP_RUBRIC_V1.id]: GENERAL_NP_RUBRIC_V1,
+  [DENTURE_RUBRIC_V1.id]: DENTURE_RUBRIC_V1,
+  [COSMETIC_RUBRIC_V1.id]: COSMETIC_RUBRIC_V1,
+  [ORTHO_RUBRIC_V1.id]: ORTHO_RUBRIC_V1,
+  [WISDOM_RUBRIC_V1.id]: WISDOM_RUBRIC_V1,
 };
 
 /** The rubric a NEW call on this service is graded against. Falls back to the

@@ -42,6 +42,21 @@ function voiceProblem(voice: { id: string; name: string }, gender: "male" | "fem
   return null;
 }
 
+/** The story's words agree with what's in the mouth: a storyline draws its
+ *  situation and the patient's dentition separately, so a situation that names
+ *  a partial or a lower denture must suit every dentition the storyline allows. */
+function dentitionProblem(lead: LeadSkeleton): string | null {
+  const d = lead.patient.dentition;
+  const hasDenture = d === "partial_denture" || d === "full_upper_denture" || d === "full_dentures";
+  for (const text of [lead.situation, lead.hiddenWhy, lead.objection]) {
+    if (/\bpartials?\b/i.test(text) && d !== "partial_denture") return `"${text}" with ${d}`;
+    if (/\b(lower|bottom) dentures?\b/i.test(text) && d !== "full_dentures") return `"${text}" with ${d}`;
+    if (/\b(upper|top) dentures?\b/i.test(text) && d !== "full_dentures" && d !== "full_upper_denture") return `"${text}" with ${d}`;
+    if (/\b(the|their|her|his|my) (full |old |current )?dentures?\b/i.test(text) && !hasDenture) return `"${text}" with ${d}`;
+  }
+  return null;
+}
+
 /** Everything about a lead that the rules on facts don't cover. */
 function consistency(spec: PersonaSpec, lead: LeadSkeleton, opts: { difficulty?: (typeof LEVELS)[number]; choice?: LeadChoice; callAbout: string }): { rule: string; detail: string }[] {
   const out: { rule: string; detail: string }[] = [];
@@ -60,6 +75,8 @@ function consistency(spec: PersonaSpec, lead: LeadSkeleton, opts: { difficulty?:
   }
   const voice = voiceProblem(lead.voice, lead.caller.gender, lead.caller.age);
   if (voice) out.push({ rule: "VOICE", detail: voice });
+  const mouth = dentitionProblem(lead);
+  if (mouth) out.push({ rule: "STORY-DENTITION", detail: mouth });
   if (!nameFitsAge(lead.caller.firstName, lead.caller.age)) out.push({ rule: "NAME-AGE", detail: `${lead.caller.firstName}, ${lead.caller.age}` });
   if (!nameFitsAge(lead.patient.firstName, lead.patient.age)) out.push({ rule: "NAME-AGE", detail: `${lead.patient.firstName}, ${lead.patient.age}` });
 

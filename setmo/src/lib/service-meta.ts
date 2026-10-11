@@ -33,7 +33,7 @@ export const SERVICE_META: Record<
   },
   GENERAL: {
     name: "General & hygiene",
-    desc: "New-patient and recall booking fundamentals.",
+    desc: "New-patient visits and first cleanings.",
     value: "varies",
   },
 };

@@ -56,6 +56,13 @@ export async function buildPackLead(opts: {
 }): Promise<BuiltLead> {
   const stored = opts.stored as { skeleton?: LeadSkeleton; prose?: LeadProse } | null;
   const callAbout = opts.pack.callAbout ?? opts.pack.name.toLowerCase();
+  // The office's own offer wording is written for the implant call, so a pack
+  // that brings its own offer uses that instead.
+  const office: OfficeFacts = {
+    ...opts.office,
+    offerFraming: opts.pack.offer ?? opts.office.offerFraming,
+    appointmentFraming: opts.pack.appointment ?? opts.office.appointmentFraming,
+  };
 
   const skeleton =
     stored?.skeleton ?? sampleLead(opts.pack.persona!, opts.seed, { difficulty: opts.difficulty, choice: opts.choice ?? undefined });
@@ -65,8 +72,8 @@ export async function buildPackLead(opts: {
       await composeLead({
         skeleton,
         callAbout,
-        office: opts.office,
-        lexicon: { allowImplantWording: opts.pack.service === "IMPLANT" },
+        office,
+        lexicon: opts.pack.lexicon ?? { allowImplantWording: opts.pack.service === "IMPLANT" },
       })
     ).prose;
 
@@ -74,7 +81,8 @@ export async function buildPackLead(opts: {
     skeleton,
     prose,
     callAbout,
-    office: opts.office,
+    office,
+    adOffer: opts.pack.adOffer,
     setterFirstName: opts.setterFirstName,
     difficulty: opts.difficulty,
   });

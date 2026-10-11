@@ -156,6 +156,8 @@ export const NOTE_GIVEAWAY: Record<string, RegExp> = {
   doubt: /\b(really work|actually work|work for me|skeptic\w*|legit|scam|too good to be true)\b/i,
   pressure: /\b(pressure\w*|pushy|sales ?pitch|upsell\w*|hard sell|no strings)\b/i,
   age: /\b(at my age|too old|worth it|my age)\b/i,
+  results: /\b(fake|look natural|natural[- ]looking|too white|too big|chiclets|horse teeth|look real|before[- ]and[- ]after)\b/i,
+  early: /\b(too young|too early|wait until|is it necessary|do (we|they) (even )?need|not sure (it's|its) needed)\b/i,
 };
 
 /** Why a note plainly gives the hesitation away, or null when it doesn't. */
@@ -191,9 +193,12 @@ export function onFileBlock(opts: {
   note?: string | null;
   coverage?: Coverage | null;
   interest?: string | null;
+  /** What the ad promised, for a lead that came in through one. */
+  adOffer?: string | null;
 }): string {
   const src = LEAD_SOURCES[opts.card.source] ?? LEAD_SOURCES.google_form;
   const lines = [`- ${src.asLead} ${opts.card.optedIn}.`];
+  if (src.ad && opts.adOffer) lines.push(`- The ad you answered was for: ${opts.adOffer}.`);
   if (opts.note) {
     lines.push(src.noteKind === "voicemail" ? `- In the voicemail you said: "${opts.note}"` : `- What you wrote: "${opts.note}"`);
   }

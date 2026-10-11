@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { agentIdFor, isElevenLabsConfigured } from "@/lib/elevenlabs";
 import { buildSessionLead, hasComposedLead, resolveDifficulty } from "@/lib/session-lead";
 import { leadCardFromSeed } from "@/lib/realism/lead-card";
+import { packFor } from "@/lib/packs/registry";
 import { error, json } from "@/lib/api";
 import type { ServiceKey } from "@/generated/prisma/client";
 
@@ -43,8 +44,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       // The challenge the setter PICKED — an adaptive lead's actual level is
       // part of what the call keeps hidden until the reveal.
       difficulty: session.difficulty,
-      // The offer only shows for a lead that answered an ad for it.
-      offer: session.serviceType === "IMPLANT" && card?.fromAd ? session.office?.offerFraming ?? null : null,
+      // The offer only shows for a lead that answered an ad for it: the office's
+      // own offer on the implant call, the call type's ad on every other.
+      offer: !card?.fromAd
+        ? null
+        : session.serviceType === "IMPLANT"
+          ? session.office?.offerFraming ?? null
+          : packFor(session.serviceType)?.adOffer ?? null,
       callback: typeof seed.callbackOf === "string",
       interrupted: s.status === "IN_PROGRESS" && Boolean(seed.connectedAt),
     });

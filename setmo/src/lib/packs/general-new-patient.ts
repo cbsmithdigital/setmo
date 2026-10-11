@@ -301,7 +301,7 @@ export const GENERAL_NP_PERSONA: PersonaSpec = {
       situations: [
         { text: "just retired and is working out what their new plan covers", coverage: ["MEDICARE_ADVANTAGE", "MEDICARE_ONLY", "PPO"] },
         "moved closer to family and needs a dentist near their new home",
-        "their partial doesn't sit right since they lost weight",
+        "chewing has gotten harder lately and they want someone to take a look",
       ],
       drivers: [
         "they don't want to be a burden about it",
@@ -353,9 +353,12 @@ export const GENERAL_NP_PERSONA: PersonaSpec = {
 export const GENERAL_NEW_PATIENT_PACK: ServicePack = {
   service: "GENERAL",
   name: "New patients & hygiene",
-  blurb: "New-patient and recall booking fundamentals — the highest-volume call.",
+  blurb: "New-patient visits and first cleanings — the highest-volume call.",
   caseValue: "$300–450 first visit",
   callAbout: "becoming a new patient at the practice",
+  offer: "a new-patient visit — an exam, x-rays and, when it's right for them, a cleaning",
+  appointment: "a new-patient appointment",
+  adOffer: "New-patient visit",
   rubric: GENERAL_NP_RUBRIC_V1,
   persona: GENERAL_NP_PERSONA,
 };

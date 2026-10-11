@@ -46,8 +46,8 @@ export function templateProse(s: LeadSkeleton, callAbout: string): LeadProse {
     openingLine: "Hello?",
     background:
       s.caller.role === "SELF"
-        ? `${s.situation}. I'm calling about ${callAbout}.`
-        : `I'm calling about ${s.patient.firstName}, ${s.patient.relation.replace("their ", "my ")}. ${s.situation}.`,
+        ? `${s.situation}. I reached out about ${callAbout}.`
+        : `I reached out about ${s.patient.firstName}, ${s.patient.relation.replace("their ", "my ")}. ${s.situation}.`,
     hiddenWhyInTheirWords: s.hiddenWhy,
     objectionInTheirWords: `${who === "I" ? "I" : who} — ${s.objection}.`,
     formNote: plainNote({
@@ -64,10 +64,10 @@ function factSheet(s: LeadSkeleton, callAbout: string, office: ComposeCtx["offic
   const patientLine =
     s.caller.role === "SELF"
       ? `You are the patient, ${s.caller.firstName} ${s.caller.lastName}, age ${s.patient.age}.`
-      : `You are ${s.caller.firstName} ${s.caller.lastName}, age ${s.caller.age}, calling as ${CALLER_LABEL[s.caller.role]} about ${s.patient.firstName}, age ${s.patient.age}. ${s.patient.firstName} is NOT on the phone and will not come to the phone.`;
+      : `You are ${s.caller.firstName} ${s.caller.lastName}, age ${s.caller.age}, ${CALLER_LABEL[s.caller.role]}, who reached out about ${s.patient.firstName}, age ${s.patient.age}. ${s.patient.firstName} is NOT on the phone and will not come to the phone.`;
   return [
     patientLine,
-    `Calling ${office.name ?? "a dental practice"}${office.city ? ` in ${office.city}` : ""} about ${callAbout}.`,
+    `Reached out to ${office.name ?? "a dental practice"}${office.city ? ` in ${office.city}` : ""} about ${callAbout}, and the practice is now calling them back.`,
     `Situation: ${s.situation}.`,
     `The real reason underneath (not volunteered): ${s.hiddenWhy}.`,
     `The hesitation you'll raise: ${s.objection}.`,
@@ -91,15 +91,15 @@ export async function composeLead(ctx: ComposeCtx): Promise<{ prose: LeadProse; 
   const fallback = templateProse(skeleton, callAbout);
   if (!process.env.ANTHROPIC_API_KEY) return { prose: fallback, source: "template" };
 
-  const system = `You write the VOICE of a person calling a dental practice, for a training role-play. You are given their facts. Your job is only to make them sound like a real person on the phone.
+  const system = `You write the VOICE of a person who reached out to a dental practice and is now getting a call back from it, for a training role-play. You are given their facts. Your job is only to make them sound like a real person on the phone.
 
 Rules:
 - Never change, add to, or contradict a fact you were given — not ages, not who is on the phone, not insurance.
 - Never invent a dentist's name, a brand, a chain, or a price.
 - Never write the patient as speaking when they are not the caller.
 - Keep it short and spoken, the way people actually talk on the phone. No stage directions.
-- openingLine: how they answer or open the call — a handful of words, in character.
-- background: two or three sentences, first person, about why they're calling.
+- openingLine: how they answer their phone when the practice calls — a handful of words, in character (the practice is calling them; they didn't place this call).
+- background: two or three sentences, first person, about why they reached out.
 - hiddenWhyInTheirWords: the deeper reason, as they'd say it IF the setter earned it.
 - objectionInTheirWords: their hesitation, in their own words, one sentence.
 - formNote: the short note they left when they reached out — under 25 words, casual, the way people actually type into a form or talk on a voicemail. Only the surface situation and what they want. No days, dates or times (the practice's records already say when). It must NOT mention the deeper reason or the hesitation, not even a hint of the topic (if the hesitation is about money, the note says nothing about cost; if it's about scheduling, nothing about times): the setter reads this note before the call, and finding those two out is the whole point of the call.`;

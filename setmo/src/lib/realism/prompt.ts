@@ -24,6 +24,9 @@ export function buildLeadPromptV2(opts: {
     offerFraming?: string | null;
     appointmentFraming?: string | null;
   };
+  /** What this call type's ads promise — part of what the lead remembers when
+   *  they came in through an ad. */
+  adOffer?: string | null;
   setterFirstName?: string | null;
   difficulty: Difficulty;
 }): { systemPrompt: string; firstMessage: string } {
@@ -31,16 +34,16 @@ export function buildLeadPromptV2(opts: {
   const isSelf = s.caller.role === "SELF";
 
   const whoYouAre = isSelf
-    ? `- You are ${s.caller.firstName} ${s.caller.lastName}, ${s.patient.age}. You're calling about yourself.`
+    ? `- You are ${s.caller.firstName} ${s.caller.lastName}, ${s.patient.age}. You reached out about yourself.`
     : [
         `- You are ${s.caller.firstName} ${s.caller.lastName}, ${s.caller.age}. You are ${CALLER_LABEL[s.caller.role]}.`,
         `- The patient is ${s.patient.firstName}, ${s.patient.age} — ${s.patient.relation.replace("their ", "your ")}.`,
         `- ${s.patient.firstName} is NOT with you and will NOT come to the phone. Never speak as ${s.patient.firstName}.`,
       ].join("\n");
 
-  const systemPrompt = `You are role-playing someone phoning a dental practice about ${opts.callAbout}. A dental appointment setter${
+  const systemPrompt = `You are role-playing someone who reached out to a dental practice about ${opts.callAbout}. A dental appointment setter${
     opts.setterFirstName ? ` (${opts.setterFirstName})` : ""
-  } from ${office?.name ?? "the practice"}${office?.city ? ` in ${office.city}` : ""} is on the call. Stay FULLY in character for the whole call. You are NOT an assistant and never break character or mention being an AI.
+  } from ${office?.name ?? "the practice"}${office?.city ? ` in ${office.city}` : ""} is calling you back now — you answered the phone; you didn't place this call. Stay FULLY in character for the whole call. You are NOT an assistant and never break character or mention being an AI.
 
 WHO YOU ARE
 ${whoYouAre}
@@ -48,7 +51,7 @@ ${whoYouAre}
 - How you come across: ${s.tone}.
 - Coverage: ${COVERAGE_LABEL[s.coverage]}. Only talk about coverage the way someone with this plan would — you don't know the details perfectly.
 - ${s.yearsSinceLastVisit == null ? "You've never been to a dentist." : s.yearsSinceLastVisit === 0 ? "You were last at a dentist within the past year." : `It's been about ${s.yearsSinceLastVisit} years since you saw a dentist.`}
-${s.card ? `\n${onFileBlock({ card: s.card, note: prose.formNote, coverage: s.coverage, interest: s.interest })}\n` : ""}
+${s.card ? `\n${onFileBlock({ card: s.card, note: prose.formNote, coverage: s.coverage, interest: s.interest, adOffer: opts.adOffer })}\n` : ""}
 WHAT YOU DON'T VOLUNTEER
 - The real reason underneath: "${prose.hiddenWhyInTheirWords}". Don't offer this. Only open up if the setter earns it with genuine curiosity and good questions. If they never dig, stay surface-level.
 - Your hesitation: "${prose.objectionInTheirWords}". Raise it naturally at some point; don't give in easily.

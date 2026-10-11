@@ -1,5 +1,6 @@
 import type { ServiceKey } from "@/generated/prisma/client";
 import type { PersonaSpec } from "@/lib/realism/sampler";
+import type { LexiconOpts } from "@/lib/realism/lexicon";
 
 // ---------------------------------------------------------------------------
 // Service packs: everything that makes one kind of dental call its own thing —
@@ -46,6 +47,17 @@ export interface ServicePack {
   /** One line describing what the caller is phoning about, in their terms —
    *  goes into the lead prompt. */
   callAbout?: string;
+  /** What the practice offers on this kind of call, as the lead hears it. The
+   *  office's own offer wording is written for the implant call (often an
+   *  implant promotion), so every other call type brings its own. */
+  offer?: string;
+  /** The appointment this call is trying to book, in plain words. */
+  appointment?: string;
+  /** What the practice's ads for this call type promise — on the lead card and
+   *  in the lead's memory when they came in through an ad. */
+  adOffer?: string;
+  /** Wording rules for this call type's leads (the default bans implant terms). */
+  lexicon?: LexiconOpts;
   rubric: Rubric;
   /** How this service's leads are built. The implant pack has none — it keeps
    *  its original generator untouched. */
