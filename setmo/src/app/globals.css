@@ -827,6 +827,8 @@ a {
   }
   .shell {
     grid-template-columns: 1fr;
+    /* the top bar keeps its own height; a short page doesn't stretch it */
+    grid-template-rows: auto 1fr;
   }
 
   /* top app bar with hamburger */
@@ -892,13 +894,15 @@ a {
     backdrop-filter: blur(2px);
   }
 
-  /* collapse multi-column grids (overrides inline grid-template-columns) */
+  /* collapse multi-column grids (overrides inline grid-template-columns).
+     minmax(0, …) lets a column shrink to the screen — a plain 1fr can't go
+     narrower than its widest one-line text, which pushed cards off the edge. */
   .g-2,
   .g-3 {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: minmax(0, 1fr) !important;
   }
   .g-4 {
-    grid-template-columns: repeat(2, 1fr) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
   .content,
@@ -1524,6 +1528,48 @@ a {
   /* the podium is a desktop flourish; on a phone the ranked list says it in order */
   .lb-podium {
     display: none !important;
+  }
+  /* live calls: name, date and score on the first line; the tags underneath */
+  .lc-row {
+    flex-wrap: wrap;
+    row-gap: 6px !important;
+  }
+  .lc-tags {
+    order: 3;
+    flex-basis: 100% !important;
+    flex-wrap: wrap;
+    padding-left: 56px;
+  }
+  /* ranked rows: give the name the room — smaller rank, avatar and gaps */
+  .lb-row {
+    gap: 10px;
+    padding: 11px 12px;
+  }
+  .lb-rank {
+    width: 20px;
+    font-size: 15px;
+  }
+  .lb-av {
+    width: 34px;
+    height: 34px;
+    font-size: 12.5px;
+  }
+  .lb-nm {
+    min-width: 0;
+    font-size: 14.5px;
+  }
+  .lb-nm small {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .lb-sc {
+    width: auto;
+    font-size: 18px;
+  }
+  .lb-move {
+    width: auto;
+    min-width: 22px;
   }
 }
 @media (max-width: 560px) {

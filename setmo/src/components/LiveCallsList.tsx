@@ -19,6 +19,7 @@ export function LiveCallsList({ rows, showOffice = false }: { rows: LiveCallRow[
           <Link
             key={c.id}
             href={`/results/${c.id}`}
+            className="lc-row"
             style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 8px", borderRadius: 10, borderTop: i ? "1px solid var(--line-soft)" : "none" }}
           >
             <div style={{ width: 42, height: 42, borderRadius: 11, background: "var(--s3)", display: "grid", placeItems: "center", color: c.booked ? "var(--mint)" : "var(--purple-2)", flex: "none" }}>
@@ -34,10 +35,13 @@ export function LiveCallsList({ rows, showOffice = false }: { rows: LiveCallRow[
                 {c.leadStates.length ? ` · lead: ${c.leadStates.slice(0, 3).join(", ").toLowerCase()}` : ""}
               </div>
             </div>
-            {c.lowConfidence && <span className="chip" style={{ fontSize: 10.5, color: "var(--amber)", flex: "none" }} title="Garbled transcript — directional only">low conf.</span>}
-            {c.primaryBlocker && <span className="chip amber" style={{ fontSize: 11, flex: "none" }}>{c.primaryBlocker}</span>}
-            <span className={"chip " + (c.booked ? "mint" : "")} style={{ fontSize: 11.5, fontWeight: 700, flex: "none" }}>{c.disposition}</span>
-            <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 19, width: 44, textAlign: "right" }} className={c.score >= 4 ? "mint-text" : "grad-text"}>
+            {/* On a phone these drop to a line of their own under the name. */}
+            <div className="lc-tags" style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
+              {c.lowConfidence && <span className="chip" style={{ fontSize: 10.5, color: "var(--amber)", flex: "none" }} title="Garbled transcript — directional only">low conf.</span>}
+              {c.primaryBlocker && <span className="chip amber" style={{ fontSize: 11, flex: "none" }}>{c.primaryBlocker}</span>}
+              <span className={"chip " + (c.booked ? "mint" : "")} style={{ fontSize: 11.5, fontWeight: 700, flex: "none" }}>{c.disposition}</span>
+            </div>
+            <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 19, width: 44, textAlign: "right" }} className={"lc-score " + (c.score >= 4 ? "mint-text" : "grad-text")}>
               {c.score ? c.score.toFixed(1) : "—"}
             </div>
           </Link>

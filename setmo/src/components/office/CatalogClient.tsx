@@ -135,11 +135,11 @@ export function CatalogClient({
               <input className="input" value={profile.city} onChange={(e) => setField("city", e.target.value)} />
             </div>
             <div className="field">
-              <label>Offer / voucher framing</label>
+              <label>Offer / voucher framing (implant calls)</label>
               <input className="input" value={profile.offerFraming} onChange={(e) => setField("offerFraming", e.target.value)} />
             </div>
             <div className="field">
-              <label>Appointment framing</label>
+              <label>Appointment framing (implant calls)</label>
               <input className="input" value={profile.appointmentFraming} onChange={(e) => setField("appointmentFraming", e.target.value)} />
             </div>
             <div className="field" style={{ marginBottom: 0 }}>

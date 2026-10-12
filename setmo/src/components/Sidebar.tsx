@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { RoleSwitcher } from "@/components/RoleSwitcher";
 import { createClient } from "@/lib/supabase/client";
+import { TAB_LABEL, tabsFor } from "@/lib/nav-tabs";
 
 type NavItem = { href: string; label: string; icon: IconName; badge?: string; ai?: boolean };
 
@@ -121,11 +122,6 @@ const NAV_AGENT: NavItem[] = [
   { href: "/leaderboard", label: "Leaderboard", icon: "trophy" },
 ];
 
-// On a phone, a setter's four most-used screens sit in a bottom tab bar (thumb
-// reach); everything else stays in the menu behind "More".
-const TAB_HREFS = ["/dashboard", "/practice", "/progress", "/coach"];
-const TAB_LABEL: Record<string, string> = { "/dashboard": "Home", "/coach": "Setty" };
-
 const NAV_BY_ROLE: Record<string, NavItem[]> = {
   SETTER: NAV_SETTER,
   OFFICE_ADMIN: NAV_OFFICE,
@@ -159,7 +155,10 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const nav = isAgent ? NAV_AGENT : NAV_BY_ROLE[role] ?? NAV_SETTER;
-  const tabs = isAgent || role === "SETTER" ? TAB_HREFS.map((h) => nav.find((n) => n.href === h)).filter((n): n is NavItem => Boolean(n)) : [];
+  // On a phone, the role's most-used screens sit in a bottom tab bar; the rest
+  // stay in the menu behind "More" (see nav-tabs.ts).
+  const tabHrefs = tabsFor(role, isAgent);
+  const tabs = tabHrefs.map((h) => nav.find((n) => n.href === h)).filter((n): n is NavItem => Boolean(n));
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
 
@@ -240,7 +239,7 @@ export function Sidebar({
       </div>
       </aside>
 
-      {/* phone bottom tab bar (setters) — hidden on desktop */}
+      {/* phone bottom tab bar — hidden on desktop */}
       {tabs.length > 0 && (
         <nav className="tabbar" aria-label="Main">
           {tabs.map((t) => (
@@ -257,7 +256,7 @@ export function Sidebar({
             </Link>
           ))}
           <button
-            className={"tab" + (open || (activeHref && !TAB_HREFS.includes(activeHref)) ? " on" : "")}
+            className={"tab" + (open || (activeHref && !tabHrefs.includes(activeHref)) ? " on" : "")}
             onClick={() => setOpen(true)}
             aria-label="More"
             aria-expanded={open}

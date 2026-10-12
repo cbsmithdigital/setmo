@@ -515,10 +515,12 @@ export async function getOfficeCatalog(officeId: string) {
 
   const services = SERVICE_ORDER.map((key) => {
     const agent = agentBy.get(key);
+    // Same names and descriptions as the practice page: the pack's, where there is one.
+    const pack = packFor(key);
     return {
       key,
-      name: SERVICE_META[key].name,
-      desc: SERVICE_META[key].desc,
+      name: pack?.name ?? SERVICE_META[key].name,
+      desc: pack?.blurb ?? SERVICE_META[key].desc,
       live: agent?.status === "LIVE",
       enabled: enabled.has(key),
     };
