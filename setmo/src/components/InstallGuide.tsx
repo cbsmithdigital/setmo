@@ -127,7 +127,7 @@ export function InstallGuide({ initial, url, qrSvg }: { initial: Platform; url: 
             <p className="ig-tip">
               <Icon name="bell" size={15} />
               <span>
-                Once it&apos;s installed, turn on <b>Notifications</b> in the menu to get your scores the moment they&apos;re ready.
+                Once it&apos;s installed, turn on <b>Notifications</b>{" "}in the menu to get your scores the moment they&apos;re ready.
               </span>
             </p>
           </>

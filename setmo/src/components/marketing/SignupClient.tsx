@@ -155,7 +155,7 @@ export function SignupClient({ promo = null }: { promo?: PromoInfo | null }) {
                 <p style={{ fontSize: 14, color: "var(--text-2)", margin: 0, lineHeight: 1.55 }}>
                   {promo.monthlyTokens > 0 ? (
                     <>
-                      Activate by <b>{promo.endsAt}</b> and we&apos;ll load your account with <b>{promo.monthlyTokens.toLocaleString()} free tokens</b>
+                      Activate by <b>{promo.endsAt}</b>{" "}and we&apos;ll load your account with <b>{promo.monthlyTokens.toLocaleString()} free tokens</b>
                       {promo.annualTokens > 0 && (
                         <> — or go annual for <b>{Math.round(promo.annualTokens / 600)} free hours</b> ({promo.annualTokens.toLocaleString()} tokens) plus 2 months of access free</>
                       )}
@@ -163,7 +163,7 @@ export function SignupClient({ promo = null }: { promo?: PromoInfo | null }) {
                     </>
                   ) : (
                     <>
-                      Prepay annual by <b>{promo.endsAt}</b> and we&apos;ll load your account with <b>{promo.annualTokens.toLocaleString()} free tokens</b>. Free tokens never expire.
+                      Prepay annual by <b>{promo.endsAt}</b>{" "}and we&apos;ll load your account with <b>{promo.annualTokens.toLocaleString()} free tokens</b>. Free tokens never expire.
                     </>
                   )}
                 </p>
