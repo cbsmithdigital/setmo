@@ -95,7 +95,7 @@ export async function lastPurchasedMinutes(officeId: string): Promise<number> {
 }
 
 /** Active office admins (incl. group admins) who should get billing alerts. */
-async function officeAdminEmails(officeId: string): Promise<string[]> {
+export async function officeAdmins(officeId: string): Promise<{ id: string; email: string }[]> {
   const office = await prisma.office.findUnique({ where: { id: officeId }, select: { organizationId: true } });
   // Admin hats count only when scoped to THIS office / its group (a hat left over
   // from another office must not route this practice's billing alerts).
@@ -109,9 +109,9 @@ async function officeAdminEmails(officeId: string): Promise<string[]> {
       status: "ACTIVE",
       OR: [{ role: { in: ["OFFICE_ADMIN", "GROUP_ADMIN"] } }, { memberships: { some: { OR: hats } } }],
     },
-    select: { email: true },
+    select: { id: true, email: true },
   });
-  return Array.from(new Set(admins.map((a) => a.email).filter(Boolean)));
+  return admins;
 }
 
 /** Active super-admins — who tops up demo accounts. */
@@ -173,10 +173,19 @@ export async function evaluateMinuteThresholds(officeId: string): Promise<void> 
   // Low-balance alerts: 100 first, then 60.
   let stage = office.minuteAlertStage;
   const alert = async (threshold: number) => {
-    const to = await officeAdminEmails(officeId);
+    const admins = await officeAdmins(officeId);
+    const to = Array.from(new Set(admins.map((a) => a.email).filter(Boolean)));
     if (!to.length) return;
     const { sendMinuteLowEmail } = await import("@/lib/email");
     await sendMinuteLowEmail({ to, practiceName: office.name, remaining: remainingMin, autoTopUp: office.autoTopUp, topUpMinutes: await lastPurchasedMinutes(officeId), threshold }).catch(() => {});
+    // ...and on the phone, for admins who turned notifications on.
+    const { pushToUsers } = await import("@/lib/push");
+    await pushToUsers(admins.map((a) => a.id), {
+      title: "Practice tokens running low",
+      body: `${office.name} has ${Math.max(0, remainingMin * 10).toLocaleString()} tokens left${office.autoTopUp ? " — auto top-up is on." : ". Top up to keep your team practicing."}`,
+      url: "/office/billing",
+      tag: `tokens-${officeId}`,
+    });
   };
   if (remainingMin <= ALERT_60 && stage < 2) { await alert(ALERT_60); stage = 2; }
   else if (remainingMin <= ALERT_100 && stage < 1) { await alert(ALERT_100); stage = 1; }

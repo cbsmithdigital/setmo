@@ -2,8 +2,21 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "crons": [
-    { "path": "/api/cron/weekly-digest", "schedule": "0 13 * * 1" },
-    { "path": "/api/cron/goals", "schedule": "0 7 * * *" },
-    { "path": "/api/cron/ghl-retention", "schedule": "30 8 * * *" }
+    {
+      "path": "/api/cron/weekly-digest",
+      "schedule": "0 13 * * 1"
+    },
+    {
+      "path": "/api/cron/goals",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/ghl-retention",
+      "schedule": "30 8 * * *"
+    },
+    {
+      "path": "/api/cron/practice-reminders",
+      "schedule": "0 15 * * 1-5"
+    }
   ]
 }

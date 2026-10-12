@@ -135,6 +135,20 @@ const ICONS: Record<string, React.ReactNode> = {
       <circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none" />
     </>
   ),
+  bell: (
+    <>
+      <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </>
+  ),
+  qr: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <path d="M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof ICONS;

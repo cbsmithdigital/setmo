@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { resolveAnalyticsRange } from "@/lib/queries";
 import { getOfficeTeam, getOfficeSkillMatrix, getOfficeMembers } from "@/lib/office";
@@ -42,6 +43,10 @@ export default async function OfficeTeamPage({
         <div className="tb-right" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <ProgressControls active={key} from={sp.from} to={sp.to} basePath="/office/team" presets={PRESETS} />
           <InviteButton allowGroupAdmin={!!user.organizationId && user.roles.some((r) => r === "GROUP_ADMIN" || r === "PLATFORM_ADMIN")} />
+          {/* the install steps + a link to send the team */}
+          <Link className="btn btn-ghost" href="/install">
+            <Icon name="qr" size={16} /> Phone app
+          </Link>
         </div>
       </div>
       <div className="content">

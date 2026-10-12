@@ -234,6 +234,65 @@ a {
   padding-top: 16px;
   border-top: 1px solid var(--line);
 }
+/* phone notifications switch, in the menu above the user */
+.sb-notify {
+  padding: 8px 8px 10px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.sbn-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sbn-ic {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--s3);
+  color: var(--muted);
+}
+.sbn-ic.on {
+  background: rgba(139, 92, 246, 0.18);
+  color: var(--purple-2);
+}
+.sbn-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.3;
+}
+.sbn-text b {
+  font-size: 13.5px;
+  color: var(--text);
+  font-weight: 600;
+}
+.sbn-btn {
+  padding: 6px 11px !important;
+  font-size: 12.5px !important;
+  flex: none;
+}
+.sbn-test {
+  margin: 8px 0 0 42px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--purple-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sbn-note {
+  margin: 6px 0 0 42px;
+  font-size: 12px;
+  color: var(--muted);
+}
 .sb-user {
   display: flex;
   align-items: center;
@@ -1618,4 +1677,191 @@ body {
   .sidebar {
     padding-left: calc(16px + env(safe-area-inset-left));
   }
+}
+
+/* ---------- "Get the SetMo app" install guide (/install) ---------- */
+.ig {
+  min-height: 100dvh;
+  display: grid;
+  place-items: start center;
+  padding: 32px 16px calc(32px + env(safe-area-inset-bottom));
+}
+.ig-card {
+  width: 100%;
+  max-width: 560px;
+  background: var(--s1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  padding: 26px 24px;
+}
+.ig-head {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 22px;
+}
+.ig-icon {
+  border-radius: 14px;
+  flex: none;
+}
+.ig-head h1 {
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+.ig-head p {
+  font-size: 14.5px;
+}
+.ig-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: var(--s2);
+  border-radius: 12px;
+  margin-bottom: 18px;
+}
+.ig-tab {
+  flex: 1;
+  padding: 9px 0;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.ig-tab.on {
+  background: var(--grad);
+  color: #fff;
+}
+.ig-steps {
+  margin: 0 0 18px;
+  padding-left: 22px;
+  list-style: decimal;
+  display: grid;
+  gap: 12px;
+  font-size: 15px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.ig-steps b {
+  color: var(--text);
+}
+.ig-steps li::marker {
+  color: var(--purple-2);
+  font-weight: 700;
+}
+.ig-inline {
+  display: inline-block !important;
+  vertical-align: -3px;
+}
+.ig-install {
+  width: 100%;
+  margin-bottom: 18px;
+  justify-content: center;
+}
+.ig-computer {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 18px;
+  font-size: 14.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.ig-computer p + p {
+  margin-top: 8px;
+}
+.ig-qr {
+  width: 150px;
+  height: 150px;
+  flex: none;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+.ig-qr svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.ig-tip {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.28);
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+.ig-tip svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--purple-2);
+}
+.ig-done {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--mint);
+  font-weight: 600;
+}
+.ig-share {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.ig-share > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13.5px;
+  min-width: 0;
+}
+.ig-share-btns {
+  display: flex;
+  gap: 8px;
+}
+.ig-foot {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 14px;
+}
+.ig-foot a {
+  color: var(--purple-2);
+  font-weight: 600;
+}
+@media (max-width: 480px) {
+  .ig-card {
+    padding: 22px 18px;
+  }
+  .ig-computer {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+/* "Get the phone app" link in the menu */
+.sb-getapp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.sb-getapp:hover {
+  color: var(--text);
 }

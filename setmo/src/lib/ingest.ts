@@ -8,7 +8,7 @@ import { uploadRecording } from "@/lib/storage";
 import { parsePostCall, extractTranscript } from "@/lib/elevenlabs";
 import { scoreTranscript, isScorerConfigured } from "@/lib/scorer";
 import { rubricForService } from "@/lib/packs/registry";
-import { leadRevealFromSeed } from "@/lib/realism/lead-card";
+import { leadCardFromSeed, leadRevealFromSeed } from "@/lib/realism/lead-card";
 import { checkReveal } from "@/lib/reveal";
 
 // Below this, a call is treated as too short to score (hang-ups / interruptions).
@@ -185,6 +185,20 @@ export async function scoreSession(
   // Setter Audit calls are scored, but never draw down a pool, drive
   // recommendations, or hit a leaderboard (the prospect isn't a customer).
   if (session.isAudit) return { ok: true, source: source + "-audit" };
+
+  // The score, on the setter's phone — unless they're still watching the app,
+  // which opens the results itself.
+  if (session.kind === "PRACTICE" && overall != null) {
+    const lead = leadCardFromSeed(session.personaSeed as Record<string, unknown> | null)?.name;
+    const { pushToUsers } = await import("@/lib/push");
+    await pushToUsers([session.setterId], {
+      title: `Your call is scored: ${overall.toFixed(1)}`,
+      body: lead ? `${lead} — see how you did and what to work on.` : "See how you did and what to work on.",
+      url: `/results/${session.id}`,
+      tag: `score-${session.id}`,
+      skipIfVisible: true,
+    });
+  }
 
   await recomputeRecommendations(session.setterId, session.serviceType);
   await updateSetterMemory(session.setterId, session.serviceType);

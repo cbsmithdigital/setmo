@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireRole, getActiveRole } from "@/lib/auth";
 import { resolveAnalyticsRange } from "@/lib/queries";
 import { getPodTeam, getPodSkillMatrix, getCenterTeam, getCenterSkillMatrix } from "@/lib/callcenter";
@@ -50,6 +51,10 @@ export default async function CallCenterTeamPage({
         </div>
         <div className="tb-right" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <ProgressControls active={key} from={sp.from} to={sp.to} basePath="/callcenter/team" presets={PRESETS} />
+          {/* the install steps + a link to send the agents */}
+          <Link className="btn btn-ghost" href="/install">
+            <Icon name="qr" size={16} /> Phone app
+          </Link>
         </div>
       </div>
       <div className="content">

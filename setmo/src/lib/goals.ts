@@ -152,11 +152,13 @@ export async function evaluateGoal(goalId: string): Promise<void> {
     await prisma.goal.update({ where: { id: goal.id }, data: { teamValue: team.value, teamAchieved, achievedAt: teamAchieved && !goal.achievedAt ? new Date() : goal.achievedAt } });
 
     // reps per participant (for qualification) over the window
+    const reached: Reached[] = [];
     for (const p of goal.participants) {
       const isManager = p.setter.role !== "SETTER";
       const reps = isManager ? 1 : (await setterScored(p.setterId, range)).length;
       const qualified = isManager ? goal.includeManager : reps >= 1;
       const justAchieved = teamAchieved && qualified && !p.achieved;
+      if (justAchieved) reached.push({ userId: p.setterId, name: fullName(p.setter.firstName, p.setter.lastName), role: p.setter.role, pending: p.rewardStatus === "NONE" });
       await prisma.goalParticipant.update({
         where: { id: p.id },
         data: {
@@ -170,16 +172,19 @@ export async function evaluateGoal(goalId: string): Promise<void> {
         },
       });
     }
+    await notifyReached(goal, reached);
     return;
   }
 
   // SETTER goal: each participant measured individually
+  const reached: Reached[] = [];
   for (const p of goal.participants) {
     const { value, reps } = await measureSetter(goal, p.setterId, range);
     const qualified = reps >= needReps;
     const { achieved, progressPct } = judge(goal, value, p.baselineValue);
     const ok = achieved && qualified;
     const justAchieved = ok && !p.achieved;
+    if (justAchieved) reached.push({ userId: p.setterId, name: fullName(p.setter.firstName, p.setter.lastName), role: p.setter.role, pending: p.rewardStatus === "NONE" });
     await prisma.goalParticipant.update({
       where: { id: p.id },
       data: {
@@ -193,6 +198,37 @@ export async function evaluateGoal(goalId: string): Promise<void> {
       },
     });
   }
+  await notifyReached(goal, reached);
+}
+
+type Reached = { userId: string; name: string; role: string; pending: boolean };
+
+/** On their phones: whoever just hit the goal, and the office admins when a
+ *  reward now waits for their approval. Once per achievement — a participant
+ *  only "just achieves" once. */
+async function notifyReached(goal: NonNullable<GoalRow>, reached: Reached[]): Promise<void> {
+  if (!reached.length) return;
+  const { pushToUsers } = await import("@/lib/push");
+  const reward = rewardText(goal);
+  for (const r of reached) {
+    await pushToUsers([r.userId], {
+      title: `Goal reached: ${goal.title}`,
+      body: r.pending ? `${reward} — it's on its way once your manager approves it.` : "Nice work — keep it going.",
+      url: r.role === "SETTER" ? "/goals" : "/office/goals",
+      tag: `goal-${goal.id}`,
+    });
+  }
+  const pending = reached.filter((r) => r.pending);
+  if (!pending.length || !goal.officeId) return;
+  const { officeAdmins } = await import("@/lib/usage");
+  const admins = (await officeAdmins(goal.officeId)).map((a) => a.id).filter((id) => !pending.some((p) => p.userId === id));
+  const who = pending.length === 1 ? pending[0].name.split(" ")[0] || "A setter" : `${pending.length} people`;
+  await pushToUsers(admins, {
+    title: `${who} hit “${goal.title}”`,
+    body: `There's a reward to approve (${reward}).`,
+    url: "/office/goals",
+    tag: `goal-approve-${goal.id}`,
+  });
 }
 
 /** Activate a DRAFT goal: create participant rows, capture baselines, evaluate. */

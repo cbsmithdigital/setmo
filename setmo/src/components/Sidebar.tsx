@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -8,8 +8,13 @@ import { Icon, type IconName } from "@/components/ui/Icon";
 import { RoleSwitcher } from "@/components/RoleSwitcher";
 import { createClient } from "@/lib/supabase/client";
 import { TAB_LABEL, tabsFor } from "@/lib/nav-tabs";
+import { NotificationsToggle } from "@/components/NotificationsToggle";
 
 type NavItem = { href: string; label: string; icon: IconName; badge?: string; ai?: boolean };
+
+const noSubscribe = () => () => {};
+const readStandalone = () =>
+  window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 
 const NAV_SETTER: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "home" },
@@ -143,6 +148,7 @@ export function Sidebar({
   roles = [],
   demoRoles = [],
   isAgent = false,
+  notifications = true,
 }: {
   role: string;
   name: string;
@@ -151,6 +157,8 @@ export function Sidebar({
   roles?: string[];
   demoRoles?: string[];
   isAgent?: boolean;
+  /** The phone-notifications switch (off while an admin views as someone). */
+  notifications?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -161,6 +169,8 @@ export function Sidebar({
   const tabs = tabHrefs.map((h) => nav.find((n) => n.href === h)).filter((n): n is NavItem => Boolean(n));
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
+  // Inside the installed app there's no need to offer it.
+  const standalone = useSyncExternalStore(noSubscribe, readStandalone, () => true);
 
   // Highlight only the MOST specific matching item, so index routes like
   // /office don't stay lit when you're on /office/team. Session & results map
@@ -227,6 +237,12 @@ export function Sidebar({
       </nav>
 
       <div className="sb-foot">
+        {!standalone && (
+          <Link href="/install" className="sb-getapp" onClick={close}>
+            <Icon name="qr" size={15} /> Get the phone app
+          </Link>
+        )}
+        {notifications && <NotificationsToggle />}
         {roles.length > 1 && <RoleSwitcher roles={roles} demoRoles={demoRoles} activeRole={role} />}
         <div className="sb-user" role="button" tabIndex={0} onClick={logout} title="Sign out">
           <div className="av">{initials}</div>

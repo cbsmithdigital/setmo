@@ -3,6 +3,7 @@ import { requireUser, getActiveRole } from "@/lib/auth";
 import { initialsOf, fullName, ROLE_LABEL } from "@/lib/format";
 import { ImpersonationBanner } from "@/components/platform/ImpersonationBanner";
 import { InstallBanner } from "@/components/InstallBanner";
+import { NotifyPrompt } from "@/components/NotifyPrompt";
 import { inDemoAccount } from "@/lib/demo-shared";
 import { tabsFor } from "@/lib/nav-tabs";
 
@@ -31,6 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           roles={user.roles}
           demoRoles={demoRoles}
           isAgent={isAgent}
+          notifications={!user.impersonatedBy}
           name={fullName(user.firstName, user.lastName)}
           roleLabel={ROLE_LABEL[activeRole]}
           initials={initialsOf(user.firstName, user.lastName)}
@@ -38,6 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <main className="main">
           {user.impersonatedBy && <ImpersonationBanner email={user.email} />}
           {!user.impersonatedBy && <InstallBanner />}
+          {!user.impersonatedBy && <NotifyPrompt />}
           {children}
         </main>
       </div>

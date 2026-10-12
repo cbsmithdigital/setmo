@@ -76,6 +76,7 @@ export async function proxy(request: NextRequest) {
     path === "/reset-password" ||
     path.startsWith("/invite") ||
     path === "/offline" || // the service worker's no-connection screen
+    path === "/install" || // "Get the SetMo app" — sent to people before they've signed in
     path.startsWith("/unsubscribe") || // token-signed email unsubscribe (no login)
     path.startsWith("/auth") ||
     // Public read-only shared-recording links (token-gated).

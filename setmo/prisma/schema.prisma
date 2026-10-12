@@ -353,6 +353,7 @@ model User {
   // Set for a call-center AGENT: the pod (floor-manager team) they belong to.
   // Their served offices are AgentOffice rows; their sessions carry callCenterOrgId.
   callCenterPodId String?   @map("call_center_pod_id")
+  practiceReminderAt DateTime? @map("practice_reminder_at") // last "time for a practice call" phone notification
   createdAt      DateTime   @default(now()) @map("created_at")
 
   office       Office?       @relation(fields: [officeId], references: [id])
@@ -370,12 +371,32 @@ model User {
   goalParticipations GoalParticipant[]
   agentOffices    AgentOffice[] // call-center agent → assigned offices
   ghlUserMaps     GhlUserMap[] // GHL agent identity mapped to this user
+  pushSubscriptions PushSubscription[] // phones/browsers that get SetMo notifications
 
   @@index([officeId])
   @@index([organizationId])
   @@index([partnerId])
   @@index([callCenterPodId])
   @@map("user")
+}
+
+// A phone or browser that gets SetMo's push notifications (score ready, goal
+// reached, low tokens, practice reminders). One row per device; a device the
+// push service reports gone (404/410) is deleted on the next send.
+model PushSubscription {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  endpoint   String    @unique
+  p256dh     String
+  auth       String
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastSentAt DateTime? @map("last_sent_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscription")
 }
 
 enum MembershipScope {
