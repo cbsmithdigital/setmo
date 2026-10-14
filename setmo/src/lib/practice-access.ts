@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { canStartSession, canStartCallCenter } from "@/lib/usage";
+import { canStartSession, canStartCallCenter, outOfTokensMessage } from "@/lib/usage";
 import type { ServiceKey } from "@/generated/prisma/client";
 
 // Who may start a practice call, for which office, on which call type — shared
@@ -43,7 +43,7 @@ export async function checkPracticeOpen(opts: {
   if (!allowance.ok) {
     return {
       ok: false,
-      error: opts.callCenterOrgId ? "Your call center's practice balance is used up." : "Your practice pool is used up. Buy a bundle or wait for the reset.",
+      error: opts.callCenterOrgId ? "Your call center's practice balance is used up." : await outOfTokensMessage(opts.officeId),
       code: 402,
     };
   }

@@ -23,7 +23,7 @@ export async function skillAveragesOverSessions(officeIds: string[], range: Anal
       startedAt: { gte: range.from, lte: range.to },
       evaluation: { isNot: null },
     },
-    include: { evaluation: { include: { skills: true } } },
+    include: { evaluation: { omit: { rawPayload: true }, include: { skills: true } } },
   });
   const sums = new Map<string, { t: number; n: number }>();
   for (const s of sessions)
@@ -206,7 +206,7 @@ export async function getOfficeSkillMatrix(officeId: string, range: AnalyticsRan
     prisma.user.findMany({ where: { officeId, role: "SETTER" }, select: { id: true, firstName: true, lastName: true } }),
     prisma.session.findMany({
       where: { officeId, callCenterOrgId: null, kind: "PRACTICE", status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null } },
-      include: { evaluation: { include: { skills: true } } },
+      include: { evaluation: { omit: { rawPayload: true }, include: { skills: true } } },
     }),
   ]);
   const order = rubricFor("IMPLANT").map((s) => s.key);

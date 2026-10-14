@@ -20,6 +20,7 @@ export function MinutePurchase({
   monthlyDiscountPct = 0,
   annualDiscountPct = 0,
   promo = null,
+  endpoint,
 }: {
   defaultPeople?: number;
   cfg?: PricingConfig;
@@ -30,6 +31,7 @@ export function MinutePurchase({
   monthlyDiscountPct?: number; // activate: token discount if they pick monthly
   annualDiscountPct?: number; // activate: token discount if they pick annual
   promo?: { monthlyTokens: number; annualTokens: number; endsAt: string } | null; // activate: sign-up bonus offer
+  endpoint?: string; // checkout route (default: the signed-in office's own); a group admin buys for a location
 }) {
   const isActivate = mode === "activate";
   const hasPromo = isActivate && !!promo;
@@ -61,7 +63,7 @@ export function MinutePurchase({
     setBusy(true);
     setErr(null);
     try {
-      const res = await fetch(isActivate ? "/api/office/activate/checkout" : "/api/office/minutes/checkout", {
+      const res = await fetch(endpoint ?? (isActivate ? "/api/office/activate/checkout" : "/api/office/minutes/checkout"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ minutes: buyingTokens ? tokensToMinutes(quote.tokens) : 0, ...(isActivate ? { plan } : {}) }),

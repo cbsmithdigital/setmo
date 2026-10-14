@@ -39,7 +39,7 @@ export async function getGroupOverview(orgId: string, scopeOfficeIds?: string[])
     prisma.session.findMany({
       where: { officeId: { in: officeIds }, kind: "PRACTICE", status: "SCORED", evaluation: { isNot: null } },
       orderBy: { startedAt: "desc" },
-      include: { evaluation: { include: { skills: true } } },
+      include: { evaluation: { omit: { rawPayload: true }, include: { skills: true } } },
     }),
   ]);
 
@@ -142,7 +142,7 @@ export async function getGroupAnalytics(orgId: string, current: AnalyticsRange, 
       evaluation: { isNot: null },
     },
     orderBy: { startedAt: "asc" },
-    include: { evaluation: { include: { skills: true } } },
+    include: { evaluation: { omit: { rawPayload: true }, include: { skills: true } } },
   });
   const real = sessions.filter((s) => s.evaluation!.skills.length > 0 && s.evaluation!.overallScore != null);
   const inR = (d: Date, r: AnalyticsRange) => d >= r.from && d <= r.to;

@@ -79,7 +79,7 @@ export async function recomputeRecommendations(setterId: string, serviceType?: S
     where: { setterId, status: "SCORED", ...(serviceType ? { serviceType } : {}) },
     orderBy: { startedAt: "desc" },
     take: LOOKBACK_SESSIONS,
-    include: { evaluation: { include: { skills: true } } },
+    include: { evaluation: { omit: { rawPayload: true }, include: { skills: true } } },
   });
   if (!sessions.length) return;
 

@@ -147,7 +147,7 @@ export async function getSetterAnalytics(
     // kind PRACTICE: real (LIVE) calls are analyzed separately, never in practice analytics
     where: { setterId, kind: "PRACTICE", status: "SCORED", startedAt: { gte: earliest, lte: current.to } },
     orderBy: { startedAt: "asc" },
-    include: { evaluation: { include: { skills: true } } },
+    include: { evaluation: { omit: { rawPayload: true }, include: { skills: true } } },
   });
   const real = sessions.filter(isRealScored);
   const inR = (s: { startedAt: Date }, r: AnalyticsRange) => s.startedAt >= r.from && s.startedAt <= r.to;
@@ -272,7 +272,7 @@ export async function getSetterHome(user: {
       where: { setterId: user.id, kind: "PRACTICE", status: "SCORED" },
       orderBy: { startedAt: "desc" },
       take: 8,
-      include: { evaluation: { include: { skills: true } } },
+      include: { evaluation: { omit: { rawPayload: true }, include: { skills: true } } },
     }),
     prisma.leaderboardEntry.findMany({
       where: { scope: "OFFICE", officeId, serviceType: "IMPLANT" },
@@ -377,7 +377,7 @@ export async function getSetterProgress(userId: string, officeId: string | null,
     prisma.session.findMany({
       where: { setterId: userId, kind: "PRACTICE", status: "SCORED", startedAt: { gte: current.from, lte: current.to } },
       orderBy: { startedAt: "desc" },
-      include: { evaluation: { include: { skills: true } } },
+      include: { evaluation: { omit: { rawPayload: true }, include: { skills: true } } },
     }),
   ]);
 

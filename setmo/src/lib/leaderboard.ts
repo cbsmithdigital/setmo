@@ -3,7 +3,11 @@ import type { ServiceKey } from "@/generated/prisma/client";
 
 // Fairness-weighted leaderboards: ranked on AVERAGE score, never raw session
 // volume, so high-volume practices don't auto-win. Materialized into
-// leaderboard_entry and recomputed after each scored session.
+// leaderboard_entry. An office's own board is recomputed after each of its
+// scored calls; the platform-wide board on a 15-minute cron (it spans every
+// customer, so rebuilding it per call would slow scoring as volume grows).
+// The averaging happens in the database — one row per setter or office comes
+// back, not every call.
 
 function periodKey(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -18,31 +22,16 @@ export async function recomputeOfficeLeaderboard(
   officeId: string,
   serviceType: ServiceKey = DEFAULT_SERVICE
 ): Promise<void> {
-  const sessions = await prisma.session.findMany({
-    where: {
-      officeId,
-      serviceType,
-      kind: "PRACTICE",
-      status: "SCORED",
-      isAudit: false,
-      callCenterOrgId: null,
-      evaluation: { isNot: null },
-    },
-    include: { evaluation: { select: { overallScore: true } } },
-  });
-
-  const byUser = new Map<string, number[]>();
-  for (const s of sessions) {
-    if (s.evaluation?.overallScore == null) continue;
-    const arr = byUser.get(s.setterId) ?? [];
-    arr.push(Number(s.evaluation.overallScore));
-    byUser.set(s.setterId, arr);
-  }
-
-  const ranked = [...byUser.entries()]
-    .map(([subjectId, scores]) => ({ subjectId, value: scores.reduce((a, b) => a + b, 0) / scores.length }))
-    .sort((a, b) => b.value - a.value);
-
+  const ranked = await prisma.$queryRaw<{ subjectId: string; value: number }[]>`
+    SELECT s.setter_id AS "subjectId", AVG(e.overall_score)::float8 AS value
+      FROM session s JOIN evaluation e ON e.session_id = s.id
+     WHERE s.office_id = ${officeId}
+       AND s.service_type::text = ${serviceType}
+       AND s.kind::text = 'PRACTICE' AND s.status::text = 'SCORED'
+       AND NOT s.is_audit AND s.call_center_org_id IS NULL
+       AND e.overall_score IS NOT NULL
+     GROUP BY s.setter_id
+     ORDER BY value DESC`;
   await materialize("OFFICE", "SETTER", serviceType, ranked, { officeId });
 }
 
@@ -50,45 +39,35 @@ export async function recomputeOfficeLeaderboard(
  *  Excluded: audit calls and prospect offices (a stranger's trial call has no
  *  place on a customer board), and call-center agent calls — those are the call
  *  center's reps, and crediting them to the served practice would publish
- *  practices that have no SetMo users of their own. */
+ *  practices that have no SetMo users of their own. Demo / test accounts never
+ *  rank against customers (see getGlobalLeaderboard for the demo-only board
+ *  their own users see instead). */
 export async function recomputeGlobalLeaderboard(
   serviceType: ServiceKey = DEFAULT_SERVICE
 ): Promise<void> {
-  const sessions = await prisma.session.findMany({
-    where: {
-      serviceType,
-      kind: "PRACTICE",
-      status: "SCORED",
-      isAudit: false,
-      callCenterOrgId: null,
-      // Demo / test accounts never rank against customers (see getGlobalLeaderboard
-      // for the demo-only board their own users see instead).
-      office: { isProspect: false, isDemo: false },
-      evaluation: { isNot: null },
-    },
-    include: { evaluation: { select: { overallScore: true } } },
-  });
-
-  const byOffice = new Map<string, number[]>();
-  for (const s of sessions) {
-    if (s.evaluation?.overallScore == null) continue;
-    const arr = byOffice.get(s.officeId) ?? [];
-    arr.push(Number(s.evaluation.overallScore));
-    byOffice.set(s.officeId, arr);
-  }
-
-  const ranked = [...byOffice.entries()]
-    .map(([subjectId, scores]) => ({ subjectId, value: scores.reduce((a, b) => a + b, 0) / scores.length }))
-    .sort((a, b) => b.value - a.value);
-
+  const ranked = await prisma.$queryRaw<{ subjectId: string; value: number }[]>`
+    SELECT s.office_id AS "subjectId", AVG(e.overall_score)::float8 AS value
+      FROM session s
+      JOIN evaluation e ON e.session_id = s.id
+      JOIN office o ON o.id = s.office_id
+     WHERE s.service_type::text = ${serviceType}
+       AND s.kind::text = 'PRACTICE' AND s.status::text = 'SCORED'
+       AND NOT s.is_audit AND s.call_center_org_id IS NULL
+       AND NOT o.is_prospect AND NOT o.is_demo
+       AND e.overall_score IS NOT NULL
+     GROUP BY s.office_id
+     ORDER BY value DESC`;
   await materialize("GLOBAL", "OFFICE", serviceType, ranked);
 }
 
+/** After a scored call: the office's own board. (The global board is the cron's.) */
 export async function recomputeLeaderboards(officeId: string): Promise<void> {
-  await Promise.all([recomputeOfficeLeaderboard(officeId), recomputeGlobalLeaderboard()]);
+  await recomputeOfficeLeaderboard(officeId);
 }
 
 // Replace the materialized rows for a scope, carrying rank movement forward.
+// Under a per-scope lock, so two rebuilds at once can't both delete and then
+// both insert (duplicate rows).
 async function materialize(
   scope: "OFFICE" | "GLOBAL",
   subjectType: "SETTER" | "OFFICE" | "GROUP",
@@ -102,13 +81,14 @@ async function materialize(
     serviceType,
     ...(scope === "OFFICE" ? { officeId: opts.officeId } : {}),
   };
+  const lockKey = `leaderboard:${scope}:${serviceType}:${opts.officeId ?? "all"}`;
 
-  const previous = await prisma.leaderboardEntry.findMany({ where });
-  const prevRank = new Map(previous.map((p) => [p.subjectId, p.rank]));
-
-  await prisma.$transaction([
-    prisma.leaderboardEntry.deleteMany({ where }),
-    prisma.leaderboardEntry.createMany({
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+    const previous = await tx.leaderboardEntry.findMany({ where, select: { subjectId: true, rank: true } });
+    const prevRank = new Map(previous.map((p) => [p.subjectId, p.rank]));
+    await tx.leaderboardEntry.deleteMany({ where });
+    await tx.leaderboardEntry.createMany({
       data: ranked.map((r, i) => {
         const rank = i + 1;
         const old = prevRank.get(r.subjectId);
@@ -118,13 +98,13 @@ async function materialize(
           subjectId: r.subjectId,
           serviceType,
           metric: "AVG_SCORE" as const,
-          value: Number(r.value.toFixed(2)),
+          value: Number(Number(r.value).toFixed(2)),
           rank,
           movement: old ? old - rank : 0,
           periodKey: pk,
           ...(scope === "OFFICE" ? { officeId: opts.officeId } : {}),
         };
       }),
-    }),
-  ]);
+    });
+  });
 }

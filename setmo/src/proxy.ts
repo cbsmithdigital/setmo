@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { REF_COOKIE, REF_COOKIE_MAX_AGE, addRefCode, cleanRefCode } from "@/lib/referral-cookie";
+import { IMPERSONATE_COOKIE } from "@/lib/impersonate-cookie";
 
 // Referral tracking: a partner's link (?ref=CODE) sets this cookie so the visit is
 // still credited after the person clicks around the site, or comes back later and
@@ -31,6 +32,19 @@ function withRef(response: NextResponse, value: string | null): NextResponse {
 // Next 16 renamed Middleware -> Proxy. This refreshes the Supabase auth session
 // on every request and gates app routes behind login.
 export async function proxy(request: NextRequest) {
+  // "View as" is look-only: while platform staff are viewing as someone, no
+  // request can change anything. Staff tools (/api/platform/*) act as the staff
+  // member themselves — including stopping view-as — so they still work.
+  const p = request.nextUrl.pathname;
+  if (
+    request.cookies.get(IMPERSONATE_COOKIE) &&
+    p.startsWith("/api/") &&
+    !p.startsWith("/api/platform/") &&
+    !["GET", "HEAD", "OPTIONS"].includes(request.method)
+  ) {
+    return NextResponse.json({ error: "View-as is look-only — stop viewing as this person to make changes." }, { status: 403 });
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const ref = refFromUrl(request);

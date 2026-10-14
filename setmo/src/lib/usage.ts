@@ -77,6 +77,18 @@ export async function canStartSession(officeId: string, opts: { isAudit?: boolea
   return { ok: b.remainingSeconds > MIN_START_SECONDS, remainingSeconds: b.remainingSeconds };
 }
 
+/** What to tell someone who can't start a call because the office has no time
+ *  left. A practice that never activated is told to activate — not that its
+ *  "pool is used up" — and nobody is told to wait for a reset: tokens roll over
+ *  until they're used, so the only way back is adding more. */
+export async function outOfTokensMessage(officeId: string): Promise<string> {
+  const [b, sub] = await Promise.all([getMinuteBalance(officeId), prisma.subscription.findUnique({ where: { officeId }, select: { status: true } })]);
+  if (b.purchasedMin <= 0 && sub?.status !== "ACTIVE") {
+    return "SetMo isn't activated for this practice yet. An office admin can activate it from Billing to start practicing.";
+  }
+  return "Your practice is out of tokens. An office admin can add more from Billing.";
+}
+
 // Auto top-up / low-minute alert thresholds (minutes remaining).
 const ALERT_100 = 100;
 const ALERT_60 = 60;

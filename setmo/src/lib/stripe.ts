@@ -43,6 +43,7 @@ export async function createAccessCheckout(opts: {
   origin: string;
   plan?: "monthly" | "annual";
   bonusMinutes?: number;
+  returnPath?: string; // where checkout comes back to (default the office's Billing)
 }): Promise<string> {
   const stripe = getStripe();
   const cfg = await getPricingConfig();
@@ -77,8 +78,8 @@ export async function createAccessCheckout(opts: {
     ],
     subscription_data: { metadata: subMeta },
     metadata: meta,
-    success_url: `${opts.origin}/office/billing?access=success`,
-    cancel_url: `${opts.origin}/office/billing?access=cancel`,
+    success_url: `${opts.origin}${opts.returnPath ?? "/office/billing"}?access=success`,
+    cancel_url: `${opts.origin}${opts.returnPath ?? "/office/billing"}?access=cancel`,
   });
   if (!session.url) throw new Error("Stripe did not return a checkout URL");
   return session.url;
@@ -92,6 +93,7 @@ export async function createMinuteCheckout(opts: {
   customerEmail?: string;
   origin: string;
   discountPct?: number;
+  returnPath?: string; // where checkout comes back to (default the office's Billing)
 }): Promise<string> {
   const stripe = getStripe();
   const quote = minuteQuote(opts.minutes, await getPricingConfig());
@@ -124,8 +126,8 @@ export async function createMinuteCheckout(opts: {
       },
     ],
     metadata: meta,
-    success_url: `${opts.origin}/office/billing?minutes=success`,
-    cancel_url: `${opts.origin}/office/billing?minutes=cancel`,
+    success_url: `${opts.origin}${opts.returnPath ?? "/office/billing"}?minutes=success`,
+    cancel_url: `${opts.origin}${opts.returnPath ?? "/office/billing"}?minutes=cancel`,
   });
   if (!session.url) throw new Error("Stripe did not return a checkout URL");
   return session.url;
@@ -247,6 +249,7 @@ export async function createActivationCheckout(opts: {
   plan?: "monthly" | "annual";
   discountPct?: number;
   bonusMinutes?: number;
+  returnPath?: string; // where checkout comes back to (default the office's Billing)
 }): Promise<string> {
   const stripe = getStripe();
   const cfg = await getPricingConfig();
@@ -301,8 +304,8 @@ export async function createActivationCheckout(opts: {
     ],
     subscription_data: { metadata: { kind: "access", officeId: opts.officeId, plan: annual ? "annual" : "monthly" } },
     metadata: meta,
-    success_url: `${opts.origin}/office/billing?activate=success`,
-    cancel_url: `${opts.origin}/office/billing?activate=cancel`,
+    success_url: `${opts.origin}${opts.returnPath ?? "/office/billing"}?activate=success`,
+    cancel_url: `${opts.origin}${opts.returnPath ?? "/office/billing"}?activate=cancel`,
   });
   if (!session.url) throw new Error("Stripe did not return a checkout URL");
   return session.url;

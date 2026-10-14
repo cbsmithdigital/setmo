@@ -3,11 +3,13 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import type { Role } from "@/generated/prisma/client";
+import { IMPERSONATE_COOKIE } from "@/lib/impersonate-cookie";
+import { readImpersonation } from "@/lib/impersonation";
 
 export type SessionUser = Awaited<ReturnType<typeof loadCurrentUser>>;
 
 export const ACTIVE_ROLE_COOKIE = "setmo_active_role";
-export const IMPERSONATE_COOKIE = "setmo_impersonate";
+export { IMPERSONATE_COOKIE };
 
 function loadUserRecord(id: string) {
   return prisma.user.findUnique({
@@ -38,15 +40,17 @@ async function loadCurrentUser() {
   const realUser = await loadUserRecord(authUser.id);
   if (!realUser) return null;
 
-  // Impersonation: only honored when the real user is internal platform staff.
+  // Impersonation: only honored when the real user is internal platform staff,
+  // the cookie is genuine and theirs (signed; lib/impersonation), and the person
+  // viewed isn't staff themselves.
   let user = realUser;
   let impersonatedBy: { id: string; email: string } | null = null;
   if (isPlatformRole(realUser.role)) {
     try {
-      const impId = (await cookies()).get(IMPERSONATE_COOKIE)?.value;
+      const impId = readImpersonation((await cookies()).get(IMPERSONATE_COOKIE)?.value, realUser.id);
       if (impId && impId !== realUser.id) {
         const target = await loadUserRecord(impId);
-        if (target) {
+        if (target && !isPlatformRole(target.role) && !target.memberships.some((m) => isPlatformRole(m.role))) {
           user = target;
           impersonatedBy = { id: realUser.id, email: realUser.email ?? authUser.email ?? "" };
         }

@@ -1,8 +1,6 @@
 import { z } from "zod";
 import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
-import { createMinuteCheckout, isStripeConfigured } from "@/lib/stripe";
-import { accountTokenDiscountPct } from "@/lib/usage";
-import { checkMinutes } from "@/lib/minute-limits";
+import { startTokenCheckout } from "@/lib/checkout";
 import { error, json } from "@/lib/api";
 import { inDemoAccount, DEMO_BILLING_MESSAGE } from "@/lib/demo-shared";
 
@@ -15,25 +13,15 @@ export async function POST(req: Request) {
   if (inDemoAccount(user)) return error(DEMO_BILLING_MESSAGE, 403);
   if (!isManagerRole(getActiveRole(user))) return error("Only admins can purchase minutes", 403);
   if (!user.officeId) return error("No office assigned", 400);
-  if (!isStripeConfigured()) return error("Billing isn't configured yet", 503);
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid minute amount", 422);
-  const bounds = await checkMinutes(parsed.data.minutes);
-  if (!bounds.ok) return error(bounds.message, bounds.status, bounds.code ? { code: bounds.code } : undefined);
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
-  try {
-    const url = await createMinuteCheckout({
-      officeId: user.officeId,
-      stripeCustomerId: user.office?.stripeCustomerId,
-      customerEmail: user.email,
-      minutes: parsed.data.minutes,
-      discountPct: await accountTokenDiscountPct(user.officeId),
-      origin,
-    });
-    return json({ url });
-  } catch (e) {
-    return error(e instanceof Error ? e.message : "Checkout failed", 502);
-  }
+  const r = await startTokenCheckout({
+    officeId: user.officeId,
+    customerEmail: user.email,
+    origin: process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin,
+    minutes: parsed.data.minutes,
+  });
+  return r.ok ? json({ url: r.url }) : error(r.error, r.status, r.code ? { code: r.code } : undefined);
 }

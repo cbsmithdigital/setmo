@@ -135,6 +135,12 @@ const ICONS: Record<string, React.ReactNode> = {
       <circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none" />
     </>
   ),
+  pin: (
+    <>
+      <path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" />
+      <circle cx="12" cy="10" r="2.3" />
+    </>
+  ),
   bell: (
     <>
       <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />

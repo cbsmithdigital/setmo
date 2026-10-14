@@ -39,7 +39,7 @@ export async function practiceSignal(officeIds: string[], range: AnalyticsRange,
       startedAt: { gte: range.from, lte: range.to },
       evaluation: { isNot: null },
     },
-    include: { evaluation: { include: { skills: true } } },
+    include: { evaluation: { omit: { rawPayload: true }, include: { skills: true } } },
   });
   const real = sessions.filter((s) => s.evaluation!.skills.length > 0 && s.evaluation!.overallScore != null);
   const booked = real.filter((s) => s.evaluation!.booked === true).length;

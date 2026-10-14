@@ -150,7 +150,7 @@ export async function finalizeAudit(auditId: string) {
 
   const sessions = await prisma.session.findMany({
     where: { auditId, evaluation: { scoredAt: { not: null } } },
-    include: { evaluation: { include: { skills: true } } },
+    include: { evaluation: { omit: { rawPayload: true }, include: { skills: true } } },
     orderBy: { startedAt: "asc" },
   });
   if (sessions.length < AUDIT_CALLS) return null; // not all scored yet
@@ -203,7 +203,7 @@ export async function buildAuditReport(auditId: string) {
 
   const sessions = await prisma.session.findMany({
     where: { auditId, evaluation: { scoredAt: { not: null } } },
-    include: { evaluation: { include: { skills: true } } },
+    include: { evaluation: { omit: { rawPayload: true }, include: { skills: true } } },
     orderBy: { startedAt: "asc" },
   });
 

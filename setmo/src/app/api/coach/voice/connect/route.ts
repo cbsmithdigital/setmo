@@ -5,7 +5,7 @@ import { getSessionResult } from "@/lib/queries";
 import { getOfficeCoachContext } from "@/lib/office";
 import { getGroupCoachContext, groupScope } from "@/lib/group";
 import { getCallCenterOverview, getPodOverview } from "@/lib/callcenter";
-import { canStartSession, canStartGroupCoach, canStartCallCenter, callCenterOrgForAgent } from "@/lib/usage";
+import { canStartSession, outOfTokensMessage, canStartGroupCoach, canStartCallCenter, callCenterOrgForAgent } from "@/lib/usage";
 import { coachAgentId, managerCoachAgentId, groupCoachAgentId, getSignedCall, isElevenLabsConfigured } from "@/lib/elevenlabs";
 import {
   voiceCoachSystem,
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
   // Coaching draws from a pool — block when it's empty (no free overage).
   const allowance = isAgent ? await canStartCallCenter(callCenterOrgId!) : await canStartSession(user.officeId!);
   if (!allowance.ok) {
-    return error(isAgent ? "Your call center's practice balance is used up." : "Your practice pool is used up. Buy a bundle or wait for the reset.", 402);
+    return error(isAgent ? "Your call center's practice balance is used up." : await outOfTokensMessage(user.officeId!), 402);
   }
 
   // Call-grounded coaching when launched from a specific call; otherwise a fresh rep.
@@ -251,7 +251,7 @@ async function groupVoiceConnect(userId: string, orgId: string, officeId: string
 async function managerVoiceConnect(userId: string, officeId: string, first: string) {
   const allowance = await canStartSession(officeId);
   if (!allowance.ok) {
-    return error("Your practice pool is used up. Buy a bundle or wait for the reset.", 402);
+    return error(await outOfTokensMessage(officeId), 402);
   }
 
   const ctx = await getOfficeCoachContext(officeId);

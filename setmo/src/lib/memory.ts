@@ -19,7 +19,7 @@ export async function updateSetterMemory(setterId: string, serviceType: ServiceK
     where: { setterId, serviceType, kind: "PRACTICE", status: "SCORED" },
     orderBy: { startedAt: "desc" },
     take: 5,
-    include: { evaluation: { include: { skills: true } } },
+    include: { evaluation: { omit: { rawPayload: true }, include: { skills: true } } },
   });
   if (!sessions.length) return;
 

@@ -4,11 +4,11 @@
 // from the source docs have been removed for the public view. Counsel-finalized
 // copy is still pending; replace this text when the reviewed version lands.
 
-export const LEGAL_EFFECTIVE = "June 22, 2026";
+export const LEGAL_EFFECTIVE = "October 14, 2026";
 
 export const TERMS_MD = `# SetMo — Terms of Service
 
-**Effective date:** ${"June 22, 2026"}
+**Effective date:** ${LEGAL_EFFECTIVE}
 
 SetMo (the "Service") is operated by **Grow Dental LLC** ("Grow Dental," "SetMo," "we," "us," "our"), 321 N Mall Drive, STE H102, St. George, UT 84790. These Terms of Service ("Terms") govern your access to and use of the SetMo platform, websites, applications, and related services.
 
@@ -20,7 +20,7 @@ By creating an account, purchasing access, or using the Service, you agree to th
 The Service is offered to **business users in the United States only**. You must be at least 18 and able to form a binding contract. **The Service is intended for workforce training and business use only — not for household, personal, consumer, patient, clinical, or minor use.**
 
 ## 2. The Service
-SetMo lets dental front-desk staff ("Setters") practice appointment-setting calls against an AI-simulated lead, scores those calls against a rubric, and provides coaching, reporting, manager dashboards, and group/multi-location tools.
+SetMo lets dental front-desk staff ("Setters") practice appointment-setting calls against an AI-simulated lead, scores those calls against a rubric, and provides coaching, reporting, manager dashboards, goals and rewards, and group/multi-location tools. **Gift-card rewards** are available on request; once we turn them on for your account, rewards your admins approve are sent to the recipient by email through our rewards provider.
 
 **The Service is a training aid — not professional, clinical, legal, financial, or employment advice.** AI scoring, simulated leads, and coaching are automated and may be inaccurate, incomplete, or unexpected. **We do not guarantee any outcome**, including any increase in appointments, consults, cases, or revenue.
 
@@ -34,16 +34,17 @@ Scores, recommendations, reports, and leaderboards are **automated training tool
 - **A Practice may retain a user's training history after that user leaves the Practice.**
 - Keep credentials secure and notify us of unauthorized use.
 
-## 5. Access Fees, Minutes, and Billing
-- **Access fee:** $44.95/month per Practice (location), billed in advance, **month-to-month, auto-renewing monthly** until cancelled.
-- **Minutes:** AI calls consume minutes. **Minutes are purchased in amounts you choose, as needed** (not fixed bundles). **Minutes do not expire**, have **no cash value**, and are **non-transferable** and **non-refundable**, except as stated below.
-- **Auto-purchase:** you may enable automatic minute purchasing. When your balance falls **below 30 minutes**, we will automatically purchase the **same amount as your most recent purchase.** You can disable auto-purchase at any time.
-- **Accidental purchase:** if you notify us within **24 hours** of a purchase and **the minutes are unused**, we will refund it. **Once any minutes from a purchase are used, that purchase is non-refundable.**
-- **Cancellation & minutes:** you may cancel in-platform; cancellation takes effect **at the end of the current billing period**, and we send a **cancellation confirmation email**. **Unused minutes are forfeited 90 days after cancellation.**
+## 5. Access Fees, Tokens, and Billing
+- **Access fee ("Practice Access"):** $44.95/month per Practice (location), billed in advance and **auto-renewing monthly** until cancelled — or prepaid **annually** at ten times the monthly fee. A group may activate and pay for each of its locations.
+- **Tokens:** AI practice and coaching calls use **tokens** (10 tokens ≈ one minute of live AI conversation). **Tokens are purchased in amounts you choose, as needed** (not fixed bundles). **Tokens do not expire** while your account is active, have **no cash value**, and are **non-transferable** and **non-refundable**, except as stated below.
+- **Auto top-up:** you may turn on automatic token purchasing. When your balance falls **below 250 tokens (about 25 minutes)**, we will automatically purchase the **same amount as your most recent purchase.** You can turn auto top-up off at any time.
+- **Accidental purchase:** if you notify us within **24 hours** of a purchase and **the tokens are unused**, we will refund it. **Once any tokens from a purchase are used, that purchase is non-refundable.** If a purchase is refunded or reversed, the tokens it bought are removed from your balance.
+- **Calls that don't complete:** a practice call that can't be scored because of a problem on our side, or whose recording never reaches us, does not use your tokens.
+- **Cancellation & tokens:** you may cancel at any time from Billing ("Manage access"); cancellation takes effect **at the end of the current billing period**. **Unused tokens may be forfeited 90 days after cancellation.**
 - **Payments:** processed by **Stripe**; you authorize recurring charges and are responsible for **taxes**. Failed charges may result in suspension. **We may change pricing with 30 days' notice**, effective the next billing period.
 
 ## 6. Free Setter Assessment
-The Setter Assessment is **free** (subject to limits, e.g., one per Practice; periodic invitations to prospects) and consumes minutes. **The Setter and the office manager can access the assessment results.** **Assessment recordings are retained for one (1) year** and **may be used for sales and marketing follow-up.** You may request deletion of assessment data by emailing **support@growdental.ai**.
+The Setter Assessment is **free**: one practice call, scored, with a report (limited to one assessment per email address every 30 days; periodic invitations to prospects). It does not use a Practice's tokens. **The Setter and the office manager can access the assessment results.** **Assessment recordings are retained for one (1) year** and **may be used for sales and marketing follow-up.** You may request deletion of assessment data by emailing **support@growdental.ai**.
 
 ## 7. Acceptable Use
 You agree not to:
@@ -74,7 +75,7 @@ The Service — including the SetMo and "Setty" software, AI models, **scoring r
 Partners may apply at **https://setmo.growdental.ai/partners/apply** and will receive the **Partner Program Terms** upon applying. Partner access is limited to **view-only account "usage health"** — defined as **active/inactive status, minutes used, number of users, location status, and subscription status.** **Partners cannot view recordings, transcripts, individual scores, or employee performance unless the Practice expressly grants access.**
 
 ## 12. Third-Party Services and Subprocessors
-The Service relies on third parties (e.g., **Stripe** for payments; AI/voice providers, which may process audio, transcripts, prompts, and outputs to provide the Service). **You authorize us to share data with subprocessors as necessary to provide the Service.** You may request a current list of subprocessors by emailing **support@growdental.ai**.
+The Service relies on third parties (e.g., **Stripe** for payments; AI/voice providers, which may process audio, transcripts, prompts, and outputs to provide the Service; and, where a Practice has gift-card rewards turned on, **Tremendous** to deliver them). **You authorize us to share data with subprocessors as necessary to provide the Service.** You may request a current list of subprocessors by emailing **support@growdental.ai**.
 
 ## 13. Beta Features
 We may offer beta or experimental features (e.g., new roleplay modes, avatars, live coaching, experimental scoring) "as is," without warranty, and may modify or discontinue them at any time.
@@ -99,7 +100,7 @@ You will indemnify and hold harmless Grow Dental from claims arising out of your
 
 ## 20. Term and Termination
 - Month-to-month; you may cancel in-platform, effective at the end of the current period; we may suspend/terminate for non-payment, breach, or misuse.
-- **On termination:** access ends; **unused minutes are forfeited 90 days after cancellation** (Section 5). Account data may be exported for a limited period after termination on request; **recordings and transcripts are retained for one (1) year, then deleted or anonymized**; aggregated/de-identified data may be retained; backups expire on normal rotation. Practice admins can manage and delete individual users.
+- **On termination:** access ends; **unused tokens may be forfeited 90 days after cancellation** (Section 5). Account data may be exported for a limited period after termination on request; **recordings and transcripts are retained for one (1) year, then deleted or anonymized**; aggregated/de-identified data may be retained; backups expire on normal rotation. Practice admins can manage and delete individual users.
 
 ## 21. Changes to These Terms
 We may update these Terms, posting a new effective date and providing reasonable notice for material changes. Continued use constitutes acceptance.
@@ -116,7 +117,7 @@ Grow Dental LLC — SetMo · support@growdental.ai · 321 N Mall Drive, STE H102
 
 export const PRIVACY_MD = `# SetMo — Privacy Policy
 
-**Effective date:** ${"June 22, 2026"}
+**Effective date:** ${LEGAL_EFFECTIVE}
 
 This Policy explains how **Grow Dental LLC** ("Grow Dental," "SetMo," "we," "us") collects, uses, and shares information in connection with the SetMo platform, websites, and services (the "Service"). The Service is offered to **business users in the United States only**.
 
@@ -136,12 +137,14 @@ We act as an **independent business/controller** for the data we collect and gen
 - **Transcripts, AI prompts/responses, and call summaries.**
 - **Performance data** — scores, rubric outputs/annotations, coaching recommendations, progress, leaderboard/ranking data.
 - **Manager/admin notes.**
-- **Usage data** — minutes consumed, activity, logins, feature use; **organization hierarchy / DSO-location relationships.**
+- **Usage data** — tokens/minutes consumed, activity, logins, feature use; **organization hierarchy / DSO-location relationships.**
+- **Notification data** — if you turn on phone notifications, your device's push subscription (an address your browser's push service issues) so we can send them. Turning notifications off deletes it.
+- **Rewards data** — if your Practice uses gift-card rewards, the recipient's name, email, and reward amount.
 - **Assessment data** — from the free Setter Assessment, **including from prospects who are not yet customers.**
 - **Support communications.**
 
 **Collected automatically:**
-- **Technical/device data** — IP, browser/device, and similar; **marketing-site analytics**; cookies, similar technologies, **and session replay.**
+- **Technical/device data** — IP, browser/device, and similar; **marketing-site analytics**; cookies, similar technologies, **and session replay.** Our sign-up and other public forms use **bot protection** that evaluates browser signals to tell people from automated traffic, and we count requests by IP address to limit abuse.
 
 ## 3. How We Use Information
 - Provide, operate, and secure the Service; **record, transcribe, and AI-analyze** calls; **generate simulated lead responses**, scores, coaching, reports, dashboards, and leaderboards;
@@ -165,6 +168,7 @@ SetMo is a training tool and is **not** a HIPAA covered entity or business assoc
 ## 6. How We Share Information; Subprocessors
 We **do not sell** personal information. (We may "share" personal information for cross-context behavioral advertising through advertising cookies/pixels — see Section 8 — and you can opt out.) We share with:
 - **Service providers / subprocessors** by category — **hosting, database/storage, authentication, voice/AI processing & transcription, analytics, email/SMS, payment (Stripe), error logging/security, and support tools** (including **ElevenLabs** and others). AI/voice providers may process audio, transcripts, prompts, and outputs to provide the Service, under contract. A current list is available by emailing **support@growdental.ai**.
+- **Rewards provider** — when a Practice has gift-card rewards turned on, we share the recipient's name and email and the reward amount with **Tremendous** to deliver the gift card.
 - **Partners** (referral/distribution) — limited **view-only "usage health"** (e.g., active/inactive, minutes used, number of users, location/subscription status) and earnings attribution. **Partners do not receive recordings, transcripts, or individual employee performance unless the Practice expressly authorizes it.**
 - **Legal & safety**, **business transfers**, and **with your direction/consent.**
 
@@ -175,9 +179,9 @@ If you use SetMo through a Practice, your Practice owner, managers, and group/DS
 We use cookies and similar technologies for authentication, preferences, security, and analytics. We use **Google Analytics, the Meta Pixel, CRM tracking, and session replay**, and we **may use retargeting/advertising in the future.** Because of these advertising technologies, we may **"share" personal information for cross-context behavioral advertising** under CCPA/CPRA. We present a **cookie banner on your initial visit** and provide a way to **opt out** of non-essential cookies and of sale/sharing.
 
 ## 9. Data Retention
-We retain information only as long as needed to provide the Service and for legitimate business and legal purposes. Suggested decisions:
+We retain information only as long as needed to provide the Service and for legitimate business and legal purposes:
 
-| Data type | Suggested retention (decide) |
+| Data type | Retention |
 |---|---|
 | Account / billing records | Duration of account + legal/tax period |
 | Recordings | 1 year, then deleted |
@@ -185,6 +189,8 @@ We retain information only as long as needed to provide the Service and for legi
 | Scores / training history | Life of the account (a Practice may retain a user's history after they leave) |
 | Free-assessment data (incl. prospects) | Recordings retained 1 year |
 | Support tickets | Up to 2 years |
+| Phone-notification subscriptions | Until you turn notifications off, or the device stops accepting them |
+| Request-limit counters (IP address) | Deleted within a day |
 | Backups | Deleted on normal rotation |
 | Aggregated / de-identified data | Retained indefinitely |
 

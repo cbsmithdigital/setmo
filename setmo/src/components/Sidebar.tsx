@@ -43,6 +43,7 @@ const NAV_OFFICE: NavItem[] = [
 
 const NAV_GROUP: NavItem[] = [
   { href: "/group", label: "Portfolio", icon: "building" },
+  { href: "/group/locations", label: "Locations", icon: "pin" },
   { href: "/practice", label: "Practice", icon: "mic" },
   { href: "/group/performance", label: "Performance", icon: "chart" },
   { href: "/office/live", label: "Live calls", icon: "sound" },
