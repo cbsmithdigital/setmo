@@ -157,17 +157,24 @@ export async function evaluateMinuteThresholds(officeId: string): Promise<void> 
     return;
   }
 
-  // Auto top-up below 25 min (guarded so we don't re-charge while it's landing).
+  // Auto top-up below 25 min. The charge is claimed in one conditional update, so
+  // two calls scored at the same moment (or the daily sweep alongside one) can't
+  // both charge the card; the claim holds for 30 minutes while it lands.
   if (remainingMin < AUTO_TOPUP_AT && office.autoTopUp && office.stripeCustomerId) {
-    const charging = office.lastAutoTopUpAt && Date.now() - office.lastAutoTopUpAt.getTime() < 30 * 60 * 1000;
-    const amount = charging ? 0 : await lastPurchasedMinutes(officeId);
+    const amount = await lastPurchasedMinutes(officeId);
     if (amount > 0) {
-      await prisma.office.update({ where: { id: officeId }, data: { lastAutoTopUpAt: new Date() } }); // claim before charging
-      const { chargeMinutesAuto } = await import("@/lib/stripe");
-      await chargeMinutesAuto({ officeId, customerId: office.stripeCustomerId, minutes: amount }).catch(async (e) => {
-        const { captureError } = await import("@/lib/observability");
-        captureError(e, { scope: "auto-topup", officeId });
+      const claimedAt = new Date();
+      const claim = await prisma.office.updateMany({
+        where: { id: officeId, OR: [{ lastAutoTopUpAt: null }, { lastAutoTopUpAt: { lt: new Date(claimedAt.getTime() - 30 * 60 * 1000) } }] },
+        data: { lastAutoTopUpAt: claimedAt },
       });
+      if (claim.count === 1) {
+        const { chargeMinutesAuto } = await import("@/lib/stripe");
+        await chargeMinutesAuto({ officeId, customerId: office.stripeCustomerId, minutes: amount, claimKey: `${officeId}:${claimedAt.getTime()}` }).catch(async (e) => {
+          const { captureError } = await import("@/lib/observability");
+          captureError(e, { scope: "auto-topup", officeId });
+        });
+      }
     }
   }
 

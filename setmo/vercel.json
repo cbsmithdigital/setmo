@@ -21,6 +21,10 @@
     {
       "path": "/api/cron/rescore",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/partner-payouts",
+      "schedule": "0 9 1,15 * *"
     }
   ]
 }

@@ -386,7 +386,7 @@ export async function createRecurringBillingCheckout(opts: {
  * matching Checkout). Tokens are granted by the `invoice.paid` webhook (kind
  * "minutes_auto"), keeping a single grant path. Returns true if the invoice paid.
  */
-export async function chargeMinutesAuto(opts: { officeId: string; customerId: string; minutes: number }): Promise<boolean> {
+export async function chargeMinutesAuto(opts: { officeId: string; customerId: string; minutes: number; claimKey: string }): Promise<boolean> {
   const stripe = getStripe();
   const quote = minuteQuote(opts.minutes, await getPricingConfig());
   const { accountTokenDiscountPct } = await import("@/lib/usage");
@@ -408,6 +408,8 @@ export async function chargeMinutesAuto(opts: { officeId: string; customerId: st
   // then pay off-session. Void on any failure so nothing lingers as owed.
   let invoiceId: string | null = null;
   try {
+    // Idempotency keys tie every Stripe step to this one claimed top-up, so a
+    // retried request can't create (or pay) a second invoice.
     const invoice = await stripe.invoices.create({
       customer: opts.customerId,
       collection_method: "charge_automatically",
@@ -416,7 +418,7 @@ export async function chargeMinutesAuto(opts: { officeId: string; customerId: st
       default_payment_method: pm,
       description: `SetMo — ${tokens.toLocaleString()} tokens (auto top-up)`,
       metadata: { kind: "minutes_auto", officeId: opts.officeId, minutes: String(quote.minutes), amountCents: String(total * 100) },
-    });
+    }, { idempotencyKey: `autotopup:${opts.claimKey}:invoice` });
     invoiceId = invoice.id ?? null;
     if (!invoiceId) return false;
     await stripe.invoiceItems.create({
@@ -426,14 +428,18 @@ export async function chargeMinutesAuto(opts: { officeId: string; customerId: st
       currency: "usd",
       tax_behavior: "exclusive",
       description: `SetMo — ${tokens.toLocaleString()} tokens (auto top-up)`,
-    });
+    }, { idempotencyKey: `autotopup:${opts.claimKey}:item` });
     await stripe.invoices.finalizeInvoice(invoiceId);
-    const paid = await stripe.invoices.pay(invoiceId, { off_session: true });
+    const paid = await stripe.invoices.pay(invoiceId, { off_session: true }, { idempotencyKey: `autotopup:${opts.claimKey}:pay` });
     if (paid.status !== "paid") {
       await stripe.invoices.voidInvoice(invoiceId).catch(() => {});
       return false;
     }
-    return true; // tokens granted by the invoice.paid webhook (idempotent)
+    // Grant now rather than waiting on the invoice.paid webhook (which also
+    // grants — whichever is first wins, the other is a no-op).
+    const { grantAutoTopUp } = await import("@/lib/billing");
+    await grantAutoTopUp(paid);
+    return true;
   } catch {
     if (invoiceId) await stripe.invoices.voidInvoice(invoiceId).catch(() => {});
     return false; // declined / requires authentication — admins were already warned

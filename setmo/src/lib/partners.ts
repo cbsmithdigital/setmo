@@ -6,6 +6,8 @@ import { cleanRefCode, refCodesFromCookie } from "@/lib/referral-cookie";
 // rev-share on access + minutes, cash by default or credit (+5%).
 
 export const CREDIT_BONUS_PCT = 5;
+// An account counts as earned for commission once it has cleared its 2nd payment.
+export const EARN_AFTER_PAYMENTS = 2;
 export const DISTRIBUTION_THRESHOLD = 10; // > this many active accounts → top rate
 export const TAX_1099_THRESHOLD_USD = 599;
 

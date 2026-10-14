@@ -366,3 +366,23 @@ export async function sendAuditSetterInvite(opts: { to: string; link: string; pr
     "audit-setter-invite",
   );
 }
+
+/** Money events the team should know about (refunds, disputes): what happened
+ *  and what SetMo did about it. Lines are plain text. */
+export async function sendBillingAlert(opts: { subject: string; heading: string; lines: string[] }): Promise<boolean> {
+  if (ALERT_EMAILS.length === 0) return false;
+  return send(
+    {
+      to: ALERT_EMAILS,
+      subject: opts.subject,
+      html: wrap(
+        `
+        <h2 style="color:#7c3aed">${esc(opts.heading)}</h2>
+        ${opts.lines.map((l) => `<p>${esc(l)}</p>`).join("\n")}
+      `,
+        540,
+      ),
+    },
+    "billing-alert",
+  );
+}

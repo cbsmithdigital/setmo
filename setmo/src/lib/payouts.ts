@@ -44,25 +44,41 @@ export async function refreshConnectStatus(partnerId: string): Promise<boolean> 
 
 export type PayoutReportRow = { partner: string; method: string; amountCents: number; count: number; status: string; note?: string };
 
-/** Pay out all partners' EARNED commissions. Idempotent-ish per run (only EARNED
- *  rows are touched and flipped to PAID). */
+/**
+ * Pay out all partners' EARNED commissions. Safe to run twice at once (the cron
+ * plus a manual run): each partner's commissions are claimed for one payout row
+ * before any money moves, the Stripe transfer carries that payout's id as its
+ * idempotency key, and a run that died mid-transfer is settled at the start of
+ * the next one.
+ */
 export async function runPartnerPayouts(dryRun = false): Promise<{ runKey: string; rows: PayoutReportRow[]; paidCents: number }> {
   const runKey = new Date().toISOString().slice(0, 10);
+  if (!dryRun) await settleInterruptedPayouts();
   // Tracking-only partners (commissionsEnabled=false) are never paid.
   const partners = await prisma.partner.findMany({ where: { status: "APPROVED", commissionsEnabled: true }, select: { id: true, name: true, payoutMethod: true, stripeConnectId: true, connectOnboarded: true } });
   const rows: PayoutReportRow[] = [];
 
   for (const p of partners) {
-    const earned = await prisma.partnerCommission.findMany({ where: { partnerId: p.id, status: "EARNED" }, select: { id: true, commissionCents: true } });
+    const earned = await prisma.partnerCommission.findMany({ where: { partnerId: p.id, status: "EARNED", payoutId: null }, select: { id: true, commissionCents: true } });
     if (!earned.length) continue;
-    const amountCents = earned.reduce((a, c) => a + c.commissionCents, 0);
-    const ids = earned.map((e) => e.id);
     // Nothing owed → nothing to pay (a $0 batch used to write a payout row and
     // grant a minimum 1 credit minute).
-    if (amountCents <= 0) continue;
+    if (earned.reduce((a, c) => a + c.commissionCents, 0) <= 0) continue;
 
     if (dryRun) {
-      rows.push({ partner: p.name, method: p.payoutMethod, amountCents, count: ids.length, status: "DRY" });
+      rows.push({ partner: p.name, method: p.payoutMethod, amountCents: earned.reduce((a, c) => a + c.commissionCents, 0), count: earned.length, status: "DRY" });
+      continue;
+    }
+
+    // Claim first: these commissions belong to this payout now, so an
+    // overlapping run finds nothing left to pay.
+    const payout = await prisma.partnerPayout.create({ data: { partnerId: p.id, amountCents: 0, method: p.payoutMethod, status: "PROCESSING", commissionCount: 0, periodKey: runKey } });
+    await prisma.partnerCommission.updateMany({ where: { id: { in: earned.map((e) => e.id) }, status: "EARNED", payoutId: null }, data: { payoutId: payout.id } });
+    const mine = await prisma.partnerCommission.findMany({ where: { payoutId: payout.id }, select: { commissionCents: true } });
+    const amountCents = mine.reduce((a, c) => a + c.commissionCents, 0);
+    if (!mine.length || amountCents <= 0) {
+      await releaseClaim(payout.id);
+      await prisma.partnerPayout.delete({ where: { id: payout.id } });
       continue;
     }
 
@@ -75,7 +91,10 @@ export async function runPartnerPayouts(dryRun = false): Promise<{ runKey: strin
         note = "not onboarded for payouts";
       } else {
         try {
-          const t = await getStripe().transfers.create({ amount: amountCents, currency: "usd", destination: p.stripeConnectId, metadata: { partnerId: p.id, runKey } });
+          const t = await getStripe().transfers.create(
+            { amount: amountCents, currency: "usd", destination: p.stripeConnectId, metadata: { partnerId: p.id, runKey, payoutId: payout.id } },
+            { idempotencyKey: `payout:${payout.id}` },
+          );
           transferId = t.id;
           status = "PAID";
         } catch (e) {
@@ -94,18 +113,57 @@ export async function runPartnerPayouts(dryRun = false): Promise<{ runKey: strin
         note = "no linked practice for credit";
       } else {
         const minutes = Math.max(1, Math.round(amountCents / 100 / CREDIT_RETAIL_PER_MIN));
-        await prisma.conversationBundle.create({ data: { officeId: linked.officeId, minutesPurchased: minutes, minutesRemaining: minutes, hours: Math.round(minutes / 60), amountCents: 0 } });
+        // Keyed to the payout, so the credit can't be granted twice either.
+        await prisma.conversationBundle.upsert({
+          where: { stripePaymentIntent: `payout:${payout.id}` },
+          create: { officeId: linked.officeId, minutesPurchased: minutes, minutesRemaining: minutes, hours: Math.round(minutes / 60), amountCents: 0, stripePaymentIntent: `payout:${payout.id}` },
+          update: {},
+        });
         status = "PAID";
         note = `${minutes} credit minutes`;
       }
     }
 
-    const payout = await prisma.partnerPayout.create({ data: { partnerId: p.id, amountCents, method: p.payoutMethod, status, commissionCount: ids.length, stripeTransferId: transferId, periodKey: runKey, note: note ?? null } });
-    if (status === "PAID") await prisma.partnerCommission.updateMany({ where: { id: { in: ids } }, data: { status: "PAID", payoutId: payout.id } });
-    rows.push({ partner: p.name, method: p.payoutMethod, amountCents, count: ids.length, status, note });
+    await prisma.partnerPayout.update({ where: { id: payout.id }, data: { amountCents, status, commissionCount: mine.length, stripeTransferId: transferId, note: note ?? null } });
+    if (status === "PAID") await prisma.partnerCommission.updateMany({ where: { payoutId: payout.id }, data: { status: "PAID" } });
+    else await releaseClaim(payout.id); // not paid → back in the queue for next time
+    rows.push({ partner: p.name, method: p.payoutMethod, amountCents, count: mine.length, status, note });
   }
 
   return { runKey, rows, paidCents: rows.filter((r) => r.status === "PAID").reduce((a, r) => a + r.amountCents, 0) };
+}
+
+/** Put a payout's claimed (still unpaid) commissions back in the queue. */
+async function releaseClaim(payoutId: string) {
+  await prisma.partnerCommission.updateMany({ where: { payoutId, status: "EARNED" }, data: { payoutId: null } });
+}
+
+/**
+ * A run that died between claiming and recording leaves a PROCESSING payout.
+ * If its transfer went through (found by the payout id in its metadata), finish
+ * recording it as paid; otherwise release its commissions for this run.
+ */
+async function settleInterruptedPayouts() {
+  const stuck = await prisma.partnerPayout.findMany({
+    where: { status: "PROCESSING", createdAt: { lt: new Date(Date.now() - 15 * 60_000) } },
+    include: { partner: { select: { stripeConnectId: true } } },
+  });
+  for (const payout of stuck) {
+    let transferId: string | null = null;
+    if (payout.method === "CASH" && payout.partner.stripeConnectId && isStripeConfigured()) {
+      const recent = await getStripe().transfers.list({ destination: payout.partner.stripeConnectId, limit: 20 }).catch(() => null);
+      transferId = recent?.data.find((t) => t.metadata?.payoutId === payout.id)?.id ?? null;
+    }
+    const credited = payout.method !== "CASH" && (await prisma.conversationBundle.findUnique({ where: { stripePaymentIntent: `payout:${payout.id}` }, select: { id: true } }));
+    if (transferId || credited) {
+      const mine = await prisma.partnerCommission.findMany({ where: { payoutId: payout.id }, select: { commissionCents: true } });
+      await prisma.partnerPayout.update({ where: { id: payout.id }, data: { status: "PAID", stripeTransferId: transferId, amountCents: mine.reduce((a, c) => a + c.commissionCents, 0), commissionCount: mine.length, note: "settled after an interrupted run" } });
+      await prisma.partnerCommission.updateMany({ where: { payoutId: payout.id }, data: { status: "PAID" } });
+    } else {
+      await releaseClaim(payout.id);
+      await prisma.partnerPayout.update({ where: { id: payout.id }, data: { status: "FAILED", note: "interrupted before paying; commissions returned to the queue" } });
+    }
+  }
 }
 
 export async function getPartnerPayouts(partnerId: string) {

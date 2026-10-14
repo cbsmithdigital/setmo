@@ -274,6 +274,18 @@ model OrgTokenBundle {
   @@map("org_token_bundle")
 }
 
+// Stripe webhook events already handled. Stripe redelivers on timeouts and
+// retries, and some handling (counting a paid invoice) isn't naturally
+// idempotent, so each event id is claimed once (released if handling fails).
+model StripeEvent {
+  id        String   @id // evt_…
+  type      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("stripe_event")
+}
+
 // Fixed-window request counters for the public endpoints (signup, assessment,
 // password reset, invites). One row per key per window; the daily cron deletes
 // expired rows.

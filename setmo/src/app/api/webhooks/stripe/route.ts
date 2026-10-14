@@ -2,13 +2,11 @@ import type Stripe from "stripe";
 import { prisma } from "@/lib/db";
 import { constructWebhookEvent, getStripe } from "@/lib/stripe";
 import { addMinutes, addOrgTokens, addCallCenterMinutes, grantSignupBonusMinutes } from "@/lib/usage";
-import { accrueCommission, markOfficeCommissionsEarned, clawbackOfficeCommissions } from "@/lib/partners";
+import { accrueCommission, markOfficeCommissionsEarned, clawbackOfficeCommissions, EARN_AFTER_PAYMENTS } from "@/lib/partners";
+import { grantAutoTopUp, handleChargeRefunded, handleDisputeCreated, invoiceSubscriptionId } from "@/lib/billing";
 import { getPricingConfig } from "@/lib/config";
 import { captureError } from "@/lib/observability";
 import { error, json } from "@/lib/api";
-
-// Account is "earned" for partner commission once it has cleared its 2nd payment.
-const EARN_AFTER_PAYMENTS = 2;
 
 // POST /api/webhooks/stripe — signature-verified billing sync + partner accrual.
 // Never grants minutes before payment is confirmed.
@@ -21,6 +19,16 @@ export async function POST(req: Request) {
     event = constructWebhookEvent(raw, signature);
   } catch (e) {
     return error(e instanceof Error ? e.message : "Invalid signature", 400);
+  }
+
+  // Each event once. Stripe redelivers (timeouts, retries), and counting a paid
+  // invoice twice would earn partner commissions early. The claim is released
+  // if handling fails, so Stripe's retry runs it again.
+  try {
+    await prisma.stripeEvent.create({ data: { id: event.id, type: event.type } });
+  } catch (e) {
+    if ((e as { code?: string })?.code === "P2002") return json({ received: true, duplicate: true });
+    throw e;
   }
 
   try {
@@ -53,11 +61,20 @@ export async function POST(req: Request) {
       await syncAccess(event.data.object);
       break;
     }
+    case "charge.refunded": {
+      await handleChargeRefunded(event.data.object);
+      break;
+    }
+    case "charge.dispute.created": {
+      await handleDisputeCreated(event.data.object);
+      break;
+    }
     default:
       break;
     }
   } catch (e) {
     // Capture + 500 so Stripe retries (transient DB/Stripe hiccups recover).
+    await prisma.stripeEvent.delete({ where: { id: event.id } }).catch(() => {});
     captureError(e, { scope: "stripe-webhook", type: event.type, eventId: event.id });
     return error("Webhook handler failed", 500);
   }
@@ -103,31 +120,6 @@ async function applyMinutes(session: Stripe.Checkout.Session) {
   });
 }
 
-// Off-session auto top-up invoice → grant tokens to the office (idempotent).
-async function applyAutoTopUpInvoice(invoice: Stripe.Invoice) {
-  const officeId = invoice.metadata?.officeId;
-  const minutes = Number(invoice.metadata?.minutes ?? 0);
-  if (!officeId || !minutes) return;
-
-  const paymentRef = invoice.id;
-  if (!paymentRef) return;
-  const existing = await prisma.conversationBundle.findFirst({ where: { stripePaymentIntent: paymentRef } });
-  if (existing) return; // idempotent
-
-  // Pre-tax token price we set on the line (tax was added on top, exclusive).
-  const cashCents = Number(invoice.metadata?.amountCents ?? invoice.subtotal ?? 0);
-  await addMinutes(officeId, minutes, paymentRef, cashCents || undefined);
-
-  const sub = await prisma.subscription.findUnique({ where: { officeId }, select: { paidInvoices: true } });
-  await accrueCommission({
-    officeId,
-    kind: "MINUTES",
-    baseCents: cashCents,
-    stripeRef: `${paymentRef}:min`,
-    earned: (sub?.paidInvoices ?? 0) >= EARN_AFTER_PAYMENTS,
-  }).catch(() => {});
-}
-
 // Group/DSO token purchase → append to the org coach wallet + save the card.
 async function applyGroupTokens(session: Stripe.Checkout.Session) {
   const organizationId = session.metadata?.organizationId;
@@ -170,16 +162,26 @@ async function applyCallCenterTokens(session: Stripe.Checkout.Session) {
 async function onInvoicePaid(invoice: Stripe.Invoice) {
   // Auto top-up invoice (tax-collected token purchase) → grant tokens, not access.
   if (invoice.metadata?.kind === "minutes_auto") {
-    await applyAutoTopUpInvoice(invoice);
+    await grantAutoTopUp(invoice);
     return;
   }
 
+  // Bring the office's subscription row up to date from Stripe first: events
+  // arrive in any order, and this invoice may be the first word of a new
+  // subscription (an activation, a plan switch, a super-admin recurring plan).
+  const subId = invoiceSubscriptionId(invoice);
+  const liveSub = subId ? await getStripe().subscriptions.retrieve(subId).catch(() => null) : null;
+  if (liveSub) await syncAccess(liveSub);
+
   const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
   if (!customerId) return;
-  // The access subscription row is created by customer.subscription.created (with
-  // officeId from metadata) before the first invoice.paid, so match by customer.
-  const sub = await prisma.subscription.findFirst({ where: { stripeCustomerId: customerId }, select: { officeId: true, paidInvoices: true, plan: true, usageMinutes: true, usageAmountCents: true } });
-  if (!sub) return;
+  const sub = await prisma.subscription.findFirst({ where: { stripeCustomerId: customerId }, select: { officeId: true, paidInvoices: true, plan: true } });
+  if (!sub) {
+    // A subscription invoice for an office we can't place yet: fail so Stripe
+    // retries once the subscription's own event has landed. Anything else isn't ours.
+    if (liveSub?.metadata?.officeId) throw new Error(`invoice.paid before its subscription row: ${invoice.id}`);
+    return;
+  }
 
   const count = sub.paidInvoices + 1;
   await prisma.subscription.update({ where: { officeId: sub.officeId }, data: { paidInvoices: count } });
@@ -193,17 +195,21 @@ async function onInvoicePaid(invoice: Stripe.Invoice) {
   // Crossing the 2nd payment earns everything that was pending for this account.
   if (count === EARN_AFTER_PAYMENTS) await markOfficeCommissionsEarned(sub.officeId);
 
-  // Super-admin recurring plan: grant this cycle's usage-minute allowance. Keyed
-  // on the invoice id so Stripe retries never double-grant.
-  if (sub.usageMinutes > 0) {
+  // Super-admin recurring plan: grant this cycle's usage-minute allowance. Read
+  // from the subscription this invoice paid (not the row, which may have been
+  // another plan's a moment ago). Keyed on the invoice id so Stripe retries
+  // never double-grant.
+  const usageMinutes = Number(liveSub?.metadata?.usageMinutes ?? 0) || 0;
+  const usageAmountCents = Number(liveSub?.metadata?.usageCents ?? 0) || 0;
+  if (usageMinutes > 0) {
     try {
       await prisma.conversationBundle.create({
         data: {
           officeId: sub.officeId,
-          minutesPurchased: sub.usageMinutes,
-          minutesRemaining: sub.usageMinutes,
-          hours: Math.round(sub.usageMinutes / 60),
-          amountCents: sub.usageAmountCents,
+          minutesPurchased: usageMinutes,
+          minutesRemaining: usageMinutes,
+          hours: Math.round(usageMinutes / 60),
+          amountCents: usageAmountCents,
           stripePaymentIntent: `${invoice.id}:allowance`,
         },
       });
@@ -213,19 +219,40 @@ async function onInvoicePaid(invoice: Stripe.Invoice) {
   }
 }
 
+const LIVE_STATUSES: Stripe.Subscription.Status[] = ["active", "trialing", "past_due"];
+
 // Flat Practice Access subscription → status + period only (no tiers/seats).
-async function syncAccess(sub: Stripe.Subscription) {
-  const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
+//
+// Worked out from Stripe's live state, not the event alone: deliveries arrive
+// out of order, and a plan switch (monthly → annual, or a super-admin recurring
+// plan) briefly leaves two subscriptions. The newest live one is the office's;
+// an older one still live is the plan being replaced and is cancelled, and the
+// replaced plan's cancellation never marks the office cancelled or claws back
+// its partner's commissions.
+async function syncAccess(eventSub: Stripe.Subscription) {
+  const customerId = typeof eventSub.customer === "string" ? eventSub.customer : eventSub.customer?.id;
   const officeId =
-    sub.metadata?.officeId ??
+    eventSub.metadata?.officeId ??
     (customerId ? (await prisma.office.findFirst({ where: { stripeCustomerId: customerId } }))?.id : undefined);
   if (!officeId) return;
+
+  let subs: Stripe.Subscription[] = [eventSub];
+  if (customerId) {
+    const listed = await getStripe().subscriptions.list({ customer: customerId, status: "all", limit: 20 });
+    // This office's subscriptions (one customer is one office; the metadata check
+    // keeps anything else on the customer out).
+    subs = listed.data.filter((s) => !s.metadata?.officeId || s.metadata.officeId === officeId);
+    if (!subs.some((s) => s.id === eventSub.id)) subs.push(eventSub);
+  }
+  const byNewest = [...subs].sort((a, b) => b.created - a.created);
+  const live = byNewest.filter((s) => LIVE_STATUSES.includes(s.status));
+  const sub = live[0] ?? byNewest[0];
 
   const item = sub.items.data[0];
   // A paused subscription (super-admin "pause access") stays Stripe-active but
   // its collection is voided — treat it as inactive so app access stays revoked.
   const paused = Boolean(sub.pause_collection);
-  const status = paused ? "CANCELED" : sub.status === "active" ? "ACTIVE" : sub.status === "past_due" ? "PAST_DUE" : "CANCELED";
+  const status = paused ? "CANCELED" : sub.status === "active" || sub.status === "trialing" ? "ACTIVE" : sub.status === "past_due" ? "PAST_DUE" : "CANCELED";
   const periodEnd = item?.current_period_end ? new Date(item.current_period_end * 1000) : null;
   // Plan from subscription metadata, else the price interval (year → annual).
   const plan = (sub.metadata?.plan === "annual" || item?.price?.recurring?.interval === "year") ? "ANNUAL" : "MONTHLY";
@@ -240,18 +267,16 @@ async function syncAccess(sub: Stripe.Subscription) {
   });
   if (customerId) await prisma.office.update({ where: { id: officeId }, data: { stripeCustomerId: customerId } });
 
-  // Switching plans (e.g. monthly → annual) creates a new sub for the same
-  // customer — cancel any other active subs so the office isn't double-billed.
-  if (status === "ACTIVE" && customerId) {
-    try {
-      const others = await getStripe().subscriptions.list({ customer: customerId, status: "active", limit: 10 });
-      for (const o of others.data) {
-        if (o.id !== sub.id) await getStripe().subscriptions.cancel(o.id).catch(() => {});
-      }
-    } catch { /* best-effort */ }
+  // Switching plans: once the new one is paid and running, cancel the older live
+  // ones so the office isn't double-billed.
+  if (sub.status === "active" && !paused) {
+    for (const old of live.slice(1)) {
+      await getStripe().subscriptions.cancel(old.id).catch(() => {});
+    }
   }
 
-  // Lapsed/cancelled before earning → claw back still-pending commissions.
-  // A pause isn't a lapse (billing can resume), so don't claw back on pause.
-  if (status === "CANCELED" && !paused) await clawbackOfficeCommissions(officeId);
+  // Lapsed/cancelled before earning → claw back still-pending commissions — only
+  // when nothing live is left (a replaced plan isn't a lapse), and never on a
+  // pause (billing can resume).
+  if (status === "CANCELED" && !paused && live.length === 0) await clawbackOfficeCommissions(officeId);
 }
