@@ -28,14 +28,14 @@ export function UnsubToggle({ u, t, initialOptOut }: { u: string; t: string; ini
     <div>
       {optedOut ? (
         <>
-          <p className="muted" style={{ fontSize: 15.5, marginBottom: 20 }}>You&apos;re unsubscribed from SetMo weekly summary emails. You&apos;ll still get account &amp; billing emails.</p>
+          <p className="muted" style={{ fontSize: 15.5, marginBottom: 20 }}>You&apos;re unsubscribed from SetMo weekly summary and practice reminder emails. You&apos;ll still get account &amp; billing emails.</p>
           <button className="btn btn-ghost" disabled={busy} onClick={() => set(true)} style={{ padding: "10px 18px" }}>
             {busy ? "…" : "Resubscribe"}
           </button>
         </>
       ) : (
         <>
-          <p className="muted" style={{ fontSize: 15.5, marginBottom: 20 }}>Stop receiving the SetMo weekly summary email? Account &amp; billing emails will still come through.</p>
+          <p className="muted" style={{ fontSize: 15.5, marginBottom: 20 }}>Stop receiving SetMo weekly summary and practice reminder emails? Account &amp; billing emails will still come through.</p>
           <button className="btn btn-primary" disabled={busy} onClick={() => set(false)} style={{ padding: "10px 18px" }}>
             {busy ? "…" : "Unsubscribe me"}
           </button>

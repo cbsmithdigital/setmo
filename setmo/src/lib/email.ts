@@ -55,22 +55,103 @@ const button = (href: string, label: string) =>
 const pasteLink = (href: string) => `<p style="color:#64708a;font-size:13px">If the button doesn't work, paste this link:<br>${href}</p>`;
 const wrap = (inner: string, width = 480) => `<div style="font-family:system-ui,sans-serif;max-width:${width}px;margin:0 auto;color:#1a1a2e">${inner}</div>`;
 
-/** Sends a setter invite email. Returns false if it didn't go out (or email
- *  isn't configured) — the caller then shows the link directly. */
-export async function sendInviteEmail(opts: { to: string; link: string; officeName: string; inviterName: string }): Promise<boolean> {
+/** Sends a setter invite email (or, with `reminder`, a nudge about one that's
+ *  still waiting). Returns false if it didn't go out (or email isn't
+ *  configured) — the caller then shows the link directly. */
+export async function sendInviteEmail(opts: { to: string; link: string; officeName: string; inviterName: string; reminder?: boolean }): Promise<boolean> {
   return send(
     {
       to: opts.to,
-      subject: `You're invited to train with ${opts.officeName} on SetMo`,
-      html: wrap(`
+      subject: opts.reminder ? `Reminder: ${opts.officeName} invited you to SetMo` : `You're invited to train with ${opts.officeName} on SetMo`,
+      html: wrap(
+        opts.reminder
+          ? `
+        <h2 style="color:#7c3aed">Your SetMo invite is waiting</h2>
+        <p>${esc(opts.inviterName)} invited you to join <strong>${esc(opts.officeName)}</strong> on SetMo, where your team practices
+        real lead calls with an AI lead and gets scored and coached on every one. It takes a minute to set up.</p>
+        <p style="margin:28px 0">${button(opts.link, "Set up your account")}</p>
+        ${pasteLink(opts.link)}
+      `
+          : `
         <h2 style="color:#7c3aed">Welcome to SetMo</h2>
         <p>${esc(opts.inviterName)} invited you to join <strong>${esc(opts.officeName)}</strong> and start
         practicing high-value lead calls.</p>
         <p style="margin:28px 0">${button(opts.link, "Set up your account")}</p>
         ${pasteLink(opts.link)}
-      `),
+      `,
+      ),
     },
-    "invite",
+    opts.reminder ? "invite-reminder" : "invite",
+  );
+}
+
+/** Footer + one-click unsubscribe headers for the optional emails (weekly
+ *  summaries, practice reminders) — the account and billing ones go regardless. */
+const unsubscribeFooter = (url: string) =>
+  `<p style="color:#94a3b8;font-size:12px;margin-top:28px">Don't want these reminders? <a href="${url}" style="color:#94a3b8">Unsubscribe</a> — you'll still get account and billing emails.</p>`;
+
+/** "Time for a practice call" — to a setter who hasn't practiced in a few days. */
+export async function sendPracticeNudge(opts: {
+  to: string;
+  firstName: string | null;
+  officeName: string;
+  daysSince: number | null; // null = they haven't taken a practice call yet
+  link: string;
+  unsubscribeUrl: string;
+  oneClickUrl: string;
+}): Promise<boolean> {
+  const hi = opts.firstName ? `Hi ${esc(opts.firstName)},` : "Hi,";
+  const line =
+    opts.daysSince == null
+      ? `You haven't taken your first practice call with <strong>${esc(opts.officeName)}</strong> yet. It takes about five minutes: an AI lead calls in, you take the call, and you're scored on the spot with what to work on.`
+      : `It's been ${opts.daysSince} days since your last practice call. A quick five-minute rep keeps your skills sharp for the real ones — and your next lead is ready.`;
+  return send(
+    {
+      to: opts.to,
+      subject: opts.daysSince == null ? "Your first SetMo practice call is ready" : "Time for a quick practice call?",
+      html: wrap(`
+        <h2 style="color:#7c3aed">Got five minutes?</h2>
+        <p>${hi}</p>
+        <p>${line}</p>
+        <p style="margin:28px 0">${button(opts.link, "Start a practice call")}</p>
+        ${unsubscribeFooter(opts.unsubscribeUrl)}
+      `),
+      headers: { "List-Unsubscribe": `<${opts.oneClickUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
+    },
+    "practice-nudge",
+  );
+}
+
+/** Weekly note to a practice's admins when the team hasn't practiced: who's
+ *  gone quiet, and who never joined. */
+export async function sendTeamIdleNudge(opts: {
+  to: string;
+  officeName: string;
+  setters: { name: string; last: string }[];
+  pending: { name: string }[];
+  link: string;
+  unsubscribeUrl: string;
+  oneClickUrl: string;
+}): Promise<boolean> {
+  const row = (a: string, b: string) => `<tr><td style="padding:3px 16px 3px 0">${esc(a)}</td><td style="padding:3px 0;color:#64708a">${esc(b)}</td></tr>`;
+  return send(
+    {
+      to: opts.to,
+      subject: `${opts.officeName}: your team hasn't practiced this week`,
+      html: wrap(
+        `
+        <h2 style="color:#7c3aed">No practice calls this week</h2>
+        <p>Nobody at <strong>${esc(opts.officeName)}</strong> has taken a SetMo practice call in the last seven days. Teams that rep a couple of times a week book noticeably more consults — a quick nudge at your next huddle goes a long way.</p>
+        ${opts.setters.length ? `<p style="margin:18px 0 6px"><strong>Your setters</strong></p><table style="font-size:14px;border-collapse:collapse">${opts.setters.map((s) => row(s.name, s.last)).join("")}</table>` : ""}
+        ${opts.pending.length ? `<p style="margin:18px 0 6px"><strong>Invited but not set up yet</strong></p><p style="margin:0;font-size:14px">${opts.pending.map((p) => esc(p.name)).join(", ")} — you can resend their invite from your Team page.</p>` : ""}
+        <p style="margin:26px 0">${button(opts.link, "Open your team")}</p>
+        ${unsubscribeFooter(opts.unsubscribeUrl)}
+      `,
+        520,
+      ),
+      headers: { "List-Unsubscribe": `<${opts.oneClickUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
+    },
+    "team-idle-nudge",
   );
 }
 

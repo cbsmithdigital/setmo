@@ -189,9 +189,14 @@ async function onInvoicePaid(invoice: Stripe.Invoice) {
   const earned = count >= EARN_AFTER_PAYMENTS;
   // Base ACCESS commission on the access list price (monthly, or 10× for annual) —
   // not invoice.amount_paid, which includes tax and (on activation) bundled tokens.
-  const cfg = await getPricingConfig();
-  const accessCents = Math.round(cfg.accessMonthly * (sub.plan === "ANNUAL" ? 10 : 1) * 100);
-  await accrueCommission({ officeId: sub.officeId, kind: "ACCESS", baseCents: accessCents, stripeRef: invoice.id ?? `inv:${sub.officeId}:${count}`, earned });
+  // A $0 invoice (a 100%-off coupon) brought in no money, so it earns the partner
+  // nothing — but it still counts toward the payments above, so commission
+  // starts on the payments that follow (Adam, 2026-10-14).
+  if ((invoice.amount_paid ?? 0) > 0) {
+    const cfg = await getPricingConfig();
+    const accessCents = Math.round(cfg.accessMonthly * (sub.plan === "ANNUAL" ? 10 : 1) * 100);
+    await accrueCommission({ officeId: sub.officeId, kind: "ACCESS", baseCents: accessCents, stripeRef: invoice.id ?? `inv:${sub.officeId}:${count}`, earned });
+  }
   // Crossing the 2nd payment earns everything that was pending for this account.
   if (count === EARN_AFTER_PAYMENTS) await markOfficeCommissionsEarned(sub.officeId);
 

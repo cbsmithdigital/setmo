@@ -127,15 +127,16 @@ export async function inviteUsers(opts: {
   return { invited, failed, previewLinks: unsent.map((u) => u.link), unsent };
 }
 
-/** Re-mint and re-send an invite link for an existing invited user. */
-export async function resendInvite(opts: { email: string; contextName: string; inviterName: string; origin: string }): Promise<{ ok: boolean; previewLink?: string }> {
+/** Re-mint and re-send an invite link for an existing invited user. `reminder`
+ *  sends the "your invite is waiting" wording (lib/nudges). */
+export async function resendInvite(opts: { email: string; contextName: string; inviterName: string; origin: string; reminder?: boolean }): Promise<{ ok: boolean; previewLink?: string }> {
   const admin = getAdminClient();
   const redirectTo = `${opts.origin}/auth/confirm?next=/invite`;
   const { data, error: linkErr } = await admin.auth.admin.generateLink({ type: "invite", email: opts.email, options: { redirectTo } });
   const link = confirmLink(opts.origin, data?.properties?.hashed_token, "invite", "/invite");
   if (linkErr || !link) return { ok: false };
   const sent = isEmailConfigured()
-    ? await sendInviteEmail({ to: opts.email, link, officeName: opts.contextName, inviterName: opts.inviterName }).catch(() => false)
+    ? await sendInviteEmail({ to: opts.email, link, officeName: opts.contextName, inviterName: opts.inviterName, reminder: opts.reminder }).catch(() => false)
     : false;
   return { ok: true, previewLink: sent ? undefined : link };
 }

@@ -326,6 +326,8 @@ model Office {
   // Gift cards sent by SetMo (Tremendous) — off until a super admin turns them on.
   giftCardsEnabled     Boolean   @default(false) @map("gift_cards_enabled")
   giftCardsRequestedAt DateTime? @map("gift_cards_requested_at")
+  // Last "your team hasn't practiced this week" email to the admins (lib/nudges).
+  idleNudgeAt      DateTime? @map("idle_nudge_at")
   createdAt        DateTime @default(now()) @map("created_at")
 
   organization Organization?       @relation(fields: [organizationId], references: [id])
@@ -380,11 +382,14 @@ model User {
   email          String     @unique
   status         UserStatus @default(INVITED)
   invitedById    String?    @map("invited_by")
-  digestOptOut   Boolean    @default(false) @map("digest_opt_out") // unsubscribed from weekly summary emails
+  digestOptOut   Boolean    @default(false) @map("digest_opt_out") // unsubscribed from weekly summary + practice reminder emails
   // Set for a call-center AGENT: the pod (floor-manager team) they belong to.
   // Their served offices are AgentOffice rows; their sessions carry callCenterOrgId.
   callCenterPodId String?   @map("call_center_pod_id")
-  practiceReminderAt DateTime? @map("practice_reminder_at") // last "time for a practice call" phone notification
+  practiceReminderAt DateTime? @map("practice_reminder_at") // last "time for a practice call" nudge (email and/or phone)
+  // Invite reminders (lib/nudges): how many have gone out and when the last did.
+  inviteRemindersSent Int       @default(0) @map("invite_reminders_sent")
+  inviteRemindedAt    DateTime? @map("invite_reminded_at")
   createdAt      DateTime   @default(now()) @map("created_at")
 
   office       Office?       @relation(fields: [officeId], references: [id])

@@ -15,7 +15,7 @@
       "schedule": "30 8 * * *"
     },
     {
-      "path": "/api/cron/practice-reminders",
+      "path": "/api/cron/nudges",
       "schedule": "0 15 * * 1-5"
     },
     {
