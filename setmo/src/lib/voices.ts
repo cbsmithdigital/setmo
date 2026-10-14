@@ -33,7 +33,7 @@ export const VOICE_CATALOG: VoiceMeta[] = [
   { name: "Dan", id: "v54DUrx2qPTkyzeYbsyW", gender: "male", ages: "any" },
   // "Andre Rene" in the Voice Library (Adam's pick, 2026-10-14; any age, as he
   // first described Andre). The library's other André (nlkkWck0nIz1Nd4Bydut) he
-  // didn't like, and the id first given for Andre is "Hope", a woman.
+  // didn't like.
   { name: "Andre", id: "GogJbMCDT0Viv4cU3N4s", gender: "male", ages: "any" },
   { name: "Josh 2", id: "ZoiZ8fuDWInAcwPXaVeq", gender: "male", ages: "any" }, // a second voice Adam calls Josh
   { name: "Aiden", id: "EOVAuWqgSZN2Oel78Psj", gender: "male", ages: "young" },
@@ -52,6 +52,8 @@ export const VOICE_CATALOG: VoiceMeta[] = [
   { name: "Eve", id: "BZgkqPqms7Kj9ulSkVzn", gender: "female", ages: "any" },
   { name: "Sia", id: "CUvmi6RSy4BQr6vnMyEw", gender: "female", ages: "30+" },
   { name: "Amy", id: "bMxLr8fP6hzNRRi9nJxU", gender: "female", ages: "young" },
+  // Added 2026-10-14 at Adam's ask; the Voice Library lists her as a young woman.
+  { name: "Hope", id: "zGjIP4SZlMnY9m93k97r", gender: "female", ages: "young" },
 ];
 
 /** Whether a voice suits a caller of this gender and age. */
