@@ -1,7 +1,11 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { IMPLANT_RUBRIC } from "@/lib/skills";
+import { rubricForService } from "@/lib/packs/registry";
+import { SERVICE_META } from "@/lib/service-meta";
 import { TrainingsAdmin } from "@/components/platform/TrainingsAdmin";
+import type { ServiceKey } from "@/generated/prisma/client";
+
+const CALL_TYPES: ServiceKey[] = ["IMPLANT", "DENTURE", "COSMETIC", "ORTHO", "WISDOM", "GENERAL"];
 
 export default async function PlatformTrainingsPage() {
   await requireRole("PLATFORM_ADMIN", "SUPPORT");
@@ -18,7 +22,22 @@ export default async function PlatformTrainingsPage() {
     assetRef: t.assetRef ?? "",
     thumbRef: t.thumbRef ?? "",
   }));
-  const skills = IMPLANT_RUBRIC.map((s) => ({ key: s.key, name: s.name }));
+  // Every skill any call type is scored on, so a training can target it and get
+  // recommended to setters weak on it: the ones every call shares first, then
+  // each call type's own, labeled with the call type.
+  const skills: { key: string; name: string }[] = [];
+  const seen = new Set<string>();
+  for (const s of rubricForService("IMPLANT").skills.filter((s) => s.tier === "universal")) {
+    skills.push({ key: s.key, name: `Every call type — ${s.name}` });
+    seen.add(s.key);
+  }
+  for (const svc of CALL_TYPES) {
+    for (const s of rubricForService(svc).skills) {
+      if (seen.has(s.key)) continue;
+      seen.add(s.key);
+      skills.push({ key: s.key, name: `${SERVICE_META[svc].name} — ${s.name}` });
+    }
+  }
 
   return (
     <>
