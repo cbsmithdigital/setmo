@@ -4,6 +4,7 @@ import { agentIdFor, getSignedCall, isElevenLabsConfigured } from "@/lib/elevenl
 import { memoryForService } from "@/lib/memory";
 import { buildSessionLead, hasComposedLead, resolveDifficulty } from "@/lib/session-lead";
 import { error, json } from "@/lib/api";
+import { checkPracticeOpen } from "@/lib/practice-access";
 import { captureError } from "@/lib/observability";
 import type { ServiceKey } from "@/generated/prisma/client";
 
@@ -52,6 +53,12 @@ export async function POST(
     Date.now() - session.startedAt.getTime() < RECONNECT_WINDOW_MS;
   if (session.status === "IN_PROGRESS" && !isReconnect) {
     return error("This call already started.", 409);
+  }
+  // Starting (not reconnecting): the same checks as creating the call — a lead
+  // card can sit open while access lapses or the tokens run out.
+  if (!isReconnect) {
+    const open = await checkPracticeOpen({ officeId: session.officeId, serviceType: session.serviceType as ServiceKey, callCenterOrgId: session.callCenterOrgId });
+    if (!open.ok) return error(open.error, open.code);
   }
 
   // The office is the one this call is FOR (session.officeId) — for a normal

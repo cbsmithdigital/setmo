@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getCurrentUser, getActiveRole } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { createGroupTokenCheckout, isStripeConfigured } from "@/lib/stripe";
 import { groupTokenDiscountPct } from "@/lib/usage";
 import { checkMinutes } from "@/lib/minute-limits";
@@ -16,6 +17,9 @@ export async function POST(req: Request) {
   if (inDemoAccount(user)) return error(DEMO_BILLING_MESSAGE, 403);
   if (getActiveRole(user) !== "GROUP_ADMIN" || !user.organizationId) return error("Group admins only", 403);
   if (!isStripeConfigured()) return error("Billing isn't configured yet", 503);
+
+  const current = await prisma.subscription.count({ where: { status: { in: ["ACTIVE", "PAST_DUE"] }, office: { organizationId: user.organizationId } } });
+  if (!current) return error("Tokens are for current SetMo clients — turn on Practice Access for at least one location first.", 402);
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid request", 422);

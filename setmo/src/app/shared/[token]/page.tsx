@@ -35,10 +35,19 @@ export default async function SharedPage({ params }: { params: Promise<{ token: 
         </div>
 
         {/* headline */}
-        <div className="card card-pad card-glow" style={{ display: "flex", gap: 28, alignItems: "center", marginBottom: 18, flexWrap: "wrap" }}>
-          <Ring value={r.score} size={132} />
-          {r.narrative && <h2 style={{ fontSize: 22, maxWidth: "24em", lineHeight: 1.25, flex: 1, minWidth: 240 }}>{r.narrative}</h2>}
-        </div>
+        {r.tooShort ? (
+          <div className="card card-pad rise" style={{ marginBottom: 18 }}>
+            <h2 style={{ fontSize: 22, marginBottom: 8 }}>Too short to score</h2>
+            <p className="muted" style={{ fontSize: 14.5, maxWidth: "36em" }}>
+              A call needs at least a minute and a few back-and-forths before it can be scored. This one doesn&apos;t count toward averages or the leaderboard.
+            </p>
+          </div>
+        ) : (
+          <div className="card card-pad card-glow" style={{ display: "flex", gap: 28, alignItems: "center", marginBottom: 18, flexWrap: "wrap" }}>
+            <Ring value={r.score} size={132} />
+            {r.narrative && <h2 style={{ fontSize: 22, maxWidth: "24em", lineHeight: 1.25, flex: 1, minWidth: 240 }}>{r.narrative}</h2>}
+          </div>
+        )}
 
         <div className="grid g-2" style={{ gridTemplateColumns: "1.1fr .9fr", marginBottom: 18 }}>
           {/* skills */}

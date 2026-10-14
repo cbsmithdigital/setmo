@@ -82,7 +82,11 @@ export async function AgentHome({ userId, first }: { userId: string; first: stri
                     <div className="muted" style={{ fontSize: 12.5 }}>{s.officeName ? `${s.officeName} · ` : ""}{whenLabel(s.when)} · {mmss(s.durationSeconds)}</div>
                   </div>
                   <Delta v={s.delta} />
-                  <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 19, width: 44, textAlign: "right" }} className={s.score >= 4 ? "mint-text" : "grad-text"}>{s.score.toFixed(1)}</div>
+                  {s.score ? (
+                    <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 19, width: 44, textAlign: "right" }} className={s.score >= 4 ? "mint-text" : "grad-text"}>{s.score.toFixed(1)}</div>
+                  ) : (
+                    <span className="muted" style={{ fontSize: 12, textAlign: "right" }}>Too short</span>
+                  )}
                 </Link>
               ))}
             </div>

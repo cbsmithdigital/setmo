@@ -5,7 +5,7 @@ import { getSessionResult } from "@/lib/queries";
 import { getOfficeCoachContext } from "@/lib/office";
 import { getGroupCoachContext, groupScope } from "@/lib/group";
 import { getCallCenterOverview, getPodOverview } from "@/lib/callcenter";
-import { canStartSession, outOfTokensMessage, canStartGroupCoach, canStartCallCenter, callCenterOrgForAgent } from "@/lib/usage";
+import { practiceBlockedMessage, canStartGroupCoach, canStartCallCenter, callCenterOrgForAgent } from "@/lib/usage";
 import { coachAgentId, managerCoachAgentId, groupCoachAgentId, getSignedCall, isElevenLabsConfigured } from "@/lib/elevenlabs";
 import {
   voiceCoachSystem,
@@ -111,10 +111,14 @@ export async function POST(req: Request) {
   }
   if (!focus) focus = "high-ticket appointment-setting fundamentals";
 
-  // Coaching draws from a pool — block when it's empty (no free overage).
-  const allowance = isAgent ? await canStartCallCenter(callCenterOrgId!) : await canStartSession(user.officeId!);
-  if (!allowance.ok) {
-    return error(isAgent ? "Your call center's practice balance is used up." : await outOfTokensMessage(user.officeId!), 402);
+  // Coaching draws from a pool — block when it's empty (no free overage), or
+  // when the office's Practice Access is off.
+  if (isAgent) {
+    const allowance = await canStartCallCenter(callCenterOrgId!);
+    if (!allowance.ok) return error("Your call center's practice balance is used up.", 402);
+  } else {
+    const blocked = await practiceBlockedMessage(user.officeId!);
+    if (blocked) return error(blocked, 402);
   }
 
   // Call-grounded coaching when launched from a specific call; otherwise a fresh rep.
@@ -249,10 +253,8 @@ async function groupVoiceConnect(userId: string, orgId: string, officeId: string
 
 // The manager's management & training assistant — grounded in the whole team.
 async function managerVoiceConnect(userId: string, officeId: string, first: string) {
-  const allowance = await canStartSession(officeId);
-  if (!allowance.ok) {
-    return error(await outOfTokensMessage(officeId), 402);
-  }
+  const blocked = await practiceBlockedMessage(officeId);
+  if (blocked) return error(blocked, 402);
 
   const ctx = await getOfficeCoachContext(officeId);
   const o = ctx.overview;

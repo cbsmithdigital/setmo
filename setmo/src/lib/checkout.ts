@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { createActivationCheckout, createAccessCheckout, createMinuteCheckout, isStripeConfigured } from "@/lib/stripe";
 import { getPlatformConfig, promoBonusMinutes } from "@/lib/config";
 import { checkMinutes } from "@/lib/minute-limits";
-import { accountTokenDiscountPct, hasSignupBonusGrant } from "@/lib/usage";
+import { accountTokenDiscountPct, hasSignupBonusGrant, hasCurrentAccess } from "@/lib/usage";
 
 // Starting a checkout for a location — shared by the office's own Billing page
 // and a group admin buying for one of the group's locations.
@@ -53,9 +53,12 @@ export async function startActivationCheckout(buyer: Buyer & { minutes: number; 
   }
 }
 
-/** Buy tokens (slider amount) for a location. */
+/** Buy tokens (slider amount) for a location — current clients only. */
 export async function startTokenCheckout(buyer: Buyer & { minutes: number }): Promise<CheckoutResult> {
   if (!isStripeConfigured()) return { ok: false, error: "Billing isn't configured yet", status: 503 };
+  if (!(await hasCurrentAccess(buyer.officeId))) {
+    return { ok: false, error: "Tokens are for current SetMo clients — turn on Practice Access first (it includes starter tokens).", status: 402 };
+  }
   const bounds = await checkMinutes(buyer.minutes);
   if (!bounds.ok) return { ok: false, error: bounds.message, status: bounds.status, code: bounds.code };
   const office = await prisma.office.findUnique({ where: { id: buyer.officeId }, select: { stripeCustomerId: true } });

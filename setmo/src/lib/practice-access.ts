@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { canStartSession, canStartCallCenter, outOfTokensMessage } from "@/lib/usage";
+import { canStartCallCenter, practiceBlockedMessage } from "@/lib/usage";
 import type { ServiceKey } from "@/generated/prisma/client";
 
 // Who may start a practice call, for which office, on which call type — shared
@@ -24,7 +24,8 @@ export async function callCenterOfficeInScope(
 
 /** The office must offer this call type, the call type must be open (live for
  *  everyone, or in beta for the offices piloting it), and the pool the call
- *  draws — the call center's or the office's — must have time left. */
+ *  draws must have time left — the call center's, or the office's, which also
+ *  needs current Practice Access (leftover tokens don't work without it). */
 export async function checkPracticeOpen(opts: {
   officeId: string;
   serviceType: ServiceKey;
@@ -38,14 +39,13 @@ export async function checkPracticeOpen(opts: {
   if (!agent || !officeService?.enabled || !open) {
     return { ok: false, error: "That service isn't available for this office yet", code: 403 };
   }
-  // No auto-overage: block when the pool is exhausted.
-  const allowance = opts.callCenterOrgId ? await canStartCallCenter(opts.callCenterOrgId) : await canStartSession(opts.officeId);
-  if (!allowance.ok) {
-    return {
-      ok: false,
-      error: opts.callCenterOrgId ? "Your call center's practice balance is used up." : await outOfTokensMessage(opts.officeId),
-      code: 402,
-    };
+  // No auto-overage: block when the pool is exhausted (or the office's access is off).
+  if (opts.callCenterOrgId) {
+    const allowance = await canStartCallCenter(opts.callCenterOrgId);
+    if (!allowance.ok) return { ok: false, error: "Your call center's practice balance is used up.", code: 402 };
+  } else {
+    const blocked = await practiceBlockedMessage(opts.officeId);
+    if (blocked) return { ok: false, error: blocked, code: 402 };
   }
   return { ok: true, agentId: agent.id };
 }

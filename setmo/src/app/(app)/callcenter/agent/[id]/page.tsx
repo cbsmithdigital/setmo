@@ -86,7 +86,7 @@ export default async function AgentDetailPage({ params }: { params: Promise<{ id
                   <div style={{ fontWeight: 600, fontSize: 13.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.persona}</div>
                   <div className="muted" style={{ fontSize: 12 }}>{r.officeName} · {relativeShort(r.startedAt)}</div>
                 </div>
-                <span className={"chip " + (r.score >= 4.3 ? "mint" : r.score < 3.7 ? "amber" : "")} style={{ padding: "2px 9px", fontFamily: "var(--font-lato)", fontWeight: 800 }}>{r.score ? r.score.toFixed(1) : "—"}</span>
+                <span className={"chip " + (r.score >= 4.3 ? "mint" : r.score < 3.7 ? "amber" : "")} style={{ padding: "2px 9px", fontFamily: "var(--font-lato)", fontWeight: 800 }}>{r.score ? r.score.toFixed(1) : "Too short"}</span>
                 <Icon name="arrow" size={14} />
               </Link>
             ))}

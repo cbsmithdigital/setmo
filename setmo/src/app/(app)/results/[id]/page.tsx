@@ -143,7 +143,15 @@ export default async function ResultsPage({
       </div>
 
       <div className="content">
-        {/* headline score */}
+        {/* headline score — or why there isn't one */}
+        {r.tooShort ? (
+          <div className="card card-pad rise" style={{ marginBottom: 18 }}>
+            <h2 style={{ fontSize: 22, marginBottom: 8 }}>Too short to score</h2>
+            <p className="muted" style={{ fontSize: 14.5, maxWidth: "36em" }}>
+              A call needs at least a minute and a few back-and-forths before it can be scored. This one doesn&apos;t count toward averages or the leaderboard.
+            </p>
+          </div>
+        ) : (
         <div className="card card-pad card-glow rise" style={{ display: "flex", gap: 30, alignItems: "center", marginBottom: 18, flexWrap: "wrap" }}>
           <Ring value={r.score} size={150} />
           <div style={{ flex: 1, minWidth: 240 }}>
@@ -163,6 +171,7 @@ export default async function ResultsPage({
             {r.narrative && <h2 style={{ fontSize: 24, maxWidth: "22em", lineHeight: 1.2 }}>{r.narrative}</h2>}
           </div>
         </div>
+        )}
 
         {/* the lead, revealed — who they really were, and whether the setter got there */}
         {r.reveal && <LeadReveal reveal={r.reveal} check={r.revealCheck} />}
@@ -228,6 +237,7 @@ export default async function ResultsPage({
           </div>
         )}
 
+        {!r.tooShort && (
         <div className="grid g-2" style={{ gridTemplateColumns: "1.1fr .9fr", marginBottom: 18 }}>
           {/* skill breakdown */}
           <div className="card card-pad rise" style={{ animationDelay: ".05s" }}>
@@ -314,6 +324,7 @@ export default async function ResultsPage({
             </div>
           </div>
         </div>
+        )}
 
         {/* replacement phrases */}
         {r.phrases.length > 0 && (

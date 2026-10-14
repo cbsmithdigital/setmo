@@ -728,6 +728,7 @@ export async function getSharedRecording(token: string) {
     durationSeconds: session.durationSeconds ?? 0,
     when: session.startedAt,
     score: e.overallScore != null ? Number(e.overallScore) : 0,
+    tooShort: e.overallScore == null && skills.length === 0,
     narrative: e.narrative ?? "",
     skills,
     wins: (e.wins as string[] | null) ?? [],
@@ -861,6 +862,9 @@ export async function getSessionResult(sessionId: string, viewer: ResultViewer, 
     persona: (session.personaSeed as { persona?: string } | null)?.persona ?? "Practice lead",
     durationSeconds: session.durationSeconds ?? 0,
     score: e.overallScore != null ? Number(e.overallScore) : 0,
+    // Too short to score (under a minute, or only a line or two from the setter):
+    // no score, no skills, and it doesn't count toward averages.
+    tooShort: e.overallScore == null && skills.length === 0,
     prev: prev?.evaluation?.overallScore != null ? Number(prev.evaluation.overallScore) : null,
     showRate: callShowRate(skills.map((s) => ({ skillKey: s.skillKey, score: s.score }))),
     narrative: e.narrative ?? "",

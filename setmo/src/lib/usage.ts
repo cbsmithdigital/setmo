@@ -77,16 +77,38 @@ export async function canStartSession(officeId: string, opts: { isAudit?: boolea
   return { ok: b.remainingSeconds > MIN_START_SECONDS, remainingSeconds: b.remainingSeconds };
 }
 
-/** What to tell someone who can't start a call because the office has no time
- *  left. A practice that never activated is told to activate — not that its
- *  "pool is used up" — and nobody is told to wait for a reset: tokens roll over
- *  until they're used, so the only way back is adding more. */
-export async function outOfTokensMessage(officeId: string): Promise<string> {
-  const [b, sub] = await Promise.all([getMinuteBalance(officeId), prisma.subscription.findUnique({ where: { officeId }, select: { status: true } })]);
-  if (b.purchasedMin <= 0 && sub?.status !== "ACTIVE") {
-    return "SetMo isn't activated for this practice yet. An office admin can activate it from Billing to start practicing.";
-  }
-  return "Your practice is out of tokens. An office admin can add more from Billing.";
+/** Whether an office is a current client: Practice Access is on, or a renewal
+ *  failed and Stripe is still retrying it (past due — the grace period; once
+ *  Stripe gives up, the subscription is cancelled). Practice calls, voice
+ *  coaching and buying tokens all need it — leftover tokens don't work without
+ *  it. Activating is how an office becomes one, and a super admin can turn it
+ *  on for a comp or trial account (Platform → the account → Activate). Demo
+ *  accounts never pay — the SetMo team tops them up — so they always count. */
+async function accessState(officeId: string): Promise<"current" | "lapsed" | "never"> {
+  const o = await prisma.office.findUnique({
+    where: { id: officeId },
+    select: { isDemo: true, organization: { select: { isDemo: true } }, subscription: { select: { status: true } } },
+  });
+  if (!o) return "never";
+  if (o.isDemo || o.organization?.isDemo) return "current";
+  const status = o.subscription?.status;
+  if (status === "ACTIVE" || status === "PAST_DUE") return "current";
+  return o.subscription ? "lapsed" : "never";
+}
+
+export async function hasCurrentAccess(officeId: string): Promise<boolean> {
+  return (await accessState(officeId)) === "current";
+}
+
+/** Why this office's people can't start a practice call or a coaching session
+ *  right now, or null if they can. Nobody is told to wait for a reset: tokens
+ *  roll over until they're used, so the way back is adding more. */
+export async function practiceBlockedMessage(officeId: string): Promise<string | null> {
+  const state = await accessState(officeId);
+  if (state === "lapsed") return "Practice Access isn't on for this practice right now. An office admin can turn it back on from Billing.";
+  if (state === "never") return "SetMo isn't activated for this practice yet. An office admin can activate it from Billing to start practicing.";
+  const allowance = await canStartSession(officeId);
+  return allowance.ok ? null : "Your practice is out of tokens. An office admin can add more from Billing.";
 }
 
 // Auto top-up / low-minute alert thresholds (minutes remaining).
@@ -169,10 +191,11 @@ export async function evaluateMinuteThresholds(officeId: string): Promise<void> 
     return;
   }
 
-  // Auto top-up below 25 min. The charge is claimed in one conditional update, so
-  // two calls scored at the same moment (or the daily sweep alongside one) can't
-  // both charge the card; the claim holds for 30 minutes while it lands.
-  if (remainingMin < AUTO_TOPUP_AT && office.autoTopUp && office.stripeCustomerId) {
+  // Auto top-up below 25 min — for a current client only. The charge is claimed
+  // in one conditional update, so two calls scored at the same moment (or the
+  // daily sweep alongside one) can't both charge the card; the claim holds for
+  // 30 minutes while it lands.
+  if (remainingMin < AUTO_TOPUP_AT && office.autoTopUp && office.stripeCustomerId && (await hasCurrentAccess(officeId))) {
     const amount = await lastPurchasedMinutes(officeId);
     if (amount > 0) {
       const claimedAt = new Date();

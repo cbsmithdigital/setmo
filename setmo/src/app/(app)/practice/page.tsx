@@ -1,7 +1,8 @@
-import { requireUser } from "@/lib/auth";
+import Link from "next/link";
+import { requireUser, getActiveRole } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getServiceOptions, getAllowance } from "@/lib/queries";
-import { getCallCenterBalance, callCenterOrgForAgent } from "@/lib/usage";
+import { getCallCenterBalance, callCenterOrgForAgent, practiceBlockedMessage } from "@/lib/usage";
 import { ServicePicker } from "@/components/ServicePicker";
 import { AllowanceMeter } from "@/components/ui/widgets";
 
@@ -63,7 +64,8 @@ export default async function PracticePage() {
     );
   }
 
-  const [services, allowance] = await Promise.all([getServiceOptions(officeId), getAllowance(officeId)]);
+  const [services, allowance, blocked] = await Promise.all([getServiceOptions(officeId), getAllowance(officeId), practiceBlockedMessage(officeId)]);
+  const canBuy = ["OFFICE_ADMIN", "GROUP_ADMIN"].includes(getActiveRole(user));
 
   return (
     <>
@@ -76,6 +78,21 @@ export default async function PracticePage() {
           <AllowanceMeter remainingMin={allowance.remainingMin} purchasedMin={allowance.purchasedMin} usedMin={allowance.usedMin} />
         </div>
       </div>
+      {blocked && (
+        <div className="content" style={{ paddingBottom: 0 }}>
+          <div className="banner" style={{ background: "rgba(251,191,36,.12)", borderColor: "rgba(251,191,36,.4)", color: "#fcd34d" }}>
+            {blocked}
+            {canBuy && (
+              <>
+                {" "}
+                <Link href={getActiveRole(user) === "GROUP_ADMIN" ? "/group/locations" : "/office/billing"} style={{ fontWeight: 700, textDecoration: "underline" }}>
+                  Go to billing
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       <ServicePicker services={services} />
     </>
   );
