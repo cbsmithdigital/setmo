@@ -31,8 +31,10 @@ export const VOICE_CATALOG: VoiceMeta[] = [
   { name: "Victor", id: "KSGYe0fMqoZR5BREvtf1", gender: "male", ages: "any" },
   { name: "Heyez", id: "6rr4jpS124uCLNtgVdAk", gender: "male", ages: "any" },
   { name: "Dan", id: "v54DUrx2qPTkyzeYbsyW", gender: "male", ages: "any" },
-  // Andre is out until we have his id: the one given (zGjIP4SZlMnY9m93k97r) is
-  // "Hope", a young woman, in the Voice Library.
+  // "Andre Rene" in the Voice Library (Adam's pick, 2026-10-14; any age, as he
+  // first described Andre). The library's other André (nlkkWck0nIz1Nd4Bydut) he
+  // didn't like, and the id first given for Andre is "Hope", a woman.
+  { name: "Andre", id: "GogJbMCDT0Viv4cU3N4s", gender: "male", ages: "any" },
   { name: "Josh 2", id: "ZoiZ8fuDWInAcwPXaVeq", gender: "male", ages: "any" }, // a second voice Adam calls Josh
   { name: "Aiden", id: "EOVAuWqgSZN2Oel78Psj", gender: "male", ages: "young" },
   { name: "Miles", id: "vSjOBQp24DUB2COr2xI9", gender: "male", ages: "young" },
