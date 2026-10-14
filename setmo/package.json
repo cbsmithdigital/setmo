@@ -9,11 +9,12 @@
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push",
+    "db:push": "prisma db push && tsx prisma/enable-rls.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "packs:check": "tsx scripts/packs-check.ts",
-    "voices:check": "tsx scripts/voices-check.ts"
+    "voices:check": "tsx scripts/voices-check.ts",
+    "db:lock": "tsx prisma/enable-rls.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
