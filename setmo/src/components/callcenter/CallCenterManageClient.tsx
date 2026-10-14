@@ -55,7 +55,7 @@ export function CallCenterManageClient({ data, orgId }: { data: Data; orgId?: st
   async function invite() {
     const body = inv.role === "SETTER" ? inv : { email: inv.email, name: inv.name, role: inv.role, podId: inv.podId };
     const r = await post("/api/callcenter/members", scoped(body));
-    if (r.ok) { setInvMsg({ kind: "ok", text: r.previewLink ? `Invited. Link: ${r.previewLink}` : "Invite sent" }); setInv({ ...inv, email: "", name: "", officeIds: [] }); refresh(); }
+    if (r.ok) { setInvMsg({ kind: "ok", text: r.previewLink ? `Invited, but the email didn't go out — share this link: ${r.previewLink}` : "Invite sent" }); setInv({ ...inv, email: "", name: "", officeIds: [] }); refresh(); }
     else setInvMsg({ kind: "err", text: r.error ?? "Failed" });
   }
 

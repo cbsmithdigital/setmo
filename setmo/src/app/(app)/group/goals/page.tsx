@@ -4,6 +4,7 @@ import { fullName } from "@/lib/format";
 import { IMPLANT_RUBRIC } from "@/lib/skills";
 import { listGoalsForGroup, rewardQueueForGroup } from "@/lib/goals";
 import { getIncentiveProvider } from "@/lib/incentives";
+import { giftCardAccess } from "@/lib/gift-cards";
 import { GoalsManager } from "@/components/goals/GoalsManager";
 
 export default async function GroupGoalsPage() {
@@ -16,11 +17,12 @@ export default async function GroupGoalsPage() {
     );
   }
   const orgId = user.organizationId;
-  const [goals, queue, offices, setters] = await Promise.all([
+  const [goals, queue, offices, setters, giftCards] = await Promise.all([
     listGoalsForGroup(orgId),
     rewardQueueForGroup(orgId),
     prisma.office.findMany({ where: { organizationId: orgId }, select: { id: true, name: true } }),
     prisma.user.findMany({ where: { role: "SETTER", status: "ACTIVE", office: { organizationId: orgId } }, select: { id: true, firstName: true, lastName: true, office: { select: { name: true } } } }),
+    giftCardAccess({ organizationId: orgId }),
   ]);
 
   return (
@@ -40,6 +42,7 @@ export default async function GroupGoalsPage() {
           offices={offices}
           skills={IMPLANT_RUBRIC.map((s) => ({ key: s.key, name: s.name }))}
           providerAutomated={getIncentiveProvider().automated}
+          giftCards={{ enabled: giftCards.enabled, requestedAt: giftCards.requestedAt?.toISOString() ?? null }}
         />
       </div>
     </>

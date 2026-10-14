@@ -95,7 +95,7 @@ export function InviteMember() {
     const j = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { setErr(j.error ?? "Couldn't invite"); return; }
-    if (j.inviteLink) window.prompt("Rep added. Email isn't configured — share this setup link:", j.inviteLink);
+    if (j.inviteLink) window.prompt("Rep added, but the email didn't go out — share this setup link:", j.inviteLink);
     setEmail(""); setName("");
     router.refresh();
   }

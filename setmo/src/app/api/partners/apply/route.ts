@@ -2,6 +2,8 @@ import { z } from "zod";
 import { createPartnerApplication } from "@/lib/partners";
 import { sendPartnerApplicationAlert } from "@/lib/email";
 import { error, json } from "@/lib/api";
+import { clientIp, withinLimits, tooMany, HOUR } from "@/lib/rate-limit";
+import { isBot, BOT_MESSAGE } from "@/lib/bot-check";
 
 const Body = z.object({
   name: z.string().min(2).max(160),
@@ -14,6 +16,9 @@ const Body = z.object({
 
 // POST /api/partners/apply — public partner application → PENDING for review.
 export async function POST(req: Request) {
+  if (await isBot()) return error(BOT_MESSAGE, 403);
+  const limit = await withinLimits([{ key: `partner-apply:ip:${clientIp(req)}`, limit: 5, windowSeconds: HOUR }]);
+  if (!limit.ok) return tooMany(limit.retryAfter);
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Check the form and try again.", 422);
   const b = parsed.data;

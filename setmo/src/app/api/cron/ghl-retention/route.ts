@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { LIVE_TRANSCRIPT_RETENTION_DAYS } from "@/lib/ghl";
 import { json, error } from "@/lib/api";
+import { cronAuthorized } from "@/lib/cron-auth";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -10,10 +11,7 @@ export const dynamic = "force-dynamic";
 // on LIVE sessions + the stored webhook payloads). Scores, skills, and the
 // outcome analysis are kept forever — only the words are dropped.
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.get("authorization") !== `Bearer ${secret}`) {
-    return error("Unauthorized", 401);
-  }
+  if (!cronAuthorized(req)) return error("Unauthorized", 401);
 
   const cutoff = new Date(Date.now() - LIVE_TRANSCRIPT_RETENTION_DAYS * 86400_000);
 

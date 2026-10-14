@@ -1,15 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/auth";
+import { requireRole, getActiveRole } from "@/lib/auth";
 import { getPlatformAccountDetail } from "@/lib/platform";
 import { StatTile } from "@/components/ui/StatTile";
-import { LocationActions, UserActions } from "@/components/platform/AdminActions";
+import { LocationActions, UserActions, GiftCardSwitch } from "@/components/platform/AdminActions";
 import { relativeShort } from "@/lib/format";
 
 const usd = (v: number) => `$${Math.round(v).toLocaleString()}`;
 
 export default async function PlatformAccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireRole("PLATFORM_ADMIN", "SUPPORT");
+  const viewer = await requireRole("PLATFORM_ADMIN", "SUPPORT");
   const { id } = await params;
   const a = await getPlatformAccountDetail(id);
   if (!a) notFound();
@@ -48,6 +48,21 @@ export default async function PlatformAccountDetailPage({ params }: { params: Pr
           <StatTile lab="Minute balance" val={`${a.balanceMin.toLocaleString()}`} sub="minutes remaining" />
           <StatTile lab="Lifetime cash" val={usd(a.cashLifetime)} sub="minutes purchased" />
           <StatTile lab="Users" val={String(a.users.length)} sub="all free" />
+        </div>
+
+        {/* gift cards — off until a super admin turns them on */}
+        <div className="card card-pad rise" style={{ marginBottom: 18 }}>
+          <h3 style={{ fontSize: 18, marginBottom: 10 }}>Gift cards</h3>
+          {a.isDemo ? (
+            <p className="muted" style={{ fontSize: 13 }}>Demo account — gift-card approvals are recorded, never sent.</p>
+          ) : (
+            <GiftCardSwitch
+              accountId={a.id}
+              enabled={a.giftCards.enabled}
+              requestedAt={a.giftCards.requestedAt ? a.giftCards.requestedAt.toISOString() : null}
+              canChange={getActiveRole(viewer) === "PLATFORM_ADMIN"}
+            />
+          )}
         </div>
 
         {/* locations */}

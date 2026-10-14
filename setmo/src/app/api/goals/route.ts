@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, getActiveRole, isManagerRole } from "@/lib/auth";
 import { error, json } from "@/lib/api";
 import { activateGoal } from "@/lib/goals";
+import { giftCardAccess } from "@/lib/gift-cards";
 
 export const maxDuration = 60;
 
@@ -46,6 +47,12 @@ export async function POST(req: Request) {
   const creatorScope = isGroup ? "GROUP" : "OFFICE";
   const organizationId = isGroup ? user.organizationId : null;
   if (isGroup && !organizationId) return error("No organization on your account", 400);
+
+  // Gift cards are paid by SetMo, so they're off until we turn them on for the account.
+  if (b.rewardType === "GIFT_CARD") {
+    const access = await giftCardAccess(isGroup ? { organizationId } : { officeId: user.officeId });
+    if (!access.enabled) return error("Gift cards aren't turned on for your account yet. Request them in the reward options, or use a custom reward.", 403);
+  }
 
   // Resolve the practice context + validate ownership.
   let officeId: string | null = null;

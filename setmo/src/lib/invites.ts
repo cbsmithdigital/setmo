@@ -44,17 +44,37 @@ export async function inviteUsers(opts: {
   inviterName: string;
   contextName: string; // office or group name shown in the email
   origin: string;
-}): Promise<{ invited: number; failed: string[]; previewLinks: string[] }> {
+}): Promise<{ invited: number; failed: string[]; previewLinks: string[]; unsent: { email: string; link: string }[] }> {
   const admin = getAdminClient();
   const redirectTo = `${opts.origin}/auth/confirm?next=/invite`;
   const roles = Array.from(new Set(opts.roles));
   const primary = PRIORITY.find((r) => roles.includes(r)) ?? "SETTER";
 
   let invited = 0;
-  const previewLinks: string[] = [];
+  const unsent: { email: string; link: string }[] = [];
   const failed: string[] = [];
 
-  for (const invitee of opts.invitees) {
+  for (const raw of opts.invitees) {
+    // Stored lowercase so "resend my setup link" finds them however they type it.
+    const invitee = { ...raw, email: raw.email.trim().toLowerCase() };
+
+    // Someone with a pending invite elsewhere stays there — re-inviting them from
+    // another practice or group would quietly move them. Re-inviting within the
+    // same practice/group (to resend, rename, add a role) is fine.
+    const existing = await prisma.user.findFirst({
+      where: { email: { equals: invitee.email, mode: "insensitive" } },
+      select: { officeId: true, organizationId: true },
+    });
+    if (existing) {
+      const sameHome = opts.organizationId
+        ? existing.organizationId === opts.organizationId
+        : existing.officeId === opts.officeId;
+      if (!sameHome && (existing.officeId || existing.organizationId)) {
+        failed.push(invitee.email);
+        continue;
+      }
+    }
+
     const { data, error: linkErr } = await admin.auth.admin.generateLink({
       type: "invite",
       email: invitee.email,
@@ -99,12 +119,12 @@ export async function inviteUsers(opts: {
       const sent = isEmailConfigured()
         ? await sendInviteEmail({ to: invitee.email, link, officeName: opts.contextName, inviterName: opts.inviterName }).catch(() => false)
         : false;
-      if (!sent) previewLinks.push(link);
+      if (!sent) unsent.push({ email: invitee.email, link });
     }
     invited++;
   }
 
-  return { invited, failed, previewLinks };
+  return { invited, failed, previewLinks: unsent.map((u) => u.link), unsent };
 }
 
 /** Re-mint and re-send an invite link for an existing invited user. */

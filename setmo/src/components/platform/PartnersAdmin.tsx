@@ -21,7 +21,7 @@ export function PartnersAdmin({ partners, isSuper, appUrl }: { partners: Partner
   }
   async function approve(partnerId: string) {
     const j = await call({ action: "approve", partnerId }, partnerId);
-    if (j?.inviteLink) window.prompt("Partner approved. Email isn't configured — share this login link with the partner:", j.inviteLink);
+    if (j?.inviteLink) window.prompt("Partner approved, but the email didn't go out — share this login link with the partner:", j.inviteLink);
   }
 
   const pending = partners.filter((p) => p.status === "PENDING");

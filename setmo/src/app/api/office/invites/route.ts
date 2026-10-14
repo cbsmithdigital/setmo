@@ -4,6 +4,7 @@ import { isAdminConfigured } from "@/lib/supabase/admin";
 import { inviteUsers, splitName } from "@/lib/invites";
 import { error, json } from "@/lib/api";
 import { inDemoAccount, DEMO_INVITE_MESSAGE } from "@/lib/demo-shared";
+import { withinLimits, tooMany, HOUR, DAY } from "@/lib/rate-limit";
 
 const Body = z.object({
   invitees: z.array(z.object({ email: z.string().email(), name: z.string().max(160).optional() })).min(1).max(25),
@@ -26,6 +27,13 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid invite", 422);
   const { invitees, roles } = parsed.data;
+
+  // Up to 25 addresses a send; this keeps a free account from mass-mailing.
+  const limit = await withinLimits([
+    { key: `invites:${user.id}`, limit: 8, windowSeconds: HOUR },
+    { key: `invites-day:${user.id}`, limit: 20, windowSeconds: DAY },
+  ]);
+  if (!limit.ok) return tooMany(limit.retryAfter, "You've sent a lot of invites in a short time — please wait a little before sending more.");
 
   // Granting group admin requires the office to be in a group AND the inviter to
   // hold group-admin authority (guards against office-admin privilege escalation).

@@ -1,4 +1,5 @@
 import { json, error } from "@/lib/api";
+import { cronAuthorized } from "@/lib/cron-auth";
 import { isEmailConfigured } from "@/lib/email";
 import { sweepAssessmentInvites } from "@/lib/assessment-invites";
 
@@ -9,8 +10,7 @@ export const dynamic = "force-dynamic";
 // re-engagement sweep (also runs weekly inside the digest cron). CRON_SECRET
 // protected. ?dryRun=1 lists who's due without sending.
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.get("authorization") !== `Bearer ${secret}`) return error("Unauthorized", 401);
+  if (!cronAuthorized(req)) return error("Unauthorized", 401);
   const dryRun = new URL(req.url).searchParams.get("dryRun") === "1";
   if (!dryRun && !isEmailConfigured()) return error("Email not configured", 503);
 

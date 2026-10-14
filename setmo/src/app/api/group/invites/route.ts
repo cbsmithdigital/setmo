@@ -5,6 +5,7 @@ import { isAdminConfigured } from "@/lib/supabase/admin";
 import { inviteUsers, splitName } from "@/lib/invites";
 import { error, json } from "@/lib/api";
 import { inDemoAccount, DEMO_INVITE_MESSAGE } from "@/lib/demo-shared";
+import { withinLimits, tooMany, HOUR, DAY } from "@/lib/rate-limit";
 
 const Body = z.object({
   invitees: z.array(z.object({ email: z.string().email(), name: z.string().max(160).optional() })).min(1).max(25),
@@ -26,6 +27,12 @@ export async function POST(req: Request) {
   if (!parsed.success) return error("Invalid invite", 422);
   const { invitees, roles, officeId } = parsed.data;
   const needsOffice = roles.some((r) => r === "OFFICE_ADMIN" || r === "SETTER");
+
+  const limit = await withinLimits([
+    { key: `invites:${user.id}`, limit: 8, windowSeconds: HOUR },
+    { key: `invites-day:${user.id}`, limit: 20, windowSeconds: DAY },
+  ]);
+  if (!limit.ok) return tooMany(limit.retryAfter, "You've sent a lot of invites in a short time — please wait a little before sending more.");
 
   let targetOfficeId: string | null = null;
   let contextName: string;

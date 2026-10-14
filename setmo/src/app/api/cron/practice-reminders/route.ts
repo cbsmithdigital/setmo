@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { json, error } from "@/lib/api";
+import { cronAuthorized } from "@/lib/cron-auth";
 import { pushToUsers } from "@/lib/push";
 import { getMinuteBalance } from "@/lib/usage";
 
@@ -21,8 +22,7 @@ const NUDGES = [
 // At most one every few days per person, and none when their practice has run
 // out of tokens. Protected by CRON_SECRET (Vercel injects it).
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.get("authorization") !== `Bearer ${secret}`) return error("Unauthorized", 401);
+  if (!cronAuthorized(req)) return error("Unauthorized", 401);
 
   const cutoff = new Date(Date.now() - QUIET_DAYS * DAY);
   const setters = await prisma.user.findMany({

@@ -2,15 +2,25 @@ import { z } from "zod";
 import { getAdminClient, isAdminConfigured } from "@/lib/supabase/admin";
 import { confirmLink } from "@/lib/invites";
 import { sendPasswordResetEmail } from "@/lib/email";
-import { json } from "@/lib/api";
+import { error, json } from "@/lib/api";
+import { clientIp, withinLimits, tooMany, HOUR } from "@/lib/rate-limit";
+import { isBot, BOT_MESSAGE } from "@/lib/bot-check";
 
 const Body = z.object({ email: z.string().email() });
 
 // POST /api/auth/request-reset — send a password-reset link. Always returns ok
 // (never reveals whether an account exists).
 export async function POST(req: Request) {
+  if (await isBot()) return error(BOT_MESSAGE, 403);
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return json({ ok: true }); // don't leak validity
+
+  // Per visitor and per address, so this can't be used to flood someone's inbox.
+  const limit = await withinLimits([
+    { key: `reset:ip:${clientIp(req)}`, limit: 10, windowSeconds: HOUR },
+    { key: `reset:email:${parsed.data.email.trim().toLowerCase()}`, limit: 3, windowSeconds: HOUR },
+  ]);
+  if (!limit.ok) return tooMany(limit.retryAfter, "We've sent a few of these already — check your inbox (and spam), or try again in a little while.");
 
   if (isAdminConfigured()) {
     try {

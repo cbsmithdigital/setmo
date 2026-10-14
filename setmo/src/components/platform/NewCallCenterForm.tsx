@@ -19,7 +19,7 @@ export function NewCallCenterForm() {
     const j = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { setMsg({ kind: "err", text: j.error ?? "Couldn't create it" }); return; }
-    setMsg({ kind: "ok", text: j.previewLink ? `Created. Senior-admin invite link: ${j.previewLink}` : "Created — the senior admin was invited by email." });
+    setMsg({ kind: "ok", text: j.previewLink ? `Created, but the invite email didn't go out — share this link with the senior admin: ${j.previewLink}` : "Created — the senior admin was invited by email." });
     setF({ name: "", adminEmail: "", adminName: "" });
     router.refresh();
   }

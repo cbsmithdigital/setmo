@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withBotId } from "botid/next/config";
 
 const nextConfig: NextConfig = {
   async headers() {
@@ -16,4 +17,5 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// BotID (Vercel's invisible bot check) proxies its challenge through our domain.
+export default withBotId(nextConfig);

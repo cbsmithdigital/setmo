@@ -54,6 +54,7 @@ export function GoalsManager({
   offices,
   skills,
   providerAutomated,
+  giftCards,
 }: {
   scope: "OFFICE" | "GROUP";
   goals: GoalSummary[];
@@ -62,10 +63,13 @@ export function GoalsManager({
   offices: { id: string; name: string }[];
   skills: { key: string; name: string }[];
   providerAutomated?: boolean;
+  // Gift cards are sent (and paid) by SetMo, so they're off until we turn them on.
+  giftCards: { enabled: boolean; requestedAt: string | null };
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [askedAt, setAskedAt] = useState<string | null>(giftCards.requestedAt);
 
   // form state
   const [title, setTitle] = useState("");
@@ -79,7 +83,7 @@ export function GoalsManager({
   const [windowSel, setWindowSel] = useState("THIS_MONTH");
   const [recurrence, setRecurrence] = useState("NONE");
   const [minReps, setMinReps] = useState("5");
-  const [rewardType, setRewardType] = useState<"GIFT_CARD" | "CUSTOM">("GIFT_CARD");
+  const [rewardType, setRewardType] = useState<"GIFT_CARD" | "CUSTOM">(giftCards.enabled ? "GIFT_CARD" : "CUSTOM");
   const [rewardAmount, setRewardAmount] = useState("50");
   const [rewardLabel, setRewardLabel] = useState("");
   const [includeManager, setIncludeManager] = useState(false);
@@ -96,6 +100,20 @@ export function GoalsManager({
       if (!res.ok) { setErr(j.error ?? "Something went wrong"); return false; }
       router.refresh();
       return true;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function requestGiftCards() {
+    setErr(null);
+    setBusy("giftcards");
+    try {
+      const res = await fetch("/api/gift-cards/request", { method: "POST" });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) { setErr(j.error ?? "Couldn't send the request"); return; }
+      if (j.enabled) router.refresh();
+      else setAskedAt(j.requestedAt ?? new Date().toISOString());
     } finally {
       setBusy(null);
     }
@@ -124,6 +142,8 @@ export function GoalsManager({
 
   return (
     <>
+      {err && !open && <div className="banner error" style={{ marginBottom: 14 }}>{err}</div>}
+
       {/* approval queue */}
       {queue.length > 0 && (
         <div className="card card-pad rise" style={{ marginBottom: 18, background: "linear-gradient(150deg,rgba(52,211,153,.12),var(--s2))" }}>
@@ -247,7 +267,22 @@ export function GoalsManager({
                 <button className={"btn " + (rewardType === "GIFT_CARD" ? "btn-primary" : "btn-ghost")} onClick={() => setRewardType("GIFT_CARD")} style={{ padding: "7px 12px", fontSize: 13 }}>Gift card</button>
                 <button className={"btn " + (rewardType === "CUSTOM" ? "btn-primary" : "btn-ghost")} onClick={() => setRewardType("CUSTOM")} style={{ padding: "7px 12px", fontSize: 13 }}>Custom</button>
               </div>
-              {rewardType === "GIFT_CARD" ? (
+              {rewardType === "GIFT_CARD" && !giftCards.enabled ? (
+                <div style={{ fontSize: 12.5, lineHeight: 1.5, padding: "10px 12px", borderRadius: 12, background: "var(--s3, rgba(255,255,255,.04))", border: "1px solid var(--line-soft)" }}>
+                  {askedAt ? (
+                    <span className="muted">
+                      Requested {new Date(askedAt).toLocaleDateString()}. We&apos;ll turn gift cards on for your account shortly — use a custom reward until then.
+                    </span>
+                  ) : (
+                    <>
+                      <span className="muted">Gift cards are sent by SetMo and need to be turned on for your account.</span>
+                      <button className="btn btn-ghost" disabled={busy === "giftcards"} onClick={requestGiftCards} style={{ marginTop: 8, padding: "6px 12px", fontSize: 12.5, display: "block" }}>
+                        {busy === "giftcards" ? "Sending…" : "Request gift cards"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : rewardType === "GIFT_CARD" ? (
                 <input className="input" inputMode="numeric" placeholder="50" value={rewardAmount} onChange={(e) => setRewardAmount(e.target.value)} style={{ width: "100%" }} />
               ) : (
                 <input className="input" placeholder="e.g. Half-day PTO" value={rewardLabel} onChange={(e) => setRewardLabel(e.target.value)} style={{ width: "100%" }} />
@@ -263,7 +298,7 @@ export function GoalsManager({
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 16, flexWrap: "wrap" }}>
-            <button className="btn btn-primary" onClick={create} disabled={busy === "create" || !title} style={{ padding: "9px 18px" }}>
+            <button className="btn btn-primary" onClick={create} disabled={busy === "create" || !title || (rewardType === "GIFT_CARD" && !giftCards.enabled)} style={{ padding: "9px 18px" }}>
               {busy === "create" ? "Creating…" : "Create goal"}
             </button>
             <span className="muted" style={{ fontSize: 13 }}>

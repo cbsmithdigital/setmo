@@ -43,7 +43,9 @@ export function InviteModal({
   const [sentCount, setSentCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [previewLinks, setPreviewLinks] = useState<string[]>([]);
+  // Invites created but not emailed (share the link by hand), and addresses we couldn't invite at all.
+  const [unsent, setUnsent] = useState<{ email: string; link: string }[]>([]);
+  const [failed, setFailed] = useState<string[]>([]);
 
   const valid = invitees.filter((i) => /.+@.+\..+/.test(i.email));
   const needsLocation = scope === "group" && selected.some((r) => r === "SETTER" || r === "OFFICE_ADMIN");
@@ -75,8 +77,10 @@ export function InviteModal({
         setLoading(false);
         return;
       }
-      setSentCount(data.invited ?? valid.length);
-      setPreviewLinks(data.previewLinks ?? []);
+      const notEmailed: { email: string; link: string }[] = data.unsent ?? [];
+      setSentCount(Math.max(0, (data.invited ?? 0) - notEmailed.length));
+      setUnsent(notEmailed);
+      setFailed(data.failed ?? []);
       setDone(true);
       router.refresh();
     } catch {
@@ -185,18 +189,28 @@ export function InviteModal({
             <div style={{ width: 64, height: 64, borderRadius: "50%", background: "var(--grad)", display: "grid", placeItems: "center", margin: "0 auto 18px", color: "#fff" }}>
               <Icon name="send" size={28} />
             </div>
-            <h2 style={{ fontSize: 23, marginBottom: 8 }}>Invites on their way</h2>
+            <h2 style={{ fontSize: 23, marginBottom: 8 }}>{sentCount > 0 ? "Invites on their way" : "Invites created"}</h2>
             <p className="muted" style={{ fontSize: 14.5, maxWidth: "26em", margin: "0 auto 22px" }}>
-              We sent {sentCount} invite{sentCount === 1 ? "" : "s"}. They&apos;ll appear on your team the moment they accept.
+              {sentCount > 0 ? `We emailed ${sentCount} invite${sentCount === 1 ? "" : "s"}. ` : ""}
+              They&apos;ll appear on your team the moment they accept.
             </p>
-            {previewLinks.length > 0 && (
+            {unsent.length > 0 && (
               <div className="banner mint" style={{ textAlign: "left", marginBottom: 18, wordBreak: "break-all" }}>
-                <b>Dev mode (email not configured)</b> — share these invite links manually:
+                <b>{unsent.length === 1 ? "This invite" : "These invites"} didn&apos;t go out by email</b> — send each person their link yourself:
                 <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
-                  {previewLinks.map((l, i) => (
-                    <li key={i} style={{ fontSize: 12 }}>{l}</li>
+                  {unsent.map((u) => (
+                    <li key={u.email} style={{ fontSize: 12, marginBottom: 6 }}>
+                      <b>{u.email}</b>
+                      <br />
+                      {u.link}
+                    </li>
                   ))}
                 </ul>
+              </div>
+            )}
+            {failed.length > 0 && (
+              <div className="banner error" style={{ textAlign: "left", marginBottom: 18, wordBreak: "break-all" }}>
+                <b>Couldn&apos;t invite:</b> {failed.join(", ")}. They may already have an account, or a pending invite to another practice.
               </div>
             )}
             <button className="btn btn-primary btn-lg" onClick={onClose}>Done</button>

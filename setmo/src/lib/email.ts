@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { captureError } from "@/lib/observability";
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -11,38 +12,66 @@ export function isEmailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL);
 }
 
+/** Escape user-supplied text before embedding it in email HTML. Everything a
+ *  visitor can type (practice, office, inviter, partner names, emails) goes
+ *  through this, so a "name" can't carry a link or markup into our mail. */
+const esc = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+/** Subjects are plain text: no line breaks, bounded length. */
+const subj = (s: string) => s.replace(/[\r\n]+/g, " ").slice(0, 180);
+
 /**
- * Sends a setter invite email. Returns true if sent; false if email isn't
- * configured (caller can surface the link directly in dev).
+ * The one place mail leaves. Resend reports failures in its return value rather
+ * than throwing, so a send only counts when that value has no error. Resend
+ * allows a couple of requests a second, so a rate-limited send waits and tries
+ * again (a batch of invites would otherwise drop some). Other failures are
+ * logged and reported, and the caller gets false so it can fall back (show the
+ * link, say it didn't send). False also when email isn't configured.
  */
-export async function sendInviteEmail(opts: {
-  to: string;
-  link: string;
-  officeName: string;
-  inviterName: string;
-}): Promise<boolean> {
+async function send(msg: { to: string | string[]; subject: string; html: string; headers?: Record<string, string> }, scope: string): Promise<boolean> {
   const resend = getResend();
   const from = process.env.RESEND_FROM_EMAIL;
   if (!resend || !from) return false;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const { error } = await resend.emails.send({ from, to: msg.to, subject: subj(msg.subject), html: msg.html, ...(msg.headers ? { headers: msg.headers } : {}) });
+      if (!error) return true;
+      if (error.name === "rate_limit_exceeded" && attempt < 3) {
+        await new Promise((r) => setTimeout(r, 1100 * (attempt + 1)));
+        continue;
+      }
+      captureError(new Error(`Email not sent: ${error.message}`), { scope: `email:${scope}`, name: error.name });
+      return false;
+    } catch (e) {
+      captureError(e, { scope: `email:${scope}` });
+      return false;
+    }
+  }
+}
 
-  await resend.emails.send({
-    from,
-    to: opts.to,
-    subject: `You're invited to train with ${opts.officeName} on SetMo`,
-    html: `
-      <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
+const button = (href: string, label: string) =>
+  `<a href="${href}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">${label}</a>`;
+const pasteLink = (href: string) => `<p style="color:#64708a;font-size:13px">If the button doesn't work, paste this link:<br>${href}</p>`;
+const wrap = (inner: string, width = 480) => `<div style="font-family:system-ui,sans-serif;max-width:${width}px;margin:0 auto;color:#1a1a2e">${inner}</div>`;
+
+/** Sends a setter invite email. Returns false if it didn't go out (or email
+ *  isn't configured) — the caller then shows the link directly. */
+export async function sendInviteEmail(opts: { to: string; link: string; officeName: string; inviterName: string }): Promise<boolean> {
+  return send(
+    {
+      to: opts.to,
+      subject: `You're invited to train with ${opts.officeName} on SetMo`,
+      html: wrap(`
         <h2 style="color:#7c3aed">Welcome to SetMo</h2>
-        <p>${opts.inviterName} invited you to join <strong>${opts.officeName}</strong> and start
+        <p>${esc(opts.inviterName)} invited you to join <strong>${esc(opts.officeName)}</strong> and start
         practicing high-value lead calls.</p>
-        <p style="margin:28px 0">
-          <a href="${opts.link}" style="background:#7c3aed;color:#fff;padding:12px 22px;
-          border-radius:12px;text-decoration:none;font-weight:600">Set up your account</a>
-        </p>
-        <p style="color:#64708a;font-size:13px">If the button doesn't work, paste this link:<br>${opts.link}</p>
-      </div>
-    `,
-  });
-  return true;
+        <p style="margin:28px 0">${button(opts.link, "Set up your account")}</p>
+        ${pasteLink(opts.link)}
+      `),
+    },
+    "invite",
+  );
 }
 
 const ADMIN_EMAIL = process.env.SETMO_ADMIN_EMAIL || process.env.RESEND_FROM_EMAIL;
@@ -54,9 +83,8 @@ const ALERT_EMAILS = (process.env.SETMO_ALERT_EMAILS || "hello@growdental.ai,ada
   .map((s) => s.trim())
   .filter(Boolean);
 
-/** Escape user-supplied text before embedding it in alert HTML. */
-const esc = (s: string) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const alertRow = (label: string, value: string) =>
+  `<tr><td style="padding:4px 14px 4px 0;color:#64708a;vertical-align:top">${label}</td><td style="padding:4px 0;color:#1a1a2e"><strong>${esc(value)}</strong></td></tr>`;
 
 /** Notify the team when a new partner/affiliate application is submitted. */
 export async function sendPartnerApplicationAlert(opts: {
@@ -68,86 +96,94 @@ export async function sendPartnerApplicationAlert(opts: {
   audience?: string | null;
   manageLink: string;
 }): Promise<boolean> {
-  const resend = getResend();
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!resend || !from || ALERT_EMAILS.length === 0) return false;
+  if (ALERT_EMAILS.length === 0) return false;
   const trackLabel = opts.track === "DISTRIBUTION" ? "Distribution" : "Referral";
-  const row = (label: string, value: string) =>
-    `<tr><td style="padding:4px 14px 4px 0;color:#64708a;vertical-align:top">${label}</td><td style="padding:4px 0;color:#1a1a2e"><strong>${esc(value)}</strong></td></tr>`;
-  await resend.emails.send({
-    from,
-    to: ALERT_EMAILS,
-    subject: `New SetMo partner application — ${opts.name} (${trackLabel})`,
-    html: `
-      <div style="font-family:system-ui,sans-serif;max-width:540px;margin:0 auto;color:#1a1a2e">
+  return send(
+    {
+      to: ALERT_EMAILS,
+      subject: `New SetMo partner application — ${opts.name} (${trackLabel})`,
+      html: wrap(
+        `
         <h2 style="color:#7c3aed">New partner application</h2>
         <table style="font-size:14px;border-collapse:collapse;margin:8px 0 4px">
-          ${row("Partner", opts.name)}
-          ${row("Track", trackLabel)}
-          ${row("Contact", opts.contactName)}
-          ${row("Email", opts.email)}
-          ${opts.orgType ? row("Org type", opts.orgType) : ""}
-          ${opts.audience ? row("Audience", opts.audience) : ""}
+          ${alertRow("Partner", opts.name)}
+          ${alertRow("Track", trackLabel)}
+          ${alertRow("Contact", opts.contactName)}
+          ${alertRow("Email", opts.email)}
+          ${opts.orgType ? alertRow("Org type", opts.orgType) : ""}
+          ${opts.audience ? alertRow("Audience", opts.audience) : ""}
         </table>
-        <p style="margin:24px 0"><a href="${opts.manageLink}" style="background:#7c3aed;color:#fff;padding:11px 20px;border-radius:12px;text-decoration:none;font-weight:600">Review &amp; approve</a></p>
-      </div>
-    `,
-  });
-  return true;
+        <p style="margin:24px 0">${button(opts.manageLink, "Review &amp; approve")}</p>
+      `,
+        540,
+      ),
+    },
+    "partner-application",
+  );
 }
 
-/** Generic transactional send (weekly digests). Returns recipients actually sent to. */
+/** An account asked for gift-card rewards — the super admin turns them on from
+ *  the account's page in the platform console. */
+export async function sendGiftCardRequestAlert(opts: { accountName: string; requester: string; requesterEmail: string; manageLink: string }): Promise<boolean> {
+  if (ALERT_EMAILS.length === 0) return false;
+  return send(
+    {
+      to: ALERT_EMAILS,
+      subject: `Gift card request — ${opts.accountName}`,
+      html: wrap(
+        `
+        <h2 style="color:#7c3aed">An account wants gift-card rewards</h2>
+        <table style="font-size:14px;border-collapse:collapse;margin:8px 0 4px">
+          ${alertRow("Account", opts.accountName)}
+          ${alertRow("Asked by", opts.requester)}
+          ${alertRow("Email", opts.requesterEmail)}
+        </table>
+        <p>Gift cards go out through Tremendous and are paid from SetMo's balance. Turn them on from the account's page if you're happy to.</p>
+        <p style="margin:24px 0">${button(opts.manageLink, "Open the account")}</p>
+      `,
+        540,
+      ),
+    },
+    "gift-card-request",
+  );
+}
+
 // Sends one digest to one recipient. `unsubscribeUrl` (RFC 8058) enables Gmail's
-// one-click unsubscribe and is also linked in the email footer.
+// one-click unsubscribe and is also linked in the email footer. Returns 1 when sent.
 export async function sendDigestEmail(opts: { to: string; subject: string; html: string; unsubscribeUrl?: string }): Promise<number> {
-  const resend = getResend();
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!resend || !from || !opts.to) return 0;
-  try {
-    await resend.emails.send({
-      from,
+  if (!opts.to) return 0;
+  const ok = await send(
+    {
       to: opts.to,
       subject: opts.subject,
       html: opts.html,
-      ...(opts.unsubscribeUrl
-        ? { headers: { "List-Unsubscribe": `<${opts.unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } }
-        : {}),
-    });
-    return 1;
-  } catch {
-    return 0; // skip a bad address, keep going
-  }
+      ...(opts.unsubscribeUrl ? { headers: { "List-Unsubscribe": `<${opts.unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } } : {}),
+    },
+    "digest",
+  );
+  return ok ? 1 : 0;
 }
 
 /** Verify-your-email link to unlock the Setter Audit report. */
 export async function sendAuditVerifyEmail(opts: { to: string; link: string; practiceName: string }): Promise<boolean> {
-  const resend = getResend();
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!resend || !from) return false;
-  await resend.emails.send({
-    from,
-    to: opts.to,
-    subject: "Confirm your free Setter Audit",
-    html: `
-      <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
-        <h2 style="color:#7c3aed">Your free Setter Audit for ${opts.practiceName}</h2>
+  return send(
+    {
+      to: opts.to,
+      subject: "Confirm your free Setter Audit",
+      html: wrap(`
+        <h2 style="color:#7c3aed">Your free Setter Audit for ${esc(opts.practiceName)}</h2>
         <p>Confirm your email to start your call and unlock the report.</p>
-        <p style="margin:28px 0">
-          <a href="${opts.link}" style="background:#7c3aed;color:#fff;padding:12px 22px;
-          border-radius:12px;text-decoration:none;font-weight:600">Start my audit</a>
-        </p>
-        <p style="color:#64708a;font-size:13px">If the button doesn't work, paste this link:<br>${opts.link}</p>
-      </div>
-    `,
-  });
-  return true;
+        <p style="margin:28px 0">${button(opts.link, "Start my audit")}</p>
+        ${pasteLink(opts.link)}
+      `),
+    },
+    "audit-verify",
+  );
 }
 
 /** Low-minute-balance alert for office admins (fires at 100 and 60 minutes). */
 export async function sendMinuteLowEmail(opts: { to: string[]; practiceName: string; remaining: number; autoTopUp: boolean; topUpMinutes: number; threshold: number }): Promise<number> {
-  const resend = getResend();
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!resend || !from || opts.to.length === 0) return 0;
+  if (opts.to.length === 0) return 0;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://setmo.growdental.ai";
   const billing = `${appUrl}/office/billing`;
 
@@ -159,27 +195,21 @@ export async function sendMinuteLowEmail(opts: { to: string[]; practiceName: str
 
   let sent = 0;
   for (const to of opts.to) {
-    try {
-      await resend.emails.send({
-        from,
+    const ok = await send(
+      {
         to,
         subject: `${opts.practiceName}: your SetMo tokens are running low (${remainingTokens.toLocaleString()} left)`,
-        html: `
-          <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
-            <h2 style="color:#7c3aed">Your token balance is low</h2>
-            <p>It looks like your team has been using SetMo more, and your token balance is low — about <strong>${remainingTokens.toLocaleString()} tokens</strong> remaining for ${opts.practiceName}.</p>
-            <p>${autoLine}</p>
-            <p style="margin:26px 0">
-              <a href="${billing}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">Manage tokens &amp; auto top-up</a>
-            </p>
-            <p style="color:#64708a;font-size:13px">Assessments are always free and never use your tokens.</p>
-          </div>
-        `,
-      });
-      sent++;
-    } catch {
-      /* skip a bad address, keep going */
-    }
+        html: wrap(`
+          <h2 style="color:#7c3aed">Your token balance is low</h2>
+          <p>It looks like your team has been using SetMo more, and your token balance is low — about <strong>${remainingTokens.toLocaleString()} tokens</strong> remaining for ${esc(opts.practiceName)}.</p>
+          <p>${autoLine}</p>
+          <p style="margin:26px 0">${button(billing, "Manage tokens &amp; auto top-up")}</p>
+          <p style="color:#64708a;font-size:13px">Assessments are always free and never use your tokens.</p>
+        `),
+      },
+      "minute-low",
+    );
+    if (ok) sent++;
   }
   return sent;
 }
@@ -188,185 +218,151 @@ export async function sendMinuteLowEmail(opts: { to: string[]; practiceName: str
  *  accounts can't buy anything, so this goes to platform admins, not the demo's
  *  own users, and points at the platform console instead of Billing. */
 export async function sendDemoMinuteLowEmail(opts: { to: string[]; practiceName: string; officeId: string; remaining: number }): Promise<number> {
-  const resend = getResend();
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!resend || !from || opts.to.length === 0) return 0;
+  if (opts.to.length === 0) return 0;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://setmo.growdental.ai";
   const console_ = `${appUrl}/platform/accounts`;
   const remaining = Math.max(0, opts.remaining);
 
   let sent = 0;
   for (const to of opts.to) {
-    try {
-      await resend.emails.send({
-        from,
+    const ok = await send(
+      {
         to,
         subject: `Demo account low: ${opts.practiceName} has ${remaining} minutes left`,
-        html: `
-          <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
-            <h2 style="color:#7c3aed">A demo account needs minutes</h2>
-            <p><strong>${opts.practiceName}</strong> is a demo account and is down to <strong>${remaining} minutes</strong>${opts.remaining < 0 ? " (it's overdrawn)" : ""}. Demo calls stop once it runs out.</p>
-            <p style="margin:26px 0">
-              <a href="${console_}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">Open accounts to add minutes</a>
-            </p>
-            <p style="color:#64708a;font-size:13px">Demo usage is real voice-agent spend but isn't counted in revenue or platform metrics.</p>
-          </div>
-        `,
-      });
-      sent++;
-    } catch {
-      /* skip a bad address, keep going */
-    }
+        html: wrap(`
+          <h2 style="color:#7c3aed">A demo account needs minutes</h2>
+          <p><strong>${esc(opts.practiceName)}</strong> is a demo account and is down to <strong>${remaining} minutes</strong>${opts.remaining < 0 ? " (it's overdrawn)" : ""}. Demo calls stop once it runs out.</p>
+          <p style="margin:26px 0">${button(console_, "Open accounts to add minutes")}</p>
+          <p style="color:#64708a;font-size:13px">Demo usage is real voice-agent spend but isn't counted in revenue or platform metrics.</p>
+        `),
+      },
+      "demo-minute-low",
+    );
+    if (ok) sent++;
   }
   return sent;
 }
 
 /** Group/DSO Setty Advisor wallet is low — prompt the leader to add a card / buy more. */
 export async function sendGroupCoachLowEmail(opts: { to: string[]; orgName: string; remaining: number }): Promise<number> {
-  const resend = getResend();
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!resend || !from || opts.to.length === 0) return 0;
+  if (opts.to.length === 0) return 0;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://setmo.growdental.ai";
   const billing = `${appUrl}/group/billing`;
   const remainingTokens = Math.max(0, opts.remaining) * 10;
 
   let sent = 0;
   for (const to of opts.to) {
-    try {
-      await resend.emails.send({
-        from,
+    const ok = await send(
+      {
         to,
         subject: `${opts.orgName}: your Setty Advisor tokens are running low (${remainingTokens.toLocaleString()} left)`,
-        html: `
-          <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
-            <h2 style="color:#7c3aed">Your Setty Advisor balance is low</h2>
-            <p>You have about <strong>${remainingTokens.toLocaleString()} tokens</strong> (~${Math.max(0, opts.remaining)} min) left for ${opts.orgName} this month.</p>
-            <p>Add a card and top up to keep your strategy sessions going — group/DSO tokens are <strong>50% off</strong>. Your free monthly allowance refreshes at the start of next month.</p>
-            <p style="margin:26px 0">
-              <a href="${billing}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">Add a card &amp; buy tokens</a>
-            </p>
-          </div>
-        `,
-      });
-      sent++;
-    } catch {
-      /* skip a bad address, keep going */
-    }
+        html: wrap(`
+          <h2 style="color:#7c3aed">Your Setty Advisor balance is low</h2>
+          <p>You have about <strong>${remainingTokens.toLocaleString()} tokens</strong> (~${Math.max(0, opts.remaining)} min) left for ${esc(opts.orgName)} this month.</p>
+          <p>Add a card and top up to keep your strategy sessions going — group/DSO tokens are <strong>50% off</strong>. Your free monthly allowance refreshes at the start of next month.</p>
+          <p style="margin:26px 0">${button(billing, "Add a card &amp; buy tokens")}</p>
+        `),
+      },
+      "group-coach-low",
+    );
+    if (ok) sent++;
   }
   return sent;
 }
 
 /** Password reset link (server-generated recovery, sent via Resend). */
 export async function sendPasswordResetEmail(opts: { to: string; link: string }): Promise<boolean> {
-  const resend = getResend();
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!resend || !from) return false;
-  await resend.emails.send({
-    from,
-    to: opts.to,
-    subject: "Reset your SetMo password",
-    html: `
-      <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
+  return send(
+    {
+      to: opts.to,
+      subject: "Reset your SetMo password",
+      html: wrap(`
         <h2 style="color:#7c3aed">Reset your password</h2>
         <p>Click below to choose a new password. If you didn't request this, you can ignore this email.</p>
-        <p style="margin:28px 0">
-          <a href="${opts.link}" style="background:#7c3aed;color:#fff;padding:12px 22px;
-          border-radius:12px;text-decoration:none;font-weight:600">Set a new password</a>
-        </p>
-        <p style="color:#64708a;font-size:13px">If the button doesn't work, paste this link:<br>${opts.link}</p>
-      </div>
-    `,
-  });
-  return true;
+        <p style="margin:28px 0">${button(opts.link, "Set a new password")}</p>
+        ${pasteLink(opts.link)}
+      `),
+    },
+    "password-reset",
+  );
 }
 
 /** Notify the platform admin when an audit needs manual approval (free email / duplicate domain). */
 export async function sendAuditApprovalRequest(opts: { practiceName: string; email: string; reason: string; manageLink: string }): Promise<boolean> {
-  const resend = getResend();
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!resend || !from || !ADMIN_EMAIL) return false;
-  await resend.emails.send({
-    from,
-    to: ADMIN_EMAIL,
-    subject: `SetMo audit needs approval — ${opts.practiceName}`,
-    html: `
-      <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;color:#1a1a2e">
+  if (!ADMIN_EMAIL) return false;
+  return send(
+    {
+      to: ADMIN_EMAIL,
+      subject: `SetMo audit needs approval — ${opts.practiceName}`,
+      html: wrap(
+        `
         <h2 style="color:#7c3aed">Setter Audit pending approval</h2>
-        <p><strong>${opts.practiceName}</strong> (${opts.email}) requested a free audit.</p>
-        <p><strong>Reason:</strong> ${opts.reason}</p>
-        <p style="margin:24px 0"><a href="${opts.manageLink}" style="background:#7c3aed;color:#fff;padding:11px 20px;border-radius:12px;text-decoration:none;font-weight:600">Review &amp; approve</a></p>
-      </div>
-    `,
-  });
-  return true;
+        <p><strong>${esc(opts.practiceName)}</strong> (${esc(opts.email)}) requested a free audit.</p>
+        <p><strong>Reason:</strong> ${esc(opts.reason)}</p>
+        <p style="margin:24px 0">${button(opts.manageLink, "Review &amp; approve")}</p>
+      `,
+        520,
+      ),
+    },
+    "audit-approval",
+  );
 }
 
 /** Invite a partner (or rep) to set up their SetMo partner-portal login. */
 export async function sendPartnerInvite(opts: { to: string; link: string; partnerName: string; isRep?: boolean; trackingOnly?: boolean }): Promise<boolean> {
-  const resend = getResend();
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!resend || !from) return false;
+  const partner = esc(opts.partnerName);
   // A tracking-only partner has no commission deal yet, so nothing mentions earnings.
   const repBody = opts.trackingOnly
     ? "Set up your login to get your own tracking link, see the practices you've brought in, and practise with the SetMo demo account."
     : "Set up your login to get your referral link and track your earnings.";
   const adminBody = opts.trackingOnly
-    ? `Set up your login to get ${opts.partnerName}'s tracking link, see every practice you refer, add your sales reps, and explore SetMo in your own demo account.`
-    : `${opts.partnerName} is approved. Set up your login to grab your referral link, track referred accounts, and see your earnings.`;
-  await resend.emails.send({
-    from,
-    to: opts.to,
-    subject: opts.isRep ? `Join ${opts.partnerName} on SetMo` : opts.trackingOnly ? `Your SetMo partner login for ${opts.partnerName}` : `Your SetMo partner account is approved 🎉`,
-    html: `
-      <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
-        <h2 style="color:#7c3aed">${opts.isRep ? `You're on the ${opts.partnerName} team` : "Welcome to the SetMo partner program"}</h2>
+    ? `Set up your login to get ${partner}'s tracking link, see every practice you refer, add your sales reps, and explore SetMo in your own demo account.`
+    : `${partner} is approved. Set up your login to grab your referral link, track referred accounts, and see your earnings.`;
+  return send(
+    {
+      to: opts.to,
+      subject: opts.isRep ? `Join ${opts.partnerName} on SetMo` : opts.trackingOnly ? `Your SetMo partner login for ${opts.partnerName}` : `Your SetMo partner account is approved 🎉`,
+      html: wrap(`
+        <h2 style="color:#7c3aed">${opts.isRep ? `You're on the ${partner} team` : "Welcome to the SetMo partner program"}</h2>
         <p>${opts.isRep ? repBody : adminBody}</p>
-        <p style="margin:28px 0"><a href="${opts.link}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">Set up your partner login</a></p>
-        <p style="color:#64708a;font-size:13px">If the button doesn't work, paste this link:<br>${opts.link}</p>
-      </div>
-    `,
-  });
-  return true;
+        <p style="margin:28px 0">${button(opts.link, "Set up your partner login")}</p>
+        ${pasteLink(opts.link)}
+      `),
+    },
+    "partner-invite",
+  );
 }
 
 /** Bimonthly re-engagement: invite a prospect to run another free assessment. */
 export async function sendAssessmentInvite(opts: { to: string; practiceName: string; link: string }): Promise<boolean> {
-  const resend = getResend();
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!resend || !from) return false;
-  await resend.emails.send({
-    from,
-    to: opts.to,
-    subject: `${opts.practiceName}: your next free Setter Assessment is ready`,
-    html: `
-      <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
+  return send(
+    {
+      to: opts.to,
+      subject: `${opts.practiceName}: your next free Setter Assessment is ready`,
+      html: wrap(`
         <h2 style="color:#7c3aed">See how your setters are doing now</h2>
-        <p>It's been a couple of months since ${opts.practiceName}'s last SetMo Setter Assessment. Run 5 quick calls and we'll score your team again — free — so you can see what's improved and where the booked-consult leaks still are.</p>
-        <p style="margin:28px 0"><a href="${opts.link}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">Start your free assessment</a></p>
-        <p style="color:#64708a;font-size:13px">If the button doesn't work, paste this link:<br>${opts.link}</p>
-      </div>
-    `,
-  });
-  return true;
+        <p>It's been a couple of months since ${esc(opts.practiceName)}'s last SetMo Setter Assessment. Run one quick practice call and we'll score it again — free — so you can see what's improved and where the booked-consult leaks still are.</p>
+        <p style="margin:28px 0">${button(opts.link, "Start your free assessment")}</p>
+        ${pasteLink(opts.link)}
+      `),
+    },
+    "assessment-invite",
+  );
 }
 
-/** Share the audit access link with a setter the prospect wants to run the calls. */
+/** Share the audit access link with a setter the prospect wants to run the call. */
 export async function sendAuditSetterInvite(opts: { to: string; link: string; practiceName: string }): Promise<boolean> {
-  const resend = getResend();
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!resend || !from) return false;
-  await resend.emails.send({
-    from,
-    to: opts.to,
-    subject: `Run ${opts.practiceName}'s SetMo Setter Audit`,
-    html: `
-      <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
+  return send(
+    {
+      to: opts.to,
+      subject: `Run ${opts.practiceName}'s SetMo Setter Audit`,
+      html: wrap(`
         <h2 style="color:#7c3aed">You've been asked to run a Setter Audit</h2>
-        <p>${opts.practiceName} wants you to run 5 quick practice calls. Open the link and start whenever you're ready.</p>
-        <p style="margin:28px 0"><a href="${opts.link}" style="background:#7c3aed;color:#fff;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:600">Start the calls</a></p>
-        <p style="color:#64708a;font-size:13px">If the button doesn't work, paste this link:<br>${opts.link}</p>
-      </div>
-    `,
-  });
-  return true;
+        <p>${esc(opts.practiceName)} wants you to run one quick practice call. Open the link and start whenever you're ready.</p>
+        <p style="margin:28px 0">${button(opts.link, "Start the call")}</p>
+        ${pasteLink(opts.link)}
+      `),
+    },
+    "audit-setter-invite",
+  );
 }

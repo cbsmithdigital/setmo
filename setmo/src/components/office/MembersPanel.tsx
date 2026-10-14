@@ -21,7 +21,14 @@ function MemberItem({ m, isSelf }: { m: MemberRow; isSelf: boolean }) {
     setMsg(null);
     try {
       const res = await fetch("/api/office/invites/resend", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId: m.id }) });
-      setMsg(res.ok ? "Sent ✓" : "Failed");
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j.previewLink) {
+        // Invite re-made, but the email didn't go out — hand the link over directly.
+        setMsg("Email didn't send");
+        window.prompt(`The email to ${m.email} didn't go out. Copy this setup link and send it to them:`, j.previewLink);
+      } else {
+        setMsg(res.ok ? "Sent ✓" : "Failed");
+      }
     } catch {
       setMsg("Failed");
     } finally {

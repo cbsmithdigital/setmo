@@ -5,8 +5,10 @@ import { emailDomainOf, emailUsedRecently } from "@/lib/audit";
 import { cookies } from "next/headers";
 import { resolveReferral } from "@/lib/partners";
 import { REF_COOKIE } from "@/lib/referral-cookie";
-import { sendAuditVerifyEmail } from "@/lib/email";
+import { isEmailConfigured, sendAuditVerifyEmail } from "@/lib/email";
 import { error, json } from "@/lib/api";
+import { clientIp, withinLimits, tooMany, HOUR, DAY } from "@/lib/rate-limit";
+import { isBot, BOT_MESSAGE } from "@/lib/bot-check";
 
 const Body = z.object({
   contactName: z.string().min(1).max(120),
@@ -20,6 +22,7 @@ const Body = z.object({
 // POST /api/audit — start a Setter Audit. Creates a prospect office + a prospect
 // "setter" user to own the calls, plus the audit row, and emails a verify link.
 export async function POST(req: Request) {
+  if (await isBot()) return error(BOT_MESSAGE, 403);
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Check the form and try again.", 422);
   const { contactName, practiceName, workEmail, caseValueUsd, monthlyLeads, ref } = parsed.data;
@@ -27,6 +30,17 @@ export async function POST(req: Request) {
   const email = workEmail.trim().toLowerCase();
   const domain = emailDomainOf(email);
   if (!domain) return error("Enter a valid email.", 422);
+
+  // Each start emails a link from our domain, so it's limited per visitor, per
+  // address, and overall (a flood here would get our sending domain suspended).
+  const ip = clientIp(req);
+  const limit = await withinLimits([
+    { key: `audit:ip:${ip}`, limit: 5, windowSeconds: HOUR },
+    { key: `audit:ip-day:${ip}`, limit: 20, windowSeconds: DAY },
+    { key: `audit:email:${email}`, limit: 3, windowSeconds: DAY },
+    { key: "audit:all", limit: 300, windowSeconds: HOUR },
+  ]);
+  if (!limit.ok) return tooMany(limit.retryAfter, "We've had a lot of requests from you — please wait a little and try again, or check your inbox for the link we sent.");
 
   // One free audit per email per 30 days.
   const cooldown = await emailUsedRecently(email);
@@ -77,8 +91,12 @@ export async function POST(req: Request) {
 
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
   const verifyUrl = `${origin}/api/audit/${audit.id}/verify?token=${token}`;
-  const emailed = await sendAuditVerifyEmail({ to: email, link: verifyUrl, practiceName });
 
-  // In dev (no email configured) hand back the link so the flow is testable.
-  return json({ id: audit.id, emailed, verifyUrl: emailed ? undefined : verifyUrl });
+  // In dev (no email configured) hand back the link so the flow is testable. In
+  // production the link only ever travels by email — that's what proves the
+  // address is theirs — so a failed send is an error, never a shortcut.
+  if (!isEmailConfigured()) return json({ id: audit.id, emailed: false, verifyUrl });
+  const emailed = await sendAuditVerifyEmail({ to: email, link: verifyUrl, practiceName });
+  if (!emailed) return error("We couldn't send the confirmation email just now. Please try again in a minute.", 502);
+  return json({ id: audit.id, emailed: true });
 }

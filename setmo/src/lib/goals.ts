@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import type { AnalyticsRange } from "@/lib/queries";
 import { callShowRate } from "@/lib/audit";
 import { getIncentiveProvider } from "@/lib/incentives";
+import { giftCardAccess } from "@/lib/gift-cards";
 import { fullName } from "@/lib/format";
 import { skillName } from "@/lib/skills";
 
@@ -333,17 +334,18 @@ export async function decideReward(participantId: string, action: "approve" | "m
   }
   if (p.rewardStatus === "SENT") return { ok: true, status: "SENT" };
 
-  await prisma.goalParticipant.update({ where: { id: participantId }, data: { rewardStatus: "APPROVED", approvedById: byUserId } });
-
   // Custom (non-cash) incentives like PTO can't be transmitted by a vendor —
   // approving them just records manual fulfillment. A demo account never sends a
-  // real gift card either: approving there is recorded, never transmitted.
-  const demo = p.goal.officeId
-    ? Boolean((await prisma.office.findUnique({ where: { id: p.goal.officeId }, select: { isDemo: true } }))?.isDemo)
-    : p.goal.organizationId
-      ? Boolean((await prisma.organization.findUnique({ where: { id: p.goal.organizationId }, select: { isDemo: true } }))?.isDemo)
-      : false;
-  if (action === "marksent" || p.goal.rewardType === "CUSTOM" || demo) {
+  // real gift card either: approving there is recorded, never transmitted. A real
+  // card goes out only where we've turned gift cards on; a goal made before that
+  // (or an account switched off since) can still be marked sent or declined.
+  const access = await giftCardAccess({ officeId: p.goal.officeId, organizationId: p.goal.organizationId });
+  const sendsCard = action === "approve" && p.goal.rewardType === "GIFT_CARD" && !access.demo;
+  if (sendsCard && !access.enabled) return { ok: false, error: "Gift cards aren't turned on for this account yet." };
+
+  await prisma.goalParticipant.update({ where: { id: participantId }, data: { rewardStatus: "APPROVED", approvedById: byUserId } });
+
+  if (!sendsCard) {
     await prisma.goalParticipant.update({ where: { id: participantId }, data: { rewardStatus: "SENT", sentAt: new Date(), providerRef: "manual" } });
     return { ok: true, status: "SENT" };
   }

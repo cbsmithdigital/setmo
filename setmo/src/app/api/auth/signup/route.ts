@@ -4,6 +4,8 @@ import { REF_COOKIE } from "@/lib/referral-cookie";
 import { isAdminConfigured } from "@/lib/supabase/admin";
 import { provisionAccount } from "@/lib/provision";
 import { error, json } from "@/lib/api";
+import { clientIp, withinLimits, tooMany, HOUR, DAY } from "@/lib/rate-limit";
+import { isBot, BOT_MESSAGE } from "@/lib/bot-check";
 
 const Body = z.object({
   kind: z.enum(["practice", "group"]),
@@ -19,6 +21,13 @@ const Body = z.object({
 // activates Practice Access + buys minutes from the billing page afterward.
 export async function POST(req: Request) {
   if (!isAdminConfigured()) return error("Signup isn't configured yet", 503);
+  if (await isBot()) return error(BOT_MESSAGE, 403);
+  const ip = clientIp(req);
+  const limit = await withinLimits([
+    { key: `signup:ip:${ip}`, limit: 5, windowSeconds: HOUR },
+    { key: `signup:ip-day:${ip}`, limit: 20, windowSeconds: DAY },
+  ]);
+  if (!limit.ok) return tooMany(limit.retryAfter);
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Check the form and try again.", 422);
   const b = parsed.data;

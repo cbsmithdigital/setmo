@@ -193,6 +193,10 @@ model Organization {
   // Demo / test organization (see Office.isDemo). Needed at the org level too
   // because group-coach and call-center money hangs off the org, not an office.
   isDemo              Boolean @default(false) @map("is_demo")
+  // Gift cards sent by SetMo (Tremendous) stay off until a super admin turns them
+  // on; on for a group covers every location. Admins ask from the goal builder.
+  giftCardsEnabled     Boolean   @default(false) @map("gift_cards_enabled")
+  giftCardsRequestedAt DateTime? @map("gift_cards_requested_at")
 
   offices           Office[]
   users             User[]
@@ -270,6 +274,18 @@ model OrgTokenBundle {
   @@map("org_token_bundle")
 }
 
+// Fixed-window request counters for the public endpoints (signup, assessment,
+// password reset, invites). One row per key per window; the daily cron deletes
+// expired rows.
+model RateLimit {
+  bucket    String   @id // "<key>:<window start, unix seconds>"
+  count     Int      @default(0)
+  expiresAt DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("rate_limit")
+}
+
 model Office {
   id               String   @id @default(uuid())
   organizationId   String?  @map("organization_id")
@@ -295,6 +311,9 @@ model Office {
   // Call-center pod that serves this office (its account owner). SEPARATE from
   // organizationId (the office's owning DSO) — an office may have both, one, or neither.
   servedByPodId    String?  @map("served_by_pod_id")
+  // Gift cards sent by SetMo (Tremendous) — off until a super admin turns them on.
+  giftCardsEnabled     Boolean   @default(false) @map("gift_cards_enabled")
+  giftCardsRequestedAt DateTime? @map("gift_cards_requested_at")
   createdAt        DateTime @default(now()) @map("created_at")
 
   organization Organization?       @relation(fields: [organizationId], references: [id])

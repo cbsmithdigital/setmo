@@ -96,10 +96,11 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Run on all paths except static assets, image optimizer, the favicon, and the
+  // Run on all paths except static assets, image optimizer, the favicon, the
   // installable-app files (the browser fetches the manifest without cookies, and
-  // the service worker must never be answered with a login redirect).
+  // the service worker must never be answered with a login redirect), and the
+  // BotID challenge path (rewritten to Vercel; a login redirect would break it).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|setmo-icon.png|manifest.webmanifest|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|setmo-icon.png|manifest.webmanifest|sw.js|149e9513-01fa-4fb0-aad4-566afd725d1b|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

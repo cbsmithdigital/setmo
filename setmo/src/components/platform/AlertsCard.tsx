@@ -5,6 +5,7 @@ type Alerts = {
   lowBalance: { officeId: string; accountId: string; name: string; daysToEmpty: number | null; balanceMin: number; isDemo: boolean }[];
   idle: { officeId: string; accountId: string; name: string; lastActivity: Date | string | null }[];
   topBurners: { officeId: string; accountId: string; name: string; burnPerDay: number }[];
+  giftCardRequests: { accountId: string; name: string; requestedAt: Date | string }[];
   liability: { total: number; over: boolean; ceiling: number };
   count: number;
 };
@@ -19,6 +20,20 @@ export function AlertsCard({ alerts }: { alerts: Alerts }) {
         <Link className="muted" href="/platform/projections" style={{ fontSize: 13, fontWeight: 600 }}>Projections →</Link>
       </div>
       {alerts.count === 0 && <p className="muted" style={{ fontSize: 13.5, marginTop: 6 }}>All clear — no low balances, idle accounts, or liability over ceiling.</p>}
+
+      {alerts.giftCardRequests.length > 0 && (
+        <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(52,211,153,.35)", background: "rgba(52,211,153,.07)" }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--mint)", marginBottom: 6 }}>
+            Gift card requests ({alerts.giftCardRequests.length})
+          </div>
+          {alerts.giftCardRequests.slice(0, 5).map((r) => (
+            <Link key={r.accountId} href={`/platform/accounts/${r.accountId}`} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "3px 0" }}>
+              <span style={{ color: "var(--text-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
+              <span className="muted">asked {new Date(r.requestedAt).toLocaleDateString()}</span>
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="grid g-3" style={{ gap: 16, marginTop: 10 }}>
         <div>

@@ -188,7 +188,7 @@ export function UserActions({ userId, status, role }: { userId: string; status: 
     setBusy(true);
     const res = await fetch("/api/platform/user", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId, action: "resend_invite" }) });
     const j = await res.json().catch(() => ({}));
-    if (res.ok) window.alert(j.emailed ? "Invite email sent." : `Email isn't configured here — share this link:\n\n${j.previewLink ?? "(no link)"}`);
+    if (res.ok) window.alert(j.emailed ? "Invite email sent." : `The email didn't go out — share this link:\n\n${j.previewLink ?? "(no link)"}`);
     else window.alert(j.error ?? "Couldn't resend the invite.");
     router.refresh();
     setBusy(false);
@@ -210,6 +210,46 @@ export function UserActions({ userId, status, role }: { userId: string; status: 
       <button className="btn btn-ghost" disabled={busy} onClick={toggle} style={{ padding: "4px 9px", fontSize: 11.5, color: status === "DISABLED" ? "var(--mint)" : "var(--amber)" }}>
         {status === "DISABLED" ? "Reactivate" : "Deactivate"}
       </button>
+    </div>
+  );
+}
+
+// Gift-card rewards for the whole account (sent by SetMo through Tremendous, paid
+// from SetMo's balance) — off until a super admin turns them on. Support sees the
+// state but can't change it.
+export function GiftCardSwitch({ accountId, enabled, requestedAt, canChange }: { accountId: string; enabled: boolean; requestedAt: string | null; canChange: boolean }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  async function toggle() {
+    if (!enabled && !window.confirm("Turn on gift cards for this account? Rewards they approve are sent through Tremendous and paid from SetMo's balance.")) return;
+    setBusy(true);
+    const res = await fetch("/api/platform/gift-cards", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accountId, enabled: !enabled }) });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      window.alert(j.error ?? "Couldn't change gift cards.");
+    }
+    router.refresh();
+    setBusy(false);
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <span className={"chip " + (enabled ? "mint" : requestedAt ? "amber" : "")} style={{ padding: "2px 9px", fontSize: 11 }}>
+        {enabled ? "On" : requestedAt ? "Requested" : "Off"}
+      </span>
+      <span className="muted" style={{ fontSize: 12.5, flex: 1, minWidth: 200 }}>
+        {enabled
+          ? "Rewards they approve go out through Tremendous, paid from SetMo's balance."
+          : requestedAt
+            ? `They asked on ${new Date(requestedAt).toLocaleDateString()}. Until it's on they can use custom rewards.`
+            : "Not requested. They can use custom rewards."}
+      </span>
+      {canChange && (
+        <button className={"btn " + (enabled ? "btn-ghost" : "btn-primary")} disabled={busy} onClick={toggle} style={{ padding: "6px 14px", fontSize: 13 }}>
+          {busy ? "…" : enabled ? "Turn off" : "Turn on"}
+        </button>
+      )}
     </div>
   );
 }

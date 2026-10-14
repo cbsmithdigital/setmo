@@ -3,6 +3,7 @@ import { minuteQuote, type PricingConfig } from "@/lib/pricing";
 import { getPricingConfig, getPlatformConfig } from "@/lib/config";
 import { fullName } from "@/lib/format";
 import { DEMO_OFFSET_PREFIX, DEMO_LOW_BALANCE_MIN } from "@/lib/demo-shared";
+import { pendingGiftCardRequests } from "@/lib/gift-cards";
 
 // Internal financials for the platform/super-admin console. Two framings drive
 // everything (per the spec): (1) the same minute is COGS for a paying account but
@@ -231,14 +232,21 @@ export async function getPlatformAccounts() {
 }
 
 export async function getPlatformAccountDetail(id: string) {
-  const org = await prisma.organization.findUnique({ where: { id }, select: { id: true, name: true, type: true, isDemo: true, referredByPartnerId: true, referralCode: true, referredAt: true } });
+  const org = await prisma.organization.findUnique({ where: { id }, select: { id: true, name: true, type: true, isDemo: true, referredByPartnerId: true, referralCode: true, referredAt: true, giftCardsEnabled: true, giftCardsRequestedAt: true } });
   const officeWhere = org ? { organizationId: org.id, isProspect: false } : { id, isProspect: false };
   const locations = await officeStats(officeWhere);
   if (locations.length === 0 && !org) return null;
 
   // Who referred this account (the office's own attribution, else its org's) and
   // through which code — so a partner's rep shows by name.
-  const office = org ? null : await prisma.office.findUnique({ where: { id }, select: { referredByPartnerId: true, referralCode: true, referredAt: true } });
+  const office = org ? null : await prisma.office.findUnique({ where: { id }, select: { referredByPartnerId: true, referralCode: true, referredAt: true, giftCardsEnabled: true, giftCardsRequestedAt: true } });
+
+  // Gift cards: a group's switch lives on the org; any location may have asked.
+  const askedAt = org
+    ? [org.giftCardsRequestedAt, ...(await prisma.office.findMany({ where: { organizationId: org.id, giftCardsRequestedAt: { not: null } }, select: { giftCardsRequestedAt: true } })).map((o) => o.giftCardsRequestedAt)]
+    : [office?.giftCardsRequestedAt ?? null];
+  const lastAsk = askedAt.filter((d): d is Date => d != null).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+  const giftCards = { enabled: Boolean(org ? org.giftCardsEnabled : office?.giftCardsEnabled), requestedAt: lastAsk };
   const refPartnerId = office?.referredByPartnerId ?? org?.referredByPartnerId ?? null;
   const refCode = office?.referralCode ?? org?.referralCode ?? null;
   let referral: { partnerId: string; partnerName: string; code: string | null; repName: string | null; at: Date | null } | null = null;
@@ -280,6 +288,7 @@ export async function getPlatformAccountDetail(id: string) {
     kind: org ? ("group" as const) : ("single" as const),
     isDemo: locations.length > 0 ? locations.every((l) => l.isDemo) : Boolean(org?.isDemo),
     referral,
+    giftCards,
     mrr: r2(locations.filter((l) => l.accessActive).length * cfg.accessMonthly),
     balanceMin: locations.reduce((a, l) => a + l.balanceMin, 0),
     cashLifetime: r2(locations.reduce((a, l) => a + l.cashLifetime, 0)),
@@ -322,13 +331,15 @@ export async function getPlatformAlerts() {
   const outstandingMin = stats.reduce((a, s) => a + Math.max(0, s.balanceMin), 0);
   const liabilityTotal = outstandingMin * MINUTE_COST_USD;
   const liabilityOver = liabilityTotal > cfg.alertLiabilityCeiling;
+  const giftCardRequests = await pendingGiftCardRequests();
 
   return {
     lowBalance,
     idle,
     topBurners,
+    giftCardRequests,
     liability: { total: r2(liabilityTotal), over: liabilityOver, ceiling: cfg.alertLiabilityCeiling },
-    count: lowBalance.length + idle.length + (liabilityOver ? 1 : 0),
+    count: lowBalance.length + idle.length + giftCardRequests.length + (liabilityOver ? 1 : 0),
   };
 }
 

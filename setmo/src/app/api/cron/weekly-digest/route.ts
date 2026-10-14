@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { json, error } from "@/lib/api";
+import { cronAuthorized } from "@/lib/cron-auth";
 import { isEmailConfigured, sendDigestEmail } from "@/lib/email";
 import { buildOfficeDigest, buildGroupDigest, buildSetterDigest, type DigestEmail } from "@/lib/digest";
 import { sweepAssessmentInvites } from "@/lib/assessment-invites";
@@ -14,10 +15,7 @@ export const dynamic = "force-dynamic";
 //   ?dryRun=1            build only, don't send (returns subjects)
 //   ?scope=office|group|setter   limit to one audience (testing)
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.get("authorization") !== `Bearer ${secret}`) {
-    return error("Unauthorized", 401);
-  }
+  if (!cronAuthorized(req)) return error("Unauthorized", 401);
 
   const url = new URL(req.url);
   const dryRun = url.searchParams.get("dryRun") === "1";
