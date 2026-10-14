@@ -11,6 +11,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const audit = await loadAuditByCookie(id);
   if (!audit) return error("Unauthorized", 401);
+  // Only for a running or finished assessment — not one still waiting on approval.
+  if (audit.status !== "ACTIVE" && audit.status !== "SCORED") return error("Your assessment isn't active yet.", 403);
 
   const agentId = process.env.SETMO_SETTY_AGENT_ID;
   if (!isElevenLabsConfigured() || !agentId) return json({ configured: false });

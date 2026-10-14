@@ -3,6 +3,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { IMPLANT_RUBRIC } from "@/lib/skills";
 import type { Rubric } from "@/lib/packs/types";
+import { captureError } from "@/lib/observability";
 
 const IMPLANT_RUBRIC_ID = "implant.v1";
 
@@ -11,6 +12,12 @@ const IMPLANT_RUBRIC_ID = "implant.v1";
 // whether or not the agent ran its feedback monologue, and on partial calls.
 
 const MODEL = process.env.SETMO_SCORER_MODEL || "claude-sonnet-4-6";
+
+// Scoring runs in the post-call webhook's background work, which has a 5-minute
+// cap: a bounded timeout and one retry leave room for the rest of it. A call
+// that still fails is left unscored for the re-score sweep (lib/rescore) rather
+// than turned into an empty score.
+const scoringClient = () => new Anthropic({ timeout: 100_000, maxRetries: 1 });
 
 export function isScorerConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -110,7 +117,7 @@ export async function scoreTranscript(opts: {
     .join("\n");
   if (!transcriptText.trim()) return null;
 
-  const client = new Anthropic();
+  const client = scoringClient();
 
   const system = `You are SetMo's call-scoring evaluator for dental appointment setters. You grade how well the SETTER (the human trainee) handled a practice call against a fictional AI LEAD. Score each of the 8 rubric skills from 1.0 to 5.0 (one decimal allowed). Be fair but encouraging — this is training. Base scores ONLY on the live appointment-setting conversation. If the transcript contains a post-call feedback/coaching segment by the agent, IGNORE it for scoring. If the call ended early, score only what actually happened.
 
@@ -174,7 +181,8 @@ ${transcriptText}`;
       recommendedNextScenario: o.next_scenario || null,
       narrative: o.narrative || null,
     };
-  } catch {
+  } catch (e) {
+    captureError(e, { scope: "scorer" });
     return null;
   }
 }
@@ -232,7 +240,7 @@ Transcript:
 ${transcriptText}`;
 
   try {
-    const res = await new Anthropic().messages.parse({
+    const res = await scoringClient().messages.parse({
       model: MODEL,
       max_tokens: 4096,
       thinking: { type: "adaptive" },
@@ -274,7 +282,8 @@ ${transcriptText}`;
       recommendedNextScenario: o.next_scenario || null,
       narrative: o.narrative || null,
     };
-  } catch {
+  } catch (e) {
+    captureError(e, { scope: "scorer" });
     return null;
   }
 }
@@ -418,7 +427,8 @@ ${transcriptText}`;
         transcriptQuality: o.transcript_quality,
       },
     };
-  } catch {
+  } catch (e) {
+    captureError(e, { scope: "scorer" });
     return null;
   }
 }

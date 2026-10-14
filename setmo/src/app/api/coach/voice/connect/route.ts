@@ -6,7 +6,7 @@ import { getOfficeCoachContext } from "@/lib/office";
 import { getGroupCoachContext, groupScope } from "@/lib/group";
 import { getCallCenterOverview, getPodOverview } from "@/lib/callcenter";
 import { canStartSession, canStartGroupCoach, canStartCallCenter, callCenterOrgForAgent } from "@/lib/usage";
-import { coachAgentId, managerCoachAgentId, groupCoachAgentId, getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
+import { coachAgentId, managerCoachAgentId, groupCoachAgentId, getSignedCall, isElevenLabsConfigured } from "@/lib/elevenlabs";
 import {
   voiceCoachSystem,
   voiceCoachFirstMessage,
@@ -30,6 +30,16 @@ const Body = z.object({
   sessionId: z.string().optional(), // the practice call being coached (for context)
   focus: z.string().max(1200).optional(),
 });
+
+
+/** Mint a coach call's link and pin the conversation id ElevenLabs assigned to
+ *  the metered session, so the post-call webhook meters this session and no
+ *  other (the browser-sent session_id isn't trusted for that). */
+async function signedCoachCall(agentId: string, sessionId: string): Promise<string> {
+  const { signedUrl, conversationId } = await getSignedCall(agentId);
+  if (conversationId) await prisma.session.update({ where: { id: sessionId }, data: { elevenlabsConversationId: conversationId } });
+  return signedUrl;
+}
 
 export async function POST(req: Request) {
   const user = await getCurrentUser();
@@ -147,7 +157,7 @@ export async function POST(req: Request) {
   };
 
   try {
-    const signedUrl = await getSignedUrl(coachAgentId()!);
+    const signedUrl = await signedCoachCall(coachAgentId()!, coachSession.id);
     return json({
       configured: true,
       signedUrl,
@@ -222,7 +232,7 @@ async function groupVoiceConnect(userId: string, orgId: string, officeId: string
   };
 
   try {
-    const signedUrl = await getSignedUrl(agentId);
+    const signedUrl = await signedCoachCall(agentId, coachSession.id);
     return json({
       configured: true,
       signedUrl,
@@ -289,7 +299,7 @@ async function managerVoiceConnect(userId: string, officeId: string, first: stri
   };
 
   try {
-    const signedUrl = await getSignedUrl(agentId);
+    const signedUrl = await signedCoachCall(agentId, coachSession.id);
     return json({
       configured: true,
       signedUrl,
@@ -369,7 +379,7 @@ async function callCenterVoiceConnect(userId: string, orgId: string, podId: stri
   };
 
   try {
-    const signedUrl = await getSignedUrl(agentId);
+    const signedUrl = await signedCoachCall(agentId, coachSession.id);
     return json({ configured: true, signedUrl, systemPrompt, firstMessage, dynamicVariables, setterId: userId, focus: "agent coaching" });
   } catch (e) {
     return error(e instanceof Error ? e.message : "Couldn't start the assistant", 502);

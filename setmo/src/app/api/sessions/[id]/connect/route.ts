@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { agentIdFor, getSignedUrl, isElevenLabsConfigured } from "@/lib/elevenlabs";
+import { agentIdFor, getSignedCall, isElevenLabsConfigured } from "@/lib/elevenlabs";
 import { memoryForService } from "@/lib/memory";
 import { buildSessionLead, hasComposedLead, resolveDifficulty } from "@/lib/session-lead";
 import { error, json } from "@/lib/api";
+import { captureError } from "@/lib/observability";
 import type { ServiceKey } from "@/generated/prisma/client";
 
 // POST /api/sessions/:id/connect — server bootstrap: mint a fresh signed URL
@@ -40,10 +41,11 @@ export async function POST(
   // retried on the same session. One that connected and then dropped is called
   // back as a NEW session (/retry) — reconnecting it would let the dropped call's
   // transcript arrive mid-redial and score the session out from under it.
+  // (The session's conversation id is assigned when its link is minted, so it
+  // can't tell us whether the call connected — connectedAt, from /live, does.)
   const connectedBefore = Boolean((session.personaSeed as Record<string, unknown> | null)?.connectedAt);
   const isReconnect =
     session.status === "IN_PROGRESS" &&
-    !session.elevenlabsConversationId &&
     !connectedBefore &&
     !session.completedAt && // the browser already reported this call as ended
     hasLead &&
@@ -109,13 +111,20 @@ export async function POST(
   let { lead, seedToStore } = await buildSessionLead({ session, ...leadInputs });
 
   // The voice link first: if it can't be had, the session is left exactly as it
-  // was (not stranded as a started call that never was).
+  // was (not stranded as a started call that never was). ElevenLabs assigns the
+  // call's conversation id with the link; it's recorded on the session below,
+  // so the post-call webhook finds this session by it (see ingest).
   let signedUrl: string;
+  let conversationId: string | null;
   try {
-    signedUrl = await getSignedUrl(agentId);
+    ({ signedUrl, conversationId } = await getSignedCall(agentId));
   } catch (e) {
-    return error(e instanceof Error ? e.message : "Failed to start conversation", 502);
+    // The setter gets a plain message (the session is untouched, so trying again
+    // is safe); the details go to the logs.
+    captureError(e, { scope: "call-connect", sessionId: session.id });
+    return error("We couldn't start the call just now — give it a moment and try again.", 502);
   }
+  const callId = conversationId ? { elevenlabsConversationId: conversationId } : {};
 
   if (!isReconnect) {
     // Start the call only if nothing changed underneath: a lead composed HERE
@@ -123,7 +132,7 @@ export async function POST(
     // replace a lead card the setter is already looking at.
     const claimed = await prisma.session.updateMany({
       where: { id: session.id, status: "CREATED", ...(hasLead ? {} : { personaSeed: { path: ["hidden"], equals: true } }) },
-      data: { status: "IN_PROGRESS", startedAt: new Date(), personaSeed: seedToStore as object },
+      data: { status: "IN_PROGRESS", startedAt: new Date(), personaSeed: seedToStore as object, ...callId },
     });
     if (claimed.count === 0) {
       // The lead card was saved meanwhile (or another tab started the call):
@@ -135,10 +144,23 @@ export async function POST(
       ({ lead, seedToStore } = await buildSessionLead({ session: fresh, ...leadInputs }));
       const retried = await prisma.session.updateMany({
         where: { id: session.id, status: "CREATED" },
-        data: { status: "IN_PROGRESS", startedAt: new Date(), personaSeed: seedToStore as object },
+        data: { status: "IN_PROGRESS", startedAt: new Date(), personaSeed: seedToStore as object, ...callId },
       });
       if (retried.count === 0) return error("This call already started.", 409);
     }
+  } else if (conversationId) {
+    // The earlier link never connected (as far as we heard). This try gets the
+    // new id; the old one is kept so that call's recording still finds the
+    // session if it did get through.
+    const seed = (session.personaSeed ?? {}) as Record<string, unknown>;
+    const prior = Array.isArray(seed.priorConversationIds) ? (seed.priorConversationIds as string[]) : [];
+    await prisma.session.update({
+      where: { id: session.id },
+      data: {
+        elevenlabsConversationId: conversationId,
+        personaSeed: { ...seed, priorConversationIds: session.elevenlabsConversationId ? [...prior, session.elevenlabsConversationId] : prior } as object,
+      },
+    });
   }
 
   return json({

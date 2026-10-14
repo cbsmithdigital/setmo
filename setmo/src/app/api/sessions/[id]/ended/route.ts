@@ -36,7 +36,7 @@ export async function POST(
     where: { id: session.id },
     data: {
       ...(session.completedAt ? {} : { completedAt: new Date() }),
-      ...(conversationId ? { elevenlabsConversationId: conversationId } : {}),
+      ...(conversationId && !session.elevenlabsConversationId ? { elevenlabsConversationId: conversationId } : {}),
       ...(seed.callbackState === "open" ? { personaSeed: { ...seed, callbackState: "closed" } as object } : {}),
     },
   });

@@ -1,13 +1,13 @@
-import { after } from "next/server";
 import { prisma } from "@/lib/db";
 import { loadAuditByCookie } from "@/lib/audit-auth";
 import { auditCallCounts, finalizeAudit, AUDIT_CALLS } from "@/lib/audit";
-import { scoreSession } from "@/lib/ingest";
+import { kickOverdueScore } from "@/lib/rescore";
 import { error, json } from "@/lib/api";
 
 // GET /api/audit/:id/status — progress poll for the runner. Returns per-call
-// states, recovers any call whose transcript was captured but never scored
-// (re-runs scoring in the background), and finalizes once all 5 are scored.
+// states, gives an overdue score another try (lib/rescore — one scorer at a
+// time, a few tries, then the call is closed out and can be run again), and
+// finalizes the report once the call is scored.
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const audit = await loadAuditByCookie(id);
@@ -15,23 +15,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const counts = await auditCallCounts(id);
 
-  // Recovery: if a transcript was captured but the background score didn't land
-  // (function killed, transient error), re-trigger it. Gate on age so we don't
-  // stampede a score that's still in flight (normal scoring finishes <60s).
-  const stuck = await prisma.evaluation.findMany({
-    where: { session: { auditId: id }, scoredAt: null, createdAt: { lt: new Date(Date.now() - 90_000) } },
+  const unscored = await prisma.evaluation.findMany({
+    where: { session: { auditId: id }, scoredAt: null },
     select: { sessionId: true },
     take: 2,
   });
-  for (const s of stuck) {
-    after(async () => {
-      try {
-        await scoreSession(s.sessionId);
-      } catch (e) {
-        console.error("audit re-score failed", s.sessionId, e);
-      }
-    });
-  }
+  for (const u of unscored) await kickOverdueScore(u.sessionId);
 
   let status = audit.status;
   if (counts.scored >= AUDIT_CALLS && status !== "SCORED") {

@@ -12,6 +12,9 @@ export async function isBot(): Promise<boolean> {
   if (!process.env.VERCEL) return false;
   try {
     const verification = await checkBotId();
+    // Logged (not reported) so a run of false positives on real people would
+    // show in the Vercel logs without flooding Sentry with actual bots.
+    if (verification.isBot) console.warn("[setmo:botid] request refused as a bot");
     return verification.isBot;
   } catch (e) {
     captureError(e, { scope: "botid" });

@@ -50,7 +50,7 @@ export function AuditIntake() {
       <div className="audit-card">
         <h3 style={{ fontSize: 22, marginBottom: 10 }}>Check your email 📬</h3>
         <p style={{ color: "var(--m-muted)", fontSize: 15.5 }}>
-          We sent a confirmation link to <b style={{ color: "var(--ink-soft)" }}>{workEmail}</b>. Click it to start your 5 calls and unlock your report.
+          We sent a confirmation link to <b style={{ color: "var(--ink-soft)" }}>{workEmail}</b>. Click it to start your call and unlock your report.
         </p>
         {devLink && (
           <div className="banner ok" style={{ marginTop: 18 }}>

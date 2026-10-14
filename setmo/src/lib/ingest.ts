@@ -16,6 +16,36 @@ import { checkReveal } from "@/lib/reveal";
 const MIN_SETTER_TURNS = 2;
 const MIN_DURATION_SECS = 60;
 
+// A scorer that hasn't finished in this long is assumed dead (the webhook's
+// background work is capped at 5 minutes), so another may take the call.
+export const SCORE_LEASE_MS = 6 * 60_000;
+
+/**
+ * Which session a finished call belongs to. The conversation id comes from
+ * ElevenLabs (the webhook is signed) and was recorded on the session when its
+ * call link was minted, so it decides. A session whose first link never
+ * connected keeps that id in personaSeed.priorConversationIds. The session_id
+ * dynamic variable is sent by the browser, so it only counts for a session
+ * that was never given a conversation id (older flows) — otherwise a changed
+ * session_id could move the call's time to another session or off the meter.
+ */
+async function sessionForCall(conversationId: string | null, sessionId: string | null) {
+  if (conversationId) {
+    const byId = await prisma.session.findUnique({ where: { elevenlabsConversationId: conversationId } });
+    if (byId) return byId;
+    const byPrior = await prisma.session.findFirst({ where: { personaSeed: { path: ["priorConversationIds"], array_contains: [conversationId] } } });
+    if (byPrior) return byPrior;
+  }
+  if (!sessionId) return null;
+  const candidate = await prisma.session.findUnique({ where: { id: sessionId } });
+  if (!candidate) return null;
+  if (candidate.elevenlabsConversationId && candidate.elevenlabsConversationId !== conversationId) {
+    console.warn("[setmo:ingest] session_id points at a session minted for another call — ignored", { sessionId, conversationId });
+    return null;
+  }
+  return candidate;
+}
+
 /**
  * CAPTURE (fast, runs inline in the webhook). Resolves the session and persists
  * the raw transcript immediately — BEFORE any scoring — so the one webhook we get
@@ -27,12 +57,7 @@ export async function ingestPostCall(
 ): Promise<{ ok: boolean; sessionId?: string; reason?: string; needsScore?: boolean; kind?: string }> {
   const parsed = parsePostCall(rawPayload);
 
-  const session = parsed.sessionId
-    ? await prisma.session.findUnique({ where: { id: parsed.sessionId } })
-    : parsed.conversationId
-      ? await prisma.session.findUnique({ where: { elevenlabsConversationId: parsed.conversationId } })
-      : null;
-
+  const session = await sessionForCall(parsed.conversationId, parsed.sessionId);
   if (!session) return { ok: false, reason: "no matching session" };
 
   const duration = parsed.durationSeconds ?? session.durationSeconds ?? 0;
@@ -66,7 +91,8 @@ export async function ingestPostCall(
     data: {
       durationSeconds: duration,
       completedAt: new Date(),
-      elevenlabsConversationId: parsed.conversationId ?? session.elevenlabsConversationId,
+      // An id assigned when the link was minted stays; older sessions learn it here.
+      elevenlabsConversationId: session.elevenlabsConversationId ?? parsed.conversationId,
     },
   });
 
@@ -88,6 +114,16 @@ export async function scoreSession(
   const evaluation = await prisma.evaluation.findUnique({ where: { sessionId }, include: { skills: true } });
   if (!evaluation?.rawPayload) return { ok: false, reason: "no captured transcript" };
   if (evaluation.scoredAt) return { ok: true, reason: "already scored" };
+  if (session.status === "FAILED") return { ok: false, reason: "call marked failed" };
+
+  // One scorer at a time per call: the webhook's background job, the re-score
+  // sweep and the results/audit polls can all ask, and only one runs it. A lease
+  // left by a function that died expires after SCORE_LEASE_MS.
+  const lease = await prisma.evaluation.updateMany({
+    where: { sessionId, scoredAt: null, OR: [{ scoringStartedAt: null }, { scoringStartedAt: { lt: new Date(Date.now() - SCORE_LEASE_MS) } }] },
+    data: { scoringStartedAt: new Date(), scoreAttempts: { increment: 1 } },
+  });
+  if (lease.count === 0) return { ok: false, reason: "scoring in progress" };
 
   const rawPayload = evaluation.rawPayload;
   const parsed = parsePostCall(rawPayload);
@@ -117,18 +153,22 @@ export async function scoreSession(
       office: { name: office?.name, city: office?.city, offerFraming: office?.offerFraming },
       rubric: rubricForService(session.serviceType),
     });
-    if (scored) {
-      skills = scored.skills;
-      overall = scored.overallScore;
-      wins = scored.wins;
-      misses = scored.misses;
-      phrases = scored.phrases;
-      personaCoaching = scored.personaCoaching;
-      nextScenario = scored.recommendedNextScenario;
-      narrative = scored.narrative ?? parsed.narrative;
-      booked = scored.booked;
-      source = "transcript-scorer";
+    if (!scored) {
+      // Never turn a scoring failure into an empty score: release the lease and
+      // leave the call for the re-score sweep (it retries, then marks it failed).
+      await prisma.evaluation.update({ where: { sessionId }, data: { scoringStartedAt: null, scoreError: "The scorer returned no result" } });
+      return { ok: false, reason: "scorer failed" };
     }
+    skills = scored.skills;
+    overall = scored.overallScore;
+    wins = scored.wins;
+    misses = scored.misses;
+    phrases = scored.phrases;
+    personaCoaching = scored.personaCoaching;
+    nextScenario = scored.recommendedNextScenario;
+    narrative = scored.narrative ?? parsed.narrative;
+    booked = scored.booked;
+    source = "transcript-scorer";
   } else if (!longEnough) {
     skills = [];
     overall = null;

@@ -24,9 +24,41 @@ function Inner({ auditId, callNumber, totalCalls, maxSeconds, onDone }: { auditI
   const [err, setErr] = useState<string | null>(null);
   const [personaName, setPersonaName] = useState<string | null>(null);
   const started = useRef(false);
+  const sessionIdRef = useRef<string | null>(null);
+  const connectedRef = useRef(false);
+  // Whether the error screen can offer another try: a call that never connected
+  // didn't use up the free call, so the prospect can just go again.
+  const [canRetry, setCanRetry] = useState(false);
+
+  const fail = useCallback((message: string) => {
+    setErr(message);
+    setCanRetry(!connectedRef.current);
+    setPhase("error");
+  }, []);
 
   const conversation = useConversation({
-    onError: (m: string) => { setErr(typeof m === "string" ? m : "The call hit an error."); setPhase("error"); },
+    onConnect: ({ conversationId }: { conversationId: string }) => {
+      connectedRef.current = true;
+      setSecs(0);
+      setPhase("live");
+      // From here this is the prospect's free call. If another window got there
+      // first, this one is hung up.
+      void fetch(`/api/audit/${auditId}/live`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId: sessionIdRef.current, conversationId }),
+      }).then(async (r) => {
+        if (r.status === 409) {
+          const j = await r.json().catch(() => ({}));
+          try { conversation.endSession(); } catch { /* ignore */ }
+          connectedRef.current = false;
+          setErr(j.error ?? "Your free call is already running in another window.");
+          setCanRetry(false);
+          setPhase("error");
+        }
+      }).catch(() => {});
+    },
+    onError: (m: string) => fail(connectedRef.current ? "The call hit an error." : typeof m === "string" && /permission|not ?allowed|denied/i.test(m) ? "Your microphone is blocked — allow it for this site and try again." : "Couldn't connect the call. Check your connection and microphone, then try again."),
   });
   const speaking = conversation.isSpeaking;
 
@@ -35,17 +67,18 @@ function Inner({ auditId, callNumber, totalCalls, maxSeconds, onDone }: { auditI
     setPhase("ended");
   }, [conversation]);
 
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    (async () => {
-      try {
-        const res = await fetch(`/api/audit/${auditId}/connect`, { method: "POST" });
-        const cfg = await res.json();
-        if (!res.ok) { setErr(cfg.error ?? "Couldn't start the call."); setPhase("error"); return; }
-        if (!cfg.configured) { setErr("Voice calls aren't configured yet."); setPhase("error"); return; }
-        setPersonaName(cfg.personaName ?? null);
-        conversation.startSession({
+  const connect = useCallback(async () => {
+    setErr(null);
+    setPhase("connecting");
+    connectedRef.current = false;
+    try {
+      const res = await fetch(`/api/audit/${auditId}/connect`, { method: "POST" });
+      const cfg = await res.json();
+      if (!res.ok) { setErr(cfg.error ?? "Couldn't start the call."); setCanRetry(res.status === 502); setPhase("error"); return; }
+      if (!cfg.configured) { setErr("Voice calls aren't configured yet."); setCanRetry(false); setPhase("error"); return; }
+      sessionIdRef.current = cfg.sessionId ?? null;
+      setPersonaName(cfg.personaName ?? null);
+      conversation.startSession({
           signedUrl: cfg.signedUrl,
           connectionType: "websocket",
           dynamicVariables: cfg.dynamicVariables,
@@ -58,16 +91,17 @@ function Inner({ auditId, callNumber, totalCalls, maxSeconds, onDone }: { auditI
                 },
               }
             : {}),
-        });
-        setSecs(0);
-        setPhase("live");
-      } catch {
-        setErr("Couldn't reach the call. Check mic permissions and try again.");
-        setPhase("error");
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      });
+    } catch {
+      fail("Couldn't reach the call. Check your microphone and connection, then try again.");
+    }
+  }, [auditId, conversation, fail]);
+
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    void connect();
+  }, [connect]);
 
   // Tick + hard cap each audit call.
   useEffect(() => {
@@ -94,8 +128,14 @@ function Inner({ auditId, callNumber, totalCalls, maxSeconds, onDone }: { auditI
 
         {phase === "error" ? (
           <div style={{ textAlign: "center", padding: "20px 0" }}>
-            <p style={{ background: "#3a1212", border: "1px solid #6b2525", color: "#fca5a5", borderRadius: 12, padding: "12px 14px", marginBottom: 18, fontSize: 14 }}>{err}</p>
-            <button className="btn btn-ghost" onClick={onDone} style={{ background: "#1a1a2e", color: "#e2e8f0", border: "1px solid #2a2a45", borderRadius: 999, padding: "11px 20px" }}>Close</button>
+            <p style={{ background: "#3a1212", border: "1px solid #6b2525", color: "#fca5a5", borderRadius: 12, padding: "12px 14px", marginBottom: canRetry ? 8 : 18, fontSize: 14 }}>{err}</p>
+            {canRetry && <p style={{ color: "#94a3b8", fontSize: 13, marginBottom: 18 }}>The call never connected, so it didn&apos;t use up your free call.</p>}
+            <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+              {canRetry && (
+                <button onClick={() => void connect()} style={{ background: "linear-gradient(135deg,#8b5cf6,#7c3aed)", color: "#fff", border: "none", borderRadius: 999, padding: "11px 22px", fontWeight: 600, cursor: "pointer" }}>Try again</button>
+              )}
+              <button className="btn btn-ghost" onClick={onDone} style={{ background: "#1a1a2e", color: "#e2e8f0", border: "1px solid #2a2a45", borderRadius: 999, padding: "11px 20px" }}>Close</button>
+            </div>
           </div>
         ) : phase === "ended" ? (
           <div style={{ textAlign: "center", padding: "24px 0" }}>

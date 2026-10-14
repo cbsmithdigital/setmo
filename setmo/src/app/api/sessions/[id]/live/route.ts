@@ -17,7 +17,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid request", 422);
 
-  const session = await prisma.session.findFirst({ where: { id, setterId: user.id }, select: { id: true, status: true, personaSeed: true } });
+  const session = await prisma.session.findFirst({ where: { id, setterId: user.id }, select: { id: true, status: true, personaSeed: true, elevenlabsConversationId: true } });
   if (!session) return error("Session not found", 404);
   if (session.status !== "IN_PROGRESS") return json({ ok: true, ignored: true });
 
@@ -25,7 +25,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   await prisma.session.update({
     where: { id: session.id },
     data: {
-      elevenlabsConversationId: parsed.data.conversationId,
+      // The id ElevenLabs assigned when the link was minted stands; the browser's
+      // report only fills in for a session that was never given one.
+      ...(session.elevenlabsConversationId ? {} : { elevenlabsConversationId: parsed.data.conversationId }),
       personaSeed: { ...seed, connectedAt: new Date().toISOString(), callbackState: "open" } as object,
     },
   });

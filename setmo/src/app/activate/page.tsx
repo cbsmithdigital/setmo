@@ -9,13 +9,24 @@ export default function ActivateAccountPage() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setErr(null);
     try {
-      await fetch("/api/auth/request-setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) });
+      const res = await fetch("/api/auth/request-setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) });
+      // The answer never says whether an account exists — only a limit or a
+      // failed check comes back as an error.
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setErr(j.error ?? "Something went wrong — please try again.");
+        return;
+      }
       setSent(true);
+    } catch {
+      setErr("Couldn't reach SetMo — check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -44,6 +55,7 @@ export default function ActivateAccountPage() {
               Were you invited by your office? Enter the email it was sent to and we&apos;ll send you a fresh setup link.
             </p>
             <form onSubmit={onSubmit}>
+              {err && <div className="banner error" style={{ marginBottom: 16 }}>{err}</div>}
               <div className="field">
                 <label htmlFor="email">Invited email</label>
                 <input id="email" className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@practice.com" />

@@ -65,6 +65,35 @@ export async function getSignedUrl(agentId: string): Promise<string> {
 }
 
 /**
+ * A signed URL whose conversation id ElevenLabs assigns up front (and which can
+ * only be used once). The caller records the id on the session BEFORE the
+ * browser starts the call, so the post-call webhook — signed by ElevenLabs —
+ * names the session itself, and nothing the browser sends can move the call's
+ * time to another session or off the meter. conversationId is null only if
+ * ElevenLabs ever stops returning it (then we fall back to the old matching).
+ */
+export async function getSignedCall(agentId: string): Promise<{ signedUrl: string; conversationId: string | null }> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) throw new Error("ELEVENLABS_API_KEY not configured.");
+
+  const res = await fetch(
+    `${API_BASE}/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}&include_conversation_id=true`,
+    { headers: { "xi-api-key": apiKey }, cache: "no-store" }
+  );
+  if (!res.ok) {
+    throw new Error(`ElevenLabs get-signed-url failed: ${res.status} ${await res.text()}`);
+  }
+  const json = (await res.json()) as { signed_url: string };
+  let conversationId: string | null = null;
+  try {
+    conversationId = new URL(json.signed_url).searchParams.get("conversation_id");
+  } catch {
+    /* unparseable — fall back to unassigned */
+  }
+  return { signedUrl: json.signed_url, conversationId };
+}
+
+/**
  * Fetch a conversation's recording from ElevenLabs by conversation id. Used as a
  * lazy fallback when the `post_call_audio` webhook was missed (dropped/late) so a
  * recording can still be recovered on demand. Returns the mp3 bytes, or null when

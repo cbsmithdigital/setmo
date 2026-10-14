@@ -12,7 +12,7 @@ import type { LeadCard as LeadCardData } from "@/lib/realism/lead-card";
 // live     → on the call
 // dropped  → the call cut out (or the page was reopened mid-call)
 // wrap     → scoring
-type Phase = "pre" | "live" | "dropped" | "wrap" | "error";
+type Phase = "pre" | "live" | "dropped" | "wrap" | "unscored" | "error";
 
 type Prep = {
   status: "loading" | "ready" | "unavailable";
@@ -226,17 +226,27 @@ function SessionInner({
             router.push(`/results/${sessionId}`);
             return;
           }
+          if (data.status === "failed") {
+            clearInterval(poll);
+            setErrMsg(
+              data.reason === "no-transcript"
+                ? "This call never reached us, so there's nothing to score. It didn't use any of your tokens."
+                : "Something went wrong scoring this call, and retrying didn't fix it. It didn't use any of your tokens."
+            );
+            go("unscored");
+            return;
+          }
         }
       } catch {
         /* keep polling */
       }
       if (tries > 72) {
         clearInterval(poll);
-        setWrapNote("Still scoring — your result will appear on your dashboard shortly.");
+        setWrapNote("This one's taking longer than usual. We'll keep at it — the result will be on your dashboard, and on your phone if notifications are on.");
       }
     }, 2500);
     return () => clearInterval(poll);
-  }, [phase, sessionId, router]);
+  }, [phase, sessionId, router, go]);
 
   const startCall = useCallback(async () => {
     setErrMsg(null);
@@ -390,6 +400,21 @@ function SessionInner({
               </button>
             )}
           </div>
+        </div>
+      </Centered>
+    );
+  }
+
+  // ---------- UNSCORED ----------
+  if (phase === "unscored") {
+    return (
+      <Centered>
+        <div className="rise" style={{ textAlign: "center", maxWidth: 460 }}>
+          <h2 style={{ fontSize: 24, marginBottom: 12 }}>We couldn&apos;t score this call</h2>
+          <p className="muted" style={{ marginBottom: 24 }}>{errMsg}</p>
+          <button className="btn btn-primary btn-lg" onClick={() => router.push("/practice")}>
+            Back to practice
+          </button>
         </div>
       </Centered>
     );

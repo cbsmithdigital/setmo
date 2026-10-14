@@ -52,6 +52,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const fresh = markCallback(seed);
   delete fresh.connectedAt;
   delete fresh.callbackState;
+  delete fresh.priorConversationIds; // the dropped call's links stay with the dropped call
   fresh.callbackOf = old.id;
   fresh.callbackRootStartedAt = rootStart.toISOString();
 

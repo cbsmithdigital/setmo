@@ -8,7 +8,7 @@ type CallState = "waiting" | "scoring" | "scored" | "empty";
 
 const STATE_META: Record<CallState, { color: string; label: string; pulse?: boolean }> = {
   empty: { color: "var(--m-line)", label: "Not started" },
-  waiting: { color: "#cbb6f0", label: "Waiting for transcript" },
+  waiting: { color: "#cbb6f0", label: "Finishing up…" },
   scoring: { color: "var(--m-amber)", label: "Scoring…", pulse: true },
   scored: { color: "var(--m-mint)", label: "Scored" },
 };
@@ -31,6 +31,7 @@ export function AuditRunner({
   const [inCall, setInCall] = useState(false);
   const [invite, setInvite] = useState("");
   const [invited, setInvited] = useState<"idle" | "ok" | "err">("idle");
+  const [inviteMsg, setInviteMsg] = useState<string | null>(null);
 
   const started = calls.length; // sessions created so far
   const scored = calls.filter((c) => c === "scored").length;
@@ -67,8 +68,16 @@ export function AuditRunner({
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email: invite.trim() }),
     });
-    setInvited(res.ok ? "ok" : "err");
-    if (res.ok) setInvite("");
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setInviteMsg(j.error ?? "Couldn't send — check the email.");
+      setInvited("err");
+      return;
+    }
+    // Created, but the email didn't go out: hand them the link instead.
+    setInviteMsg(j.link ? `The email didn't go out — send them this link: ${j.link}` : "Sent — they can run the call from that link.");
+    setInvited("ok");
+    setInvite("");
   }
 
   return (
@@ -117,13 +126,13 @@ export function AuditRunner({
 
       {/* invite a setter to run the calls instead */}
       <div style={{ borderTop: "1px solid var(--m-line)", marginTop: 18, paddingTop: 18 }}>
-        <label className="hint" style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-soft)" }}>Want your setter to run these instead?</label>
+        <label className="hint" style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-soft)" }}>Want your setter to run it instead?</label>
         <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
           <input type="email" value={invite} onChange={(e) => setInvite(e.target.value)} placeholder="setter@yourpractice.com" style={{ flex: 1, minWidth: 200 }} />
           <button className="btn btn-ghost" onClick={sendInvite} type="button">Send link</button>
         </div>
-        {invited === "ok" && <p className="audit-note" style={{ color: "var(--mint-deep)" }}>Sent — they can run the calls from that link.</p>}
-        {invited === "err" && <p className="audit-note" style={{ color: "#b42318" }}>Couldn&apos;t send — check the email.</p>}
+        {invited === "ok" && <p className="audit-note" style={{ color: "var(--mint-deep)", wordBreak: "break-all" }}>{inviteMsg}</p>}
+        {invited === "err" && <p className="audit-note" style={{ color: "#b42318" }}>{inviteMsg}</p>}
       </div>
 
       {inCall && (

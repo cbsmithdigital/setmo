@@ -118,19 +118,30 @@ export function estimateRecovery(opts: {
 
 export type AuditCallState = "waiting" | "scoring" | "scored";
 
-/** Per-call states for the runner: waiting (transcript not captured) → scoring
- * (captured, awaiting the score) → scored. Drives the N/5 status bars. */
+/** Per-call states for the runner: waiting (connected, transcript not in yet) →
+ * scoring (captured, awaiting the score) → scored. Only a call that actually
+ * connected counts: a try that never got going (mic blocked, network) or one
+ * given up on (FAILED) doesn't use up the free call. `attempts` is every try. */
 export async function auditCallCounts(auditId: string) {
   const sessions = await prisma.session.findMany({
     where: { auditId },
     orderBy: { startedAt: "asc" },
-    select: { evaluation: { select: { scoredAt: true } } },
+    select: { status: true, personaSeed: true, evaluation: { select: { scoredAt: true } } },
   });
-  const calls: AuditCallState[] = sessions.map((s) =>
+  const counted = sessions.filter((s) => s.status !== "FAILED" && (s.evaluation || auditCallConnected(s.personaSeed)));
+  const calls: AuditCallState[] = counted.map((s) =>
     !s.evaluation ? "waiting" : s.evaluation.scoredAt ? "scored" : "scoring"
   );
-  return { total: sessions.length, scored: calls.filter((c) => c === "scored").length, calls };
+  return { total: counted.length, scored: calls.filter((c) => c === "scored").length, calls, attempts: sessions.length };
 }
+
+/** Whether an audit call reached the lead (set by /api/audit/:id/live). */
+export function auditCallConnected(seed: unknown): boolean {
+  return Boolean((seed as Record<string, unknown> | null)?.connectedAt);
+}
+
+/** Tries at the free call before we stop and ask them to get in touch. */
+export const AUDIT_MAX_ATTEMPTS = 4;
 
 /** Compute + persist the report once the trial call is scored. Idempotent. */
 export async function finalizeAudit(auditId: string) {
