@@ -100,15 +100,27 @@ export async function hasCurrentAccess(officeId: string): Promise<boolean> {
   return (await accessState(officeId)) === "current";
 }
 
+/** Whether this office's people can start a practice call right now, and if not, why. */
+export async function practiceAvailability(officeId: string): Promise<"open" | "never" | "lapsed" | "no-tokens"> {
+  const state = await accessState(officeId);
+  if (state !== "current") return state;
+  return (await canStartSession(officeId)).ok ? "open" : "no-tokens";
+}
+
 /** Why this office's people can't start a practice call or a coaching session
  *  right now, or null if they can. Nobody is told to wait for a reset: tokens
  *  roll over until they're used, so the way back is adding more. */
 export async function practiceBlockedMessage(officeId: string): Promise<string | null> {
-  const state = await accessState(officeId);
-  if (state === "lapsed") return "Practice Access isn't on for this practice right now. An office admin can turn it back on from Billing.";
-  if (state === "never") return "SetMo isn't activated for this practice yet. An office admin can activate it from Billing to start practicing.";
-  const allowance = await canStartSession(officeId);
-  return allowance.ok ? null : "Your practice is out of tokens. An office admin can add more from Billing.";
+  switch (await practiceAvailability(officeId)) {
+    case "lapsed":
+      return "Practice Access isn't on for this practice right now. An office admin can turn it back on from Billing.";
+    case "never":
+      return "SetMo isn't activated for this practice yet. An office admin can activate it from Billing to start practicing.";
+    case "no-tokens":
+      return "Your practice is out of tokens. An office admin can add more from Billing.";
+    default:
+      return null;
+  }
 }
 
 // Auto top-up / low-minute alert thresholds (minutes remaining).

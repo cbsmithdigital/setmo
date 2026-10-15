@@ -390,6 +390,8 @@ model User {
   // Invite reminders (lib/nudges): how many have gone out and when the last did.
   inviteRemindersSent Int       @default(0) @map("invite_reminders_sent")
   inviteRemindedAt    DateTime? @map("invite_reminded_at")
+  // Last group/DSO practices update email to this admin (lib/nudges, every 5 days).
+  groupUpdateAt       DateTime? @map("group_update_at")
   createdAt      DateTime   @default(now()) @map("created_at")
 
   office       Office?       @relation(fields: [officeId], references: [id])

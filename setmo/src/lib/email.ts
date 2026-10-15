@@ -88,7 +88,7 @@ export async function sendInviteEmail(opts: { to: string; link: string; officeNa
 /** Footer + one-click unsubscribe headers for the optional emails (weekly
  *  summaries, practice reminders) — the account and billing ones go regardless. */
 const unsubscribeFooter = (url: string) =>
-  `<p style="color:#94a3b8;font-size:12px;margin-top:28px">Don't want these reminders? <a href="${url}" style="color:#94a3b8">Unsubscribe</a> — you'll still get account and billing emails.</p>`;
+  `<p style="color:#94a3b8;font-size:12px;margin-top:28px">Don't want these emails? <a href="${url}" style="color:#94a3b8">Unsubscribe</a> — you'll still get account and billing emails.</p>`;
 
 /** "Time for a practice call" — to a setter who hasn't practiced in a few days. */
 export async function sendPracticeNudge(opts: {
@@ -120,6 +120,86 @@ export async function sendPracticeNudge(opts: {
     },
     "practice-nudge",
   );
+}
+
+export type PracticeUpdate = {
+  name: string;
+  calls: number;
+  prevCalls: number;
+  avg: number | null;
+  setters: number;
+  practiced: number;
+  quiet: string[];
+  pending: number;
+  blocked: string | null; // why the practice can't take calls right now, if it can't
+};
+
+type GroupUpdateOpts = {
+  to: string;
+  orgName: string;
+  periodDays: number;
+  practices: PracticeUpdate[];
+  link: string;
+  unsubscribeUrl: string;
+  oneClickUrl: string;
+};
+
+/** Every few days to a group/DSO admin: what each of their practices did (or
+ *  didn't) in the period — the quiet ones first. */
+export async function sendGroupUpdate(opts: GroupUpdateOpts): Promise<boolean> {
+  const { subject, html } = buildGroupUpdate(opts);
+  return send(
+    { to: opts.to, subject, html, headers: { "List-Unsubscribe": `<${opts.oneClickUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } },
+    "group-update",
+  );
+}
+
+/** The group update's subject and HTML (separate so it can be previewed). */
+export function buildGroupUpdate(opts: GroupUpdateOpts): { subject: string; html: string } {
+  const quietPractices = opts.practices.filter((p) => p.calls === 0);
+  const active = opts.practices.filter((p) => p.calls > 0);
+  const totalCalls = active.reduce((a, p) => a + p.calls, 0);
+  const scored = active.filter((p) => p.avg != null);
+  const avg = scored.length ? scored.reduce((a, p) => a + (p.avg ?? 0) * p.calls, 0) / scored.reduce((a, p) => a + p.calls, 0) : null;
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const trend = (p: PracticeUpdate) =>
+    p.prevCalls === p.calls ? "same as the 5 days before" : p.calls > p.prevCalls ? `up from ${p.prevCalls}` : `down from ${p.prevCalls}`;
+
+  // Names to nudge, kept to a readable handful.
+  const names = (list: string[]) => (list.length > 6 ? `${list.slice(0, 6).map(esc).join(", ")} and ${list.length - 6} more` : list.map(esc).join(", "));
+
+  const practiceBlock = (p: PracticeUpdate) => {
+    const lines: string[] = [];
+    if (p.calls > 0) {
+      lines.push(`${plural(p.calls, "practice call")} (${trend(p)}) · ${p.practiced} of ${plural(p.setters, "setter")} practiced${p.avg != null ? ` · average score ${p.avg.toFixed(1)}` : ""}`);
+      if (p.quiet.length) lines.push(`Quiet: ${names(p.quiet)}`);
+    } else if (p.blocked) {
+      lines.push(esc(p.blocked));
+    } else if (p.setters) {
+      lines.push(`No practice calls${p.prevCalls ? ` (${p.prevCalls} the 5 days before)` : ""}`);
+      lines.push(`Not practicing: ${names(p.quiet)}`);
+    } else {
+      lines.push("No setters on the team yet");
+    }
+    if (p.pending) lines.push(`${p.pending === 1 ? "1 person" : `${p.pending} people`} invited but not set up yet`);
+    return `<div style="padding:10px 0;border-top:1px solid #e6e8f0"><strong>${esc(p.name)}</strong>${lines.map((l) => `<div style="font-size:14px;color:#3b4256;margin-top:3px">${l}</div>`).join("")}</div>`;
+  };
+
+  const summary = `${active.length} of ${plural(opts.practices.length, "practice")} practiced · ${plural(totalCalls, "call")}${avg != null ? ` · average score ${avg.toFixed(1)}` : ""}`;
+  return {
+      subject: `${opts.orgName}: your practices, the last ${opts.periodDays} days`,
+      html: wrap(
+        `
+        <h2 style="color:#7c3aed">Your practices, the last ${opts.periodDays} days</h2>
+        <p style="color:#3b4256">${summary}</p>
+        ${quietPractices.length ? `<p style="margin:20px 0 4px;color:#b45309"><strong>Not practicing</strong></p>${quietPractices.map(practiceBlock).join("")}` : ""}
+        ${active.length ? `<p style="margin:20px 0 4px;color:#047857"><strong>Practicing</strong></p>${active.map(practiceBlock).join("")}` : ""}
+        <p style="margin:26px 0">${button(opts.link, "Open your portfolio")}</p>
+        ${unsubscribeFooter(opts.unsubscribeUrl)}
+      `,
+        540,
+      ),
+  };
 }
 
 /** Weekly note to a practice's admins when the team hasn't practiced: who's

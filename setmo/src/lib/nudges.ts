@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/db";
 import { pushToUsers } from "@/lib/push";
-import { practiceBlockedMessage, canStartCallCenter, callCenterOrgForAgent, officeAdmins } from "@/lib/usage";
-import { isEmailConfigured, sendPracticeNudge, sendTeamIdleNudge } from "@/lib/email";
+import { practiceBlockedMessage, practiceAvailability, canStartCallCenter, callCenterOrgForAgent, officeAdmins } from "@/lib/usage";
+import { isEmailConfigured, sendPracticeNudge, sendTeamIdleNudge, sendGroupUpdate, type PracticeUpdate } from "@/lib/email";
 import { resendInvite } from "@/lib/invites";
+import { mpaOfficeIds } from "@/lib/group";
 import { unsubscribeToken, unsubscribeUrl } from "@/lib/unsubscribe";
 import { fullName } from "@/lib/format";
 import { captureError } from "@/lib/observability";
@@ -13,7 +14,8 @@ import { captureError } from "@/lib/observability";
 //    on) — and again every 3 days while they stay quiet (Adam, 2026-10-14);
 //  - invites: a reminder on day 2 and day 7 to anyone who hasn't set up their
 //    account, with a fresh link;
-//  - admins: a weekly note when nobody at the practice has practiced in 7 days.
+//  - admins: a weekly note when nobody at the practice has practiced in 7 days;
+//  - group/DSO admins: every 5 days, what each of their practices did or didn't do.
 // Never for demo accounts, or where the practice can't take a call right now
 // (no Practice Access, or out of tokens — the billing emails cover that). The
 // optional emails carry an unsubscribe link (User.digestOptOut).
@@ -23,6 +25,14 @@ const SETTER_QUIET_DAYS = 3;
 const TEAM_QUIET_DAYS = 7;
 const INVITE_REMINDER_AGES = [2, 7]; // days after the invite
 const INVITE_REMINDER_GAP_DAYS = 4; // at least this long between the two
+const GROUP_UPDATE_DAYS = 5; // group/DSO admins: an update this often, covering this many days
+
+// For the group update: a practice that can't take calls, in a few words.
+const BLOCKED_NOTE: Partial<Record<string, string>> = {
+  never: "Not activated yet — nobody can practice",
+  lapsed: "Practice Access is off — nobody can practice",
+  "no-tokens": "Out of tokens — nobody can practice until more are added",
+};
 
 type RunOpts = { origin: string; dryRun?: boolean };
 
@@ -190,6 +200,106 @@ export async function remindPendingInvites({ origin, dryRun }: RunOpts) {
     await prisma.user.update({ where: { id: u.id }, data: { inviteRemindersSent: n + 1, inviteRemindedAt: new Date() } });
   }
   return { considered: invited.length, reminded: dryRun ? plan.length : sent, plan };
+}
+
+/** Group/DSO admins: every 5 days, what each of their practices did or didn't
+ *  do (Adam, 2026-10-14). A group admin sees every location; a multi-practice
+ *  admin their assigned set — the same scope as the group pages. */
+export async function sendGroupUpdates({ origin, dryRun }: RunOpts) {
+  const now = Date.now();
+  const due = new Date(now - GROUP_UPDATE_DAYS * DAY);
+  const admins = await prisma.user.findMany({
+    where: {
+      status: "ACTIVE",
+      digestOptOut: false,
+      organizationId: { not: null },
+      organization: { isDemo: false, type: "GROUP" },
+      OR: [
+        { role: { in: ["GROUP_ADMIN", "MULTI_PRACTICE_ADMIN"] } },
+        { memberships: { some: { role: { in: ["GROUP_ADMIN", "MULTI_PRACTICE_ADMIN"] } } } },
+      ],
+      AND: [{ OR: [{ groupUpdateAt: null }, { groupUpdateAt: { lt: due } }] }],
+    },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      organizationId: true,
+      organization: { select: { name: true } },
+      memberships: { select: { role: true, scopeType: true, scopeId: true } },
+    },
+  });
+
+  const periodStart = new Date(now - GROUP_UPDATE_DAYS * DAY);
+  const prevStart = new Date(now - 2 * GROUP_UPDATE_DAYS * DAY);
+  const practiceCache = new Map<string, PracticeUpdate | null>();
+  const practiceUpdate = async (officeId: string): Promise<PracticeUpdate | null> => {
+    if (practiceCache.has(officeId)) return practiceCache.get(officeId)!;
+    const office = await prisma.office.findUnique({ where: { id: officeId }, select: { name: true, isDemo: true, isProspect: true } });
+    if (!office || office.isDemo || office.isProspect) {
+      practiceCache.set(officeId, null);
+      return null;
+    }
+    const [sessions, prevCalls, setters, pending, availability] = await Promise.all([
+      prisma.session.findMany({
+        where: { officeId, kind: "PRACTICE", isAudit: false, startedAt: { gte: periodStart } },
+        select: { setterId: true, evaluation: { select: { overallScore: true } } },
+      }),
+      prisma.session.count({ where: { officeId, kind: "PRACTICE", isAudit: false, startedAt: { gte: prevStart, lt: periodStart } } }),
+      prisma.user.findMany({
+        where: { officeId, status: "ACTIVE", OR: [{ role: "SETTER" }, { memberships: { some: { role: "SETTER", scopeId: officeId } } }] },
+        select: { id: true, firstName: true, lastName: true, email: true },
+      }),
+      prisma.user.count({ where: { officeId, status: "INVITED", NOT: { email: { endsWith: "@prospect.setmo" } } } }),
+      practiceAvailability(officeId),
+    ]);
+    const practicedIds = new Set(sessions.map((s) => s.setterId));
+    const scores = sessions.map((s) => s.evaluation?.overallScore).filter((v) => v != null).map(Number);
+    const update: PracticeUpdate = {
+      name: office.name,
+      calls: sessions.length,
+      prevCalls,
+      avg: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+      setters: setters.length,
+      practiced: setters.filter((s) => practicedIds.has(s.id)).length,
+      quiet: setters.filter((s) => !practicedIds.has(s.id)).map((s) => fullName(s.firstName, s.lastName) || s.email),
+      pending,
+      blocked: BLOCKED_NOTE[availability] ?? null,
+    };
+    practiceCache.set(officeId, update);
+    return update;
+  };
+
+  const plan: { email: string; org: string; practices: PracticeUpdate[] }[] = [];
+  let sent = 0;
+  for (const a of admins) {
+    const orgId = a.organizationId!;
+    const fullAdmin = a.role === "GROUP_ADMIN" || a.memberships.some((m) => m.role === "GROUP_ADMIN" && m.scopeType === "GROUP" && m.scopeId === orgId);
+    const officeIds = fullAdmin
+      ? (await prisma.office.findMany({ where: { organizationId: orgId }, select: { id: true } })).map((o) => o.id)
+      : await mpaOfficeIds(a.id, orgId);
+    const practices = (await Promise.all(officeIds.map(practiceUpdate))).filter((p): p is PracticeUpdate => p != null);
+    if (!practices.length) continue;
+    // The quiet ones first, then the busiest.
+    practices.sort((x, y) => (x.calls === 0 ? 0 : 1) - (y.calls === 0 ? 0 : 1) || y.calls - x.calls || x.name.localeCompare(y.name));
+    plan.push({ email: a.email, org: a.organization?.name ?? "", practices });
+    if (dryRun) continue;
+
+    const ok = await sendGroupUpdate({
+      to: a.email,
+      orgName: a.organization?.name ?? "Your group",
+      periodDays: GROUP_UPDATE_DAYS,
+      practices,
+      link: `${origin}/group`,
+      unsubscribeUrl: unsubscribeUrl(a.id),
+      oneClickUrl: oneClick(origin, a.id),
+    }).catch(() => false);
+    if (ok) {
+      sent++;
+      await prisma.user.update({ where: { id: a.id }, data: { groupUpdateAt: new Date() } });
+    }
+  }
+  return { considered: admins.length, sent: dryRun ? plan.length : sent, plan };
 }
 
 /** Practices where nobody has practiced in 7 days: a weekly note to the admins. */
