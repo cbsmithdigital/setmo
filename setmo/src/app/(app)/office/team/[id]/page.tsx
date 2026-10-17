@@ -29,6 +29,7 @@ export default async function SetterDetailPage({
       controlsBasePath={`/office/team/${id}`}
       backHref="/office/team"
       backLabel="Team"
+      subtitlePrefix={t.baseline ? "Your free assessment" : undefined}
     />
   );
 }

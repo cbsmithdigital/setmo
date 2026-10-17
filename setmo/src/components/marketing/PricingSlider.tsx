@@ -4,12 +4,14 @@ import { useMemo, useState } from "react";
 import { tokenQuote, recommendTokens, TOKEN_STEP, minTokens, maxTokens, DEFAULT_PRICING, type PricingConfig } from "@/lib/pricing";
 
 // Marketing price-preview slider (light theme). Illustrative only — the real
-// purchase happens in-app after signup. Mirrors the in-app token pricing math.
-export function PricingSlider({ cfg = DEFAULT_PRICING }: { cfg?: PricingConfig }) {
+// purchase happens in-app after signup. Mirrors the in-app token pricing math;
+// `discountPct` is the monthly plan's account discount, so it shows what a new
+// practice actually pays.
+export function PricingSlider({ cfg = DEFAULT_PRICING, discountPct = 0 }: { cfg?: PricingConfig; discountPct?: number }) {
   const [people, setPeople] = useState("3");
   const recommended = useMemo(() => recommendTokens(Number(people) || 1, cfg), [people, cfg]);
   const [tokens, setTokens] = useState(recommended);
-  const quote = tokenQuote(tokens, cfg);
+  const quote = tokenQuote(tokens, cfg, discountPct);
   const MIN_T = minTokens(cfg);
   const MAX_T = maxTokens(cfg);
   const recPct = ((recommended - MIN_T) / (MAX_T - MIN_T)) * 100;
@@ -59,7 +61,7 @@ export function PricingSlider({ cfg = DEFAULT_PRICING }: { cfg?: PricingConfig }
         <span style={{ position: "absolute", right: 0 }}>{MAX_T.toLocaleString()}</span>
       </div>
       <p style={{ fontSize: 12, color: "var(--m-muted)", margin: "10px 0 0" }}>
-        Tokens roll over and never expire (10 tokens ≈ 1 minute of live AI). Bigger balances earn a better rate. Need more than {MAX_T.toLocaleString()}?{" "}
+        Tokens roll over and never expire (10 tokens ≈ 1 minute of live AI). Bigger balances earn a better rate{discountPct > 0 ? `, and prices shown include the monthly plan's ${discountPct}% token discount` : ""}. Need more than {MAX_T.toLocaleString()}?{" "}
         <a href="mailto:hello@growdental.ai,adam@growdental.ai?subject=SetMo%20bulk%20tokens" style={{ color: "var(--purple-deep)", fontWeight: 600 }}>Contact us for bulk pricing</a>.
       </p>
     </div>

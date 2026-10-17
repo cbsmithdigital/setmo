@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { loadAuditByCookie } from "@/lib/audit-auth";
-import { auditCallConnected } from "@/lib/audit";
+import { auditCallConnected, loadAuditAccess } from "@/lib/audit";
 import { error, json } from "@/lib/api";
 
 const Body = z.object({ sessionId: z.string().min(1).max(64), conversationId: z.string().max(200).optional() });
@@ -11,7 +10,7 @@ const Body = z.object({ sessionId: z.string().min(1).max(64), conversationId: z.
 // (a second window), this one is refused and the browser hangs it up.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const audit = await loadAuditByCookie(id);
+  const audit = await loadAuditAccess(id);
   if (!audit) return error("Unauthorized", 401);
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid request", 422);

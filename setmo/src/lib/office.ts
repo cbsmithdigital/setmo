@@ -2,6 +2,21 @@ import { prisma } from "@/lib/db";
 import { getAllowance, getSetterAnalytics, type AnalyticsRange } from "@/lib/queries";
 import { skillName, skillTier, skillShort, rubricFor } from "@/lib/skills";
 import { fullName, initialsOf } from "@/lib/format";
+import { getPlatformConfig, promoInfo } from "@/lib/config";
+import { activationFrom } from "@/lib/pricing";
+import { hasSignupBonusGrant } from "@/lib/usage";
+
+// The free assessment's stand-in setter (audit-…@prospect.setmo) owns the
+// baseline call but isn't a person, so it's never listed or counted as a teammate.
+const NOT_STAND_IN = { NOT: { email: { endsWith: "@prospect.setmo" } } };
+// The baseline call itself stays in the skill heatmap and on its own page (the
+// claim screen promises the practice keeps it), named as the baseline rather
+// than after the owner, who may not be the one who ran it.
+const isStandIn = (email: string) => email.endsWith("@prospect.setmo");
+const BASELINE_NAME = "Baseline assessment";
+
+// $44.95, $159 — cents only when there are some.
+const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
 // The default analytics window for office views — this calendar month, matching
 // the setter dashboard + the team-member detail page so numbers agree.
@@ -69,7 +84,7 @@ export type TeamRow = {
 export async function getOfficeTeam(officeId: string, range: AnalyticsRange = thisMonthRange()): Promise<TeamRow[]> {
   const [setters, sessions, recs] = await Promise.all([
     prisma.user.findMany({
-      where: { officeId, role: "SETTER", status: "ACTIVE" },
+      where: { officeId, role: "SETTER", status: "ACTIVE", ...NOT_STAND_IN },
       select: { id: true, firstName: true, lastName: true },
     }),
     prisma.session.findMany({
@@ -139,7 +154,7 @@ export async function getOfficeMembers(officeId: string): Promise<MemberRow[]> {
   // shown to prospects.
   const office = await prisma.office.findUnique({ where: { id: officeId }, select: { isDemo: true } });
   const users = await prisma.user.findMany({
-    where: { officeId, ...(office?.isDemo ? { partnerId: null } : {}) },
+    where: { officeId, ...NOT_STAND_IN, ...(office?.isDemo ? { partnerId: null } : {}) },
     select: { id: true, email: true, firstName: true, lastName: true, role: true, status: true, memberships: { select: { role: true } } },
     orderBy: [{ firstName: "asc" }, { email: "asc" }],
   });
@@ -203,7 +218,7 @@ export async function getOfficeSkillHeatmap(officeId: string, range: AnalyticsRa
 // SkillMatrix component renders for the group (one level down).
 export async function getOfficeSkillMatrix(officeId: string, range: AnalyticsRange = thisMonthRange()) {
   const [setters, sessions] = await Promise.all([
-    prisma.user.findMany({ where: { officeId, role: "SETTER" }, select: { id: true, firstName: true, lastName: true } }),
+    prisma.user.findMany({ where: { officeId, role: "SETTER" }, select: { id: true, email: true, firstName: true, lastName: true } }),
     prisma.session.findMany({
       where: { officeId, callCenterOrgId: null, kind: "PRACTICE", status: "SCORED", durationSeconds: { gte: 60 }, startedAt: { gte: range.from, lte: range.to }, evaluation: { isNot: null } },
       include: { evaluation: { omit: { rawPayload: true }, include: { skills: true } } },
@@ -227,7 +242,7 @@ export async function getOfficeSkillMatrix(officeId: string, range: AnalyticsRan
     acc.set(s.setterId, a);
   }
 
-  const nameById = new Map(setters.map((u) => [u.id, fullName(u.firstName, u.lastName)]));
+  const nameById = new Map(setters.map((u) => [u.id, isStandIn(u.email) ? BASELINE_NAME : fullName(u.firstName, u.lastName)]));
   const rows = [...acc.entries()]
     .map(([id, a]) => ({
       id,
@@ -279,20 +294,30 @@ export async function getOutcome(officeId: string, periodLabel: string) {
 // First-run activation checklist for a new account. Each step auto-completes from
 // real state; the card hides once everything's done.
 export async function getOnboarding(officeId: string) {
-  const [sub, allowance, setterCount, office] = await Promise.all([
+  const [sub, allowance, setterCount, office, cfg] = await Promise.all([
     prisma.subscription.findUnique({ where: { officeId }, select: { status: true } }),
     getAllowance(officeId),
-    prisma.user.count({ where: { officeId, role: "SETTER" } }),
+    prisma.user.count({ where: { officeId, role: "SETTER", ...NOT_STAND_IN } }),
     prisma.office.findUnique({ where: { id: officeId }, select: { isDemo: true } }),
+    getPlatformConfig(),
   ]);
   // A demo account is set up and funded by SetMo — there's nothing to activate,
   // buy or invite, so the checklist never shows.
   if (office?.isDemo) return { steps: [], doneCount: 0, allDone: true };
+  const active = sub?.status === "ACTIVE";
+  // Day one, from the live config (the checkout's math): a month of access plus
+  // starter tokens, or access alone while this office can still get the sign-up
+  // promo's bonus tokens (same rule as the billing page).
+  const start = activationFrom(cfg, cfg.monthlyTokenDiscountPct);
+  const promo = !active && !(await hasSignupBonusGrant(officeId)) ? promoInfo(cfg) : null;
+  const accessDesc = promo && promo.monthlyTokens > 0
+    ? `${usd(start.access)}/mo, with ${promo.monthlyTokens.toLocaleString()} free tokens if you activate by ${promo.endsAt} — cancel anytime`
+    : `${usd(start.access)}/mo plus starter tokens from ${usd(start.starter)} — month-to-month, cancel anytime`;
   // Office-admin setup only — running a practice call is a setter step
   // (see getSetterOnboarding), so it's intentionally not listed here.
   const steps = [
-    { key: "access", label: "Activate Practice Access", desc: "$44.95/mo — month-to-month, cancel anytime", href: "/office/billing", cta: "Activate", done: sub?.status === "ACTIVE" },
-    { key: "minutes", label: "Add practice minutes", desc: "Buy a balance — every call draws from it", href: "/office/billing", cta: "Buy minutes", done: allowance.purchasedMin > 0 },
+    { key: "access", label: "Activate Practice Access", desc: accessDesc, href: "/office/billing", cta: "Activate", done: active },
+    { key: "minutes", label: "Add practice tokens", desc: active ? "Buy a token balance — every call draws from it" : "Starter tokens come with activation — every call draws from them", href: "/office/billing", cta: "Buy tokens", done: allowance.purchasedMin > 0 },
     { key: "team", label: "Invite your team", desc: "Add setters & managers — free and unlimited", href: "/office/team", cta: "Invite", done: setterCount >= 1 },
   ];
   return { steps, doneCount: steps.filter((s) => s.done).length, allDone: steps.every((s) => s.done) };
@@ -301,9 +326,10 @@ export async function getOnboarding(officeId: string) {
 export async function getOfficeSetterDetail(officeId: string, setterId: string, range?: AnalyticsRange) {
   const setter = await prisma.user.findFirst({
     where: { id: setterId, officeId, role: "SETTER" },
-    select: { id: true, firstName: true, lastName: true },
+    select: { id: true, email: true, firstName: true, lastName: true },
   });
   if (!setter) return null;
+  const baseline = isStandIn(setter.email);
 
   // Same period analytics the setter sees — windowed, vs the previous period,
   // <1-min calls excluded, and the chart carries all 8 skills + overall.
@@ -346,7 +372,8 @@ export async function getOfficeSetterDetail(officeId: string, setterId: string, 
 
   return {
     id: setter.id,
-    name: fullName(setter.firstName, setter.lastName),
+    name: baseline ? BASELINE_NAME : fullName(setter.firstName, setter.lastName),
+    baseline,
     avg: a.overallAvg,
     delta: a.overallDelta,
     hasPrior: a.hasPrior,

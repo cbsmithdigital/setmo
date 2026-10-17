@@ -23,6 +23,8 @@ export async function POST(req: Request) {
 
   const target = await prisma.user.findUnique({ where: { id: parsed.data.userId }, select: { email: true, status: true, officeId: true } });
   if (!target || target.officeId !== user.officeId) return error("User not found in your office", 404);
+  // The free assessment's stand-in setter isn't a person; its address goes nowhere.
+  if (target.email.endsWith("@prospect.setmo")) return error("That's a placeholder from your free assessment, not a teammate, so there's no invite to send.", 422);
   if (target.status !== "INVITED") return error("That user has already joined", 409);
   if (!target.email) return error("That user has no email on file", 422);
 

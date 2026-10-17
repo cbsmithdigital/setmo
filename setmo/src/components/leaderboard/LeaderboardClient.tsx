@@ -8,6 +8,8 @@ type Row = {
   name: string;
   sub?: string;
   initials: string;
+  // Another practice on the global board: no name or initials, so a plain icon.
+  anonymous?: boolean;
   score: number;
   movement: number;
   me?: boolean;
@@ -59,13 +61,19 @@ export function LeaderboardClient({
   const secondaryLabel = isCenter ? "Pods" : isAgent ? "Whole call center" : "Global · practices";
   const secondaryIcon = "shield" as const;
   const emptyNoun = scope === "office" ? (isCenter || isAgent ? "agents" : "setters") : isCenter ? "pods" : isAgent ? "agents" : "practices";
+  // An empty practices board usually means too few practices rank yet to keep
+  // each one anonymous (getGlobalLeaderboard), not that none do.
+  const emptyText =
+    emptyNoun === "practices"
+      ? "Global standings appear here once enough practices are ranked."
+      : `No ranked ${emptyNoun} yet — scores appear here after sessions are graded.`;
   const footer =
     scope === "global"
       ? isCenter
         ? "Pod standings — how each pod's agents average out. Balanced coaching lifts the whole floor."
         : isAgent
           ? "Center-wide rankings across every pod — climb by improving your average, not by taking more calls."
-          : "Global rankings show practice-level standings only — individual names stay inside each office."
+          : "Global rankings show practice-level standings only — other practices stay anonymous, and individual names stay inside each office."
       : isCenter
         ? "Every agent across your call center, ranked on average — improvement beats call volume."
         : "Rankings update after each scored session. Climb by improving, not by grinding volume.";
@@ -100,7 +108,7 @@ export function LeaderboardClient({
 
         {rows.length === 0 ? (
           <div className="card card-pad muted" style={{ fontSize: 14 }}>
-            No ranked {emptyNoun} yet — scores appear here after sessions are graded.
+            {emptyText}
           </div>
         ) : (
           <>
@@ -130,10 +138,11 @@ export function LeaderboardClient({
                         className="lb-av"
                         style={{ width: tall ? 56 : 46, height: tall ? 56 : 46, fontSize: tall ? 17 : 14, margin: "0 auto 12px", background: place === 1 ? "linear-gradient(135deg,#fbbf24,#f59e0b)" : "var(--grad)" }}
                       >
-                        {p.initials}
+                        {p.anonymous ? <Icon name="building" size={tall ? 24 : 20} /> : p.initials}
                       </div>
                       <div style={{ fontWeight: 700, fontSize: tall ? 16 : 14.5 }}>{showMe(p) ? "You" : p.name}</div>
-                      <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>{subFor(p)}</div>
+                      {/* other practices have no subtitle; a blank line keeps the podium cards level */}
+                      <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>{subFor(p) || "\u00a0"}</div>
                       <div className="mint-text" style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: tall ? 38 : 30 }}>
                         {p.score.toFixed(1)}
                       </div>
@@ -149,7 +158,7 @@ export function LeaderboardClient({
                 {rows.map((p) => (
                   <div key={p.rank} className={"lb-row" + (p.me ? " me" : "") + (p.top ? " top" : "")}>
                     <div className="lb-rank">{p.rank}</div>
-                    <div className="lb-av">{p.initials}</div>
+                    <div className="lb-av">{p.anonymous ? <Icon name="building" size={18} /> : p.initials}</div>
                     <div className="lb-nm">
                       {showMe(p) ? "You" : p.name}
                       <small>{subFor(p)}</small>

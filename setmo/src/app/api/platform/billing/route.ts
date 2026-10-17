@@ -2,7 +2,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getPlatformActor } from "@/lib/auth";
 import { logAdminAction } from "@/lib/platform";
-import { createRecurringBillingCheckout, createBillingPortalSession, isStripeConfigured } from "@/lib/stripe";
+import { createRecurringBillingCheckout, createBillingPortalSession, isPortalNotConfigured, isStripeConfigured } from "@/lib/stripe";
+import { captureError } from "@/lib/observability";
 import { error, json } from "@/lib/api";
 
 const Body = z.discriminatedUnion("action", [
@@ -42,8 +43,18 @@ export async function POST(req: Request) {
 
   if (parsed.data.action === "portal") {
     if (!office.stripeCustomerId) return error("No card on file yet — set up billing first.", 409);
-    const url = await createBillingPortalSession({ customerId: office.stripeCustomerId, returnUrl: `${origin}${returnPath}` });
-    return json({ url });
+    try {
+      const url = await createBillingPortalSession({ customerId: office.stripeCustomerId, returnUrl: `${origin}${returnPath}` });
+      return json({ url });
+    } catch (e) {
+      captureError(e, { scope: "platform-billing-portal", officeId });
+      return error(
+        isPortalNotConfigured(e)
+          ? "Stripe's customer portal isn't saved in live mode — Dashboard → Settings → Billing → Customer portal, then Save."
+          : "Stripe refused the portal session — see the Vercel logs.",
+        502,
+      );
+    }
   }
 
   // setup_recurring — billing contact: the chosen email, else the office admin.

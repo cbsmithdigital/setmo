@@ -76,12 +76,25 @@ export const isBulk = (minutes: number, cfg: PricingConfig = DEFAULT_PRICING) =>
 // ===========================================================================
 export const TOKENS_PER_MINUTE = 10;
 export const TOKEN_STEP = MINUTE_STEP * TOKENS_PER_MINUTE; // 100
-export const MINUTES_PER_CALL = 5; // ≈ typical practice call — calibrate after the first 9 sessions
-export const TOKENS_PER_CALL = MINUTES_PER_CALL * TOKENS_PER_MINUTE; // 50
+export const MINUTES_PER_CALL = 6.5; // ≈ typical practice call — 64 real scored calls averaged ~6.6 min (Oct 2026)
+export const TOKENS_PER_CALL = MINUTES_PER_CALL * TOKENS_PER_MINUTE; // 65
+
+// Default account discount on a monthly account's token purchases. The live
+// value is platform config (getPlatformConfig().monthlyTokenDiscountPct); this is
+// for client components that can't read it.
+export const DEFAULT_MONTHLY_TOKEN_DISCOUNT_PCT = 8;
 
 export const minutesToTokens = (m: number) => Math.round(m * TOKENS_PER_MINUTE);
 export const tokensToMinutes = (t: number) => Math.round(t / TOKENS_PER_MINUTE);
-export const tokensToCalls = (t: number) => Math.round(t / TOKENS_PER_CALL);
+
+/** ≈ practice calls a minute balance covers. It's an estimate, so it rounds
+ *  down (to a multiple of 5 past a handful) and never promises more calls than
+ *  the minutes buy. */
+export function minutesToCalls(minutes: number): number {
+  const calls = Math.floor(minutes / MINUTES_PER_CALL);
+  return calls >= 10 ? Math.floor(calls / 5) * 5 : Math.max(0, calls);
+}
+export const tokensToCalls = (t: number) => minutesToCalls(t / TOKENS_PER_MINUTE);
 export const minTokens = (cfg: PricingConfig = DEFAULT_PRICING) => cfg.minMinutes * TOKENS_PER_MINUTE;
 export const maxTokens = (cfg: PricingConfig = DEFAULT_PRICING) => cfg.maxMinutes * TOKENS_PER_MINUTE;
 
@@ -105,13 +118,28 @@ export function tokenQuote(tokens: number, cfg: PricingConfig = DEFAULT_PRICING,
   return {
     tokens: tk,
     minutes: q.minutes,
-    perToken: round2(total / tk),
+    perToken: Math.round((total / tk) * 1000) / 1000, // shown to 3 decimals, so round there ($0.066, not $0.07)
     total,
     listTotal,
     volumeDiscountPct: q.discountPct,
     accountDiscountPct,
-    calls: Math.round(q.minutes / MINUTES_PER_CALL),
+    calls: minutesToCalls(q.minutes),
   };
+}
+
+export type ActivationCost = {
+  access: number; // first month of Practice Access
+  starterTokens: number; // the smallest starter balance
+  starter: number; // $ for it, after the monthly account discount
+  total: number; // $ due on day one, before tax
+};
+
+/** The smallest first payment on the monthly plan: a month of access plus the
+ *  minimum starter tokens, which activation requires unless a sign-up promo is
+ *  live (its bonus tokens are the starter balance). Same math as the checkout. */
+export function activationFrom(cfg: PricingConfig = DEFAULT_PRICING, monthlyDiscountPct = DEFAULT_MONTHLY_TOKEN_DISCOUNT_PCT): ActivationCost {
+  const starter = tokenQuote(minTokens(cfg), cfg, monthlyDiscountPct);
+  return { access: cfg.accessMonthly, starterTokens: starter.tokens, starter: starter.total, total: round2(cfg.accessMonthly + starter.total) };
 }
 
 /** Recommended starting tokens from how many people are on the phones. */

@@ -16,14 +16,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid request", 422);
 
-  const part = await prisma.goalParticipant.findUnique({ where: { id }, select: { goal: { select: { officeId: true, organizationId: true } } } });
+  const part = await prisma.goalParticipant.findUnique({ where: { id }, select: { goal: { select: { officeId: true, organizationId: true, office: { select: { organizationId: true } } } } } });
   if (!part) return error("Not found", 404);
   const role = getActiveRole(user);
   const g = part.goal;
+  // A group admin decides rewards on the group's own goals and on any practice
+  // goal at one of its locations (the approval push sends them to that office's page).
   const canManage =
     role === "PLATFORM_ADMIN" ||
-    (role === "OFFICE_ADMIN" && g.officeId === user.officeId) ||
-    (role === "GROUP_ADMIN" && g.organizationId === user.organizationId);
+    (role === "OFFICE_ADMIN" && Boolean(user.officeId) && g.officeId === user.officeId) ||
+    (role === "GROUP_ADMIN" && Boolean(user.organizationId) && (g.organizationId === user.organizationId || g.office?.organizationId === user.organizationId));
   if (!canManage) return error("Forbidden", 403);
 
   const res = await decideReward(id, parsed.data.action, user.id);

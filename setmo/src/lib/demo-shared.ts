@@ -13,7 +13,7 @@ export const DEMO_LOW_BALANCE_MIN = 100;
 
 /** What a demo user sees instead of a Stripe checkout. */
 export const DEMO_BILLING_MESSAGE =
-  "This is a demo account — minutes are topped up by the SetMo team, so there's nothing to buy here.";
+  "This is a demo account — tokens are topped up by the SetMo team, so there's nothing to buy here.";
 
 /** What a demo user sees instead of sending an invite. Inviting a prospect into a
  *  demo account would tie their email to it and block them from signing up for

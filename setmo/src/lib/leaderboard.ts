@@ -35,13 +35,17 @@ export async function recomputeOfficeLeaderboard(
   await materialize("OFFICE", "SETTER", serviceType, ranked, { officeId });
 }
 
-/** Global scope: rank offices by their average score (privacy-respecting).
- *  Excluded: audit calls and prospect offices (a stranger's trial call has no
- *  place on a customer board), and call-center agent calls — those are the call
- *  center's reps, and crediting them to the served practice would publish
- *  practices that have no SetMo users of their own. Demo / test accounts never
- *  rank against customers (see getGlobalLeaderboard for the demo-only board
- *  their own users see instead). */
+/** Global scope: rank offices by their average score (privacy-respecting; the
+ *  board names only the viewer's own practice, see getGlobalLeaderboard).
+ *  Only current clients rank: Practice Access on, or a renewal Stripe is still
+ *  retrying (the same rule as accessState in usage.ts), so an office that never
+ *  activated or has lapsed drops off. Excluded: audit calls and prospect offices
+ *  (a stranger's trial call has no place on a customer board), and call-center
+ *  agent calls — those are the call center's reps, and crediting them to the
+ *  served practice would publish practices that have no SetMo users of their
+ *  own. Demo / test accounts (the office or its organization) never rank against
+ *  customers (see getGlobalLeaderboard for the demo-only board their own users
+ *  see instead). */
 export async function recomputeGlobalLeaderboard(
   serviceType: ServiceKey = DEFAULT_SERVICE
 ): Promise<void> {
@@ -50,10 +54,13 @@ export async function recomputeGlobalLeaderboard(
       FROM session s
       JOIN evaluation e ON e.session_id = s.id
       JOIN office o ON o.id = s.office_id
+      JOIN subscription sub ON sub.office_id = o.id
+      LEFT JOIN organization g ON g.id = o.organization_id
      WHERE s.service_type::text = ${serviceType}
        AND s.kind::text = 'PRACTICE' AND s.status::text = 'SCORED'
        AND NOT s.is_audit AND s.call_center_org_id IS NULL
-       AND NOT o.is_prospect AND NOT o.is_demo
+       AND NOT o.is_prospect AND NOT o.is_demo AND NOT COALESCE(g.is_demo, false)
+       AND sub.status::text IN ('ACTIVE', 'PAST_DUE')
        AND e.overall_score IS NOT NULL
      GROUP BY s.office_id
      ORDER BY value DESC`;

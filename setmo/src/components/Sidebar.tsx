@@ -76,6 +76,7 @@ const NAV_PLATFORM: NavItem[] = [
 const NAV_PLATFORM_SUPER: NavItem[] = [
   ...NAV_PLATFORM,
   { href: "/platform/callcenter", label: "Call centers", icon: "building" },
+  { href: "/platform/assessments", label: "Assessments", icon: "check" },
   { href: "/platform/ghl", label: "GHL live calls", icon: "sound" },
   { href: "/platform/config", label: "Configuration", icon: "gear" },
   { href: "/platform/admins", label: "Internal admins", icon: "team" },

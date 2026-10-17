@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { prisma } from "@/lib/db";
+import { inDemoAccount } from "@/lib/demo-shared";
 import { getAdminClient, isAdminConfigured } from "@/lib/supabase/admin";
 import { confirmLink } from "@/lib/invites";
 import { sendPasswordResetEmail } from "@/lib/email";
@@ -24,6 +26,13 @@ export async function POST(req: Request) {
 
   if (isAdminConfigured()) {
     try {
+      // Demo logins use made-up addresses, some on domains we don't own, so a reset
+      // link for one would go to a stranger. Their passwords are managed by the team.
+      const user = await prisma.user.findFirst({
+        where: { email: { equals: parsed.data.email.trim(), mode: "insensitive" } },
+        select: { office: { select: { isDemo: true } }, organization: { select: { isDemo: true } } },
+      });
+      if (user && inDemoAccount(user)) return json({ ok: true });
       const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
       const admin = getAdminClient();
       const { data } = await admin.auth.admin.generateLink({

@@ -4,8 +4,9 @@ import { useState } from "react";
 import { SettyConversation } from "@/components/audit/SettyConversation";
 
 // Floating "Talk to Setty" launcher on the audit results page → opens the
-// briefed ElevenLabs voice session.
-export function SettyButton({ auditId, practiceName }: { auditId: string; practiceName: string }) {
+// briefed ElevenLabs voice session. `canActivate`: this page offers the
+// activation (not a setter's link or an office that already has an account).
+export function SettyButton({ auditId, practiceName, canActivate }: { auditId: string; practiceName: string; canActivate: boolean }) {
   const [open, setOpen] = useState(false);
   const [live, setLive] = useState(false);
 
@@ -31,7 +32,7 @@ export function SettyButton({ auditId, practiceName }: { auditId: string; practi
         </div>
       )}
 
-      {live && <SettyConversation auditId={auditId} onClose={() => { setLive(false); setOpen(false); }} />}
+      {live && <SettyConversation auditId={auditId} canActivate={canActivate} onClose={() => { setLive(false); setOpen(false); }} />}
 
       <button
         onClick={() => setOpen((o) => !o)}

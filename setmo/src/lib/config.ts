@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { prisma } from "@/lib/db";
-import { DEFAULT_PRICING, type PricingConfig } from "@/lib/pricing";
+import { DEFAULT_PRICING, DEFAULT_MONTHLY_TOKEN_DISCOUNT_PCT, type PricingConfig } from "@/lib/pricing";
 
 // Effective platform config = DB row (if any) merged over code defaults. The
 // PricingConfig slice is what the pricing functions consume.
@@ -20,7 +20,7 @@ export type PlatformConfig = PricingConfig & {
 
 export const DEFAULT_CONFIG: PlatformConfig = {
   ...DEFAULT_PRICING,
-  monthlyTokenDiscountPct: 8,
+  monthlyTokenDiscountPct: DEFAULT_MONTHLY_TOKEN_DISCOUNT_PCT,
   annualTokenDiscountPct: 15,
   groupFreeMinutesMonthly: 120,
   groupTokenDiscountPct: 50,

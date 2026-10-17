@@ -1,7 +1,8 @@
 import { getCurrentUser, getActiveRole } from "@/lib/auth";
-import { createBillingPortalSession, isStripeConfigured } from "@/lib/stripe";
+import { createBillingPortalSession, isPortalNotConfigured, isStripeConfigured } from "@/lib/stripe";
 import { error, json } from "@/lib/api";
 import { inDemoAccount, DEMO_BILLING_MESSAGE } from "@/lib/demo-shared";
+import { captureError } from "@/lib/observability";
 
 // POST /api/group/billing-portal — open the Stripe customer portal for the group's
 // coach-token wallet customer, so a group/DSO admin can update or remove their card
@@ -21,6 +22,13 @@ export async function POST(req: Request) {
     const url = await createBillingPortalSession({ customerId, returnUrl: `${origin}/group/billing` });
     return json({ url });
   } catch (e) {
-    return error(e instanceof Error ? e.message : "Couldn't open billing portal", 502);
+    // The admin gets a message they can act on; Stripe's details go to the logs.
+    captureError(e, { scope: "group-billing-portal", organizationId: user.organizationId, customerId });
+    return error(
+      isPortalNotConfigured(e)
+        ? "The billing portal isn't available right now. Email hello@growdental.ai and we'll update your card or send your receipts."
+        : "Couldn't open the billing portal just now. Try again in a minute, or email hello@growdental.ai.",
+      502,
+    );
   }
 }

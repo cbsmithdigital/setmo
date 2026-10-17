@@ -41,7 +41,9 @@ Create a repo and push this project. Vercel deploys from it.
    DATABASE_URL=... DIRECT_URL=... pnpm db:push
    DATABASE_URL=... DIRECT_URL=... NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... pnpm db:seed
    ```
-   Seeding creates demo logins (password `SetMo-demo-2026`, e.g. `sam@brightworkdental.com`).
+   Seeding creates demo logins (e.g. `sam@brightworkdental.com`) with the password in
+   `SETMO_DEMO_PASSWORD`. Set it in `setmo/.env.local` first and never commit it; the seed
+   stops without it. Only the seed scripts read it, so it doesn't go in Vercel.
    For real testers instead, skip the seed and invite them from the Office Admin → Usage &
    billing screen once deployed.
 
@@ -61,6 +63,11 @@ Create a repo and push this project. Vercel deploys from it.
    configure data-collection fields in ElevenLabs (the parser in `src/lib/elevenlabs.ts` is
    tolerant, and `rawPayload` is always stored so nothing is lost while mapping). Until this
    emits structured data, results screens won't populate from real calls.
+5. **Authentication:** in the **Security** tab of every agent the app uses (practice, coach,
+   Setty), turn on **authentication** and save. The app starts every call through a signed
+   URL it mints on the server, so calls keep working and nobody can start one with the bare
+   agent id. Don't also add an allowlist: ElevenLabs says not to use signed URLs and an
+   allowlist on the same agent.
 
 ## 4. Stripe (test mode is fine)
 1. Copy **Secret key** → `STRIPE_SECRET_KEY` (use a `sk_test_…` key for testing).

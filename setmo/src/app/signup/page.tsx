@@ -1,4 +1,5 @@
 import { getPlatformConfig, promoInfo } from "@/lib/config";
+import { activationFrom } from "@/lib/pricing";
 import { SignupClient } from "@/components/marketing/SignupClient";
 
 // Dynamic so the sign-up promo banner reflects live platform config (same
@@ -7,5 +8,5 @@ export const dynamic = "force-dynamic";
 
 export default async function SignupPage() {
   const cfg = await getPlatformConfig();
-  return <SignupClient promo={promoInfo(cfg)} />;
+  return <SignupClient promo={promoInfo(cfg)} start={activationFrom(cfg, cfg.monthlyTokenDiscountPct)} />;
 }

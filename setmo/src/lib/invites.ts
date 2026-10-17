@@ -130,6 +130,7 @@ export async function inviteUsers(opts: {
 /** Re-mint and re-send an invite link for an existing invited user. `reminder`
  *  sends the "your invite is waiting" wording (lib/nudges). */
 export async function resendInvite(opts: { email: string; contextName: string; inviterName: string; origin: string; reminder?: boolean }): Promise<{ ok: boolean; previewLink?: string }> {
+  if (opts.email.endsWith("@prospect.setmo")) return { ok: false }; // assessment stand-in, not a person
   const admin = getAdminClient();
   const redirectTo = `${opts.origin}/auth/confirm?next=/invite`;
   const { data, error: linkErr } = await admin.auth.admin.generateLink({ type: "invite", email: opts.email, options: { redirectTo } });

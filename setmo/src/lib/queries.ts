@@ -636,7 +636,7 @@ async function demoGlobalBoard(): Promise<{ subjectId: string; rank: number; val
       status: "SCORED",
       isAudit: false,
       callCenterOrgId: null,
-      office: { isDemo: true },
+      office: { OR: [{ isDemo: true }, { organization: { isDemo: true } }] },
       evaluation: { isNot: null },
     },
     select: { officeId: true, evaluation: { select: { overallScore: true } } },
@@ -654,25 +654,51 @@ async function demoGlobalBoard(): Promise<{ subjectId: string; rank: number; val
     .map((r, i) => ({ ...r, rank: i + 1, movement: 0 }));
 }
 
-// ---------- global leaderboard (privacy: office/group standings only) ----------
+/** The materialized GLOBAL rows, kept to offices that are current clients right
+ *  now and re-ranked. The cron already ranks only those (recomputeGlobalLeaderboard,
+ *  same rule as accessState in usage.ts); this re-check means an office whose
+ *  access lapsed since the last 15-minute rebuild drops off at once. */
+async function realGlobalBoard(): Promise<{ subjectId: string; rank: number; value: number; movement: number }[]> {
+  const rows = await prisma.leaderboardEntry.findMany({
+    where: { scope: "GLOBAL", serviceType: "IMPLANT" },
+    orderBy: { rank: "asc" },
+    select: { subjectId: true, rank: true, value: true, movement: true },
+  });
+  const current = await prisma.office.findMany({
+    where: {
+      id: { in: rows.map((r) => r.subjectId) },
+      isProspect: false,
+      isDemo: false,
+      OR: [{ organizationId: null }, { organization: { isDemo: false } }],
+      subscription: { status: { in: ["ACTIVE", "PAST_DUE"] } },
+    },
+    select: { id: true },
+  });
+  const keep = new Set(current.map((o) => o.id));
+  return rows.filter((r) => keep.has(r.subjectId)).map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
+// ---------- global leaderboard (privacy: office standings, de-identified) ----------
+// Comparisons across customers use de-identified data (Terms §10): the viewer's
+// own practice keeps its name, and every other practice is "Practice #<rank>",
+// with no name, city, group or initials. A short board would still give practices
+// away (with two ranked, the other row can only be one practice), so it stays
+// empty until at least this many practices rank.
+const GLOBAL_BOARD_MIN_PRACTICES = 5;
+
 export async function getGlobalLeaderboard(viewerOfficeId: string | null) {
   // A demo account sees a board of demo accounts only. Two reasons: demo offices
   // are kept off the real board, and a partner demoing to a prospect must never
-  // put real customers' practice names on screen.
-  const viewerIsDemo = viewerOfficeId
-    ? Boolean((await prisma.office.findUnique({ where: { id: viewerOfficeId }, select: { isDemo: true } }))?.isDemo)
-    : false;
-  const board = viewerIsDemo
-    ? await demoGlobalBoard()
-    : await prisma.leaderboardEntry.findMany({
-        where: { scope: "GLOBAL", serviceType: "IMPLANT" },
-        orderBy: { rank: "asc" },
-      });
-  const offices = await prisma.office.findMany({
-    where: { id: { in: board.map((b) => b.subjectId) } },
-    include: { organization: true },
-  });
-  const by = new Map(offices.map((o) => [o.id, o]));
+  // put real customers on screen.
+  const mine = viewerOfficeId
+    ? await prisma.office.findUnique({
+        where: { id: viewerOfficeId },
+        select: { name: true, city: true, isDemo: true, organization: { select: { name: true, isDemo: true } } },
+      })
+    : null;
+  const viewerIsDemo = Boolean(mine?.isDemo || mine?.organization?.isDemo);
+  const board = viewerIsDemo ? await demoGlobalBoard() : await realGlobalBoard();
+  if (board.length < GLOBAL_BOARD_MIN_PRACTICES) return [];
 
   const officeInitials = (name: string) =>
     name
@@ -682,15 +708,16 @@ export async function getGlobalLeaderboard(viewerOfficeId: string | null) {
       .join("") || "?";
 
   return board.map((b) => {
-    const o = by.get(b.subjectId);
+    const own = mine != null && b.subjectId === viewerOfficeId;
     return {
       rank: b.rank,
-      name: o?.name ?? "Practice",
-      sub: o?.organization?.name ?? o?.city ?? "Independent",
-      initials: o ? officeInitials(o.name) : "?",
+      name: own ? mine.name : `Practice #${b.rank}`,
+      sub: own ? (mine.organization?.name ?? mine.city ?? "Independent") : "",
+      initials: own ? officeInitials(mine.name) : "",
+      anonymous: !own,
       score: Number(b.value),
       movement: b.movement,
-      me: viewerOfficeId != null && b.subjectId === viewerOfficeId,
+      me: own,
       top: b.rank === 1,
     };
   });

@@ -6,7 +6,8 @@
  * in, plus the matching application rows. Idempotent: safe to re-run.
  *
  * Run: pnpm db:seed   (requires .env.local with DATABASE_URL/DIRECT_URL +
- *                      NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)
+ *                      NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY +
+ *                      SETMO_DEMO_PASSWORD, the demo logins' password)
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
@@ -21,7 +22,8 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
 });
 
-const DEMO_PASSWORD = "SetMo-demo-2026";
+// The demo logins' password lives only in .env.local — never commit it.
+const DEMO_PASSWORD = process.env.SETMO_DEMO_PASSWORD ?? "";
 
 // Stable ids for idempotent upserts.
 const ORG_ID = "00000000-0000-0000-0000-000000000001";
@@ -78,6 +80,12 @@ async function main() {
       "⚠ SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_URL not set — " +
         "seeding app data only; auth users will NOT be created (login won't work)."
     );
+  } else if (!DEMO_PASSWORD) {
+    console.error(
+      "✖ SETMO_DEMO_PASSWORD is not set. Add it to .env.local (never commit it) — " +
+        "it's the password the demo logins are created with. Nothing was seeded."
+    );
+    process.exit(1);
   }
 
   // ---------- organization + office ----------
@@ -379,6 +387,8 @@ async function main() {
       update: {},
       create: { id: sib.id, organizationId: ORG_ID, name: sib.name, city: sib.city, seatCount: 6 },
     });
+    // The global board only ranks current clients, so give each sibling access.
+    await prisma.subscription.upsert({ where: { officeId: sib.id }, update: { status: "ACTIVE" }, create: { officeId: sib.id, status: "ACTIVE" } });
     for (let k = 0; k < 2; k++) {
       const sid = `00000000-0000-0000-0000-0000000200${String(synth++).padStart(2, "0")}`;
       await prisma.user.upsert({
@@ -450,7 +460,7 @@ async function main() {
 
   console.log("\n✅ Seed complete.");
   if (sb) {
-    console.log("\nDemo logins (password for all):", DEMO_PASSWORD);
+    console.log("\nDemo logins (password for all: your SETMO_DEMO_PASSWORD):");
     console.log("  Setter:        sam@brightworkdental.com");
     console.log("  Office admin:  lena@brightworkdental.com");
     console.log("  Other setters: jordan@, maya@, theo@, priya@, marcus@brightworkdental.com");

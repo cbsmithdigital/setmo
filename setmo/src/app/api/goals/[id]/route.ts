@@ -16,13 +16,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid request", 422);
 
-  const goal = await prisma.goal.findUnique({ where: { id }, select: { officeId: true, organizationId: true } });
+  const goal = await prisma.goal.findUnique({ where: { id }, select: { officeId: true, organizationId: true, office: { select: { organizationId: true } } } });
   if (!goal) return error("Not found", 404);
   const role = getActiveRole(user);
+  // A group admin runs the group's own goals and any practice goal at one of its
+  // locations (the office Goals page and its approval push reach them too).
   const canManage =
     role === "PLATFORM_ADMIN" ||
-    (role === "OFFICE_ADMIN" && goal.officeId === user.officeId) ||
-    (role === "GROUP_ADMIN" && goal.organizationId === user.organizationId);
+    (role === "OFFICE_ADMIN" && Boolean(user.officeId) && goal.officeId === user.officeId) ||
+    (role === "GROUP_ADMIN" && Boolean(user.organizationId) && (goal.organizationId === user.organizationId || goal.office?.organizationId === user.organizationId));
   if (!canManage) return error("Forbidden", 403);
 
   if (parsed.data.action === "archive") {

@@ -15,6 +15,7 @@ const Body = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(200),
   ref: z.string().max(60).optional().nullable(),
+  agree: z.literal(true), // agreed to the Terms of Service and Privacy Policy
 });
 
 // POST /api/auth/signup — self-serve account creation. Free signup; the practice
@@ -28,8 +29,12 @@ export async function POST(req: Request) {
     { key: `signup:ip-day:${ip}`, limit: 20, windowSeconds: DAY },
   ]);
   if (!limit.ok) return tooMany(limit.retryAfter);
-  const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return error("Check the form and try again.", 422);
+  const raw = await req.json().catch(() => null);
+  const parsed = Body.safeParse(raw);
+  if (!parsed.success) {
+    const agreed = Boolean(raw && typeof raw === "object" && (raw as { agree?: unknown }).agree === true);
+    return error(agreed ? "Check the form and try again." : "Please agree to the Terms of Service and Privacy Policy to continue.", 422);
+  }
   const b = parsed.data;
 
   // The link's code if the form carried one, else the first-touch cookie from an
@@ -44,6 +49,7 @@ export async function POST(req: Request) {
     password: b.password,
     referralCode: b.ref ?? undefined,
     cookieReferralCode: cookieRef,
+    termsAcceptedAt: new Date(),
   });
   if (!res.ok) return error(res.error, res.code);
   return json({ ok: true });

@@ -7,7 +7,7 @@ import { mmss } from "@/lib/format";
 type Phase = "connecting" | "live" | "ended" | "error";
 const MAX_SECONDS = 20 * 60; // generous safety cap
 
-function Inner({ auditId, onClose }: { auditId: string; onClose: () => void }) {
+function Inner({ auditId, canActivate, onClose }: { auditId: string; canActivate: boolean; onClose: () => void }) {
   const [phase, setPhase] = useState<Phase>("connecting");
   const [secs, setSecs] = useState(0);
   const [err, setErr] = useState<string | null>(null);
@@ -73,7 +73,7 @@ function Inner({ auditId, onClose }: { auditId: string; onClose: () => void }) {
           </>
         ) : phase === "ended" ? (
           <>
-            <p style={{ color: "#94a3b8", margin: "8px 0 20px", fontSize: 14.5 }}>Thanks for chatting. Ready when you are — activate SetMo right on this page.</p>
+            <p style={{ color: "#94a3b8", margin: "8px 0 20px", fontSize: 14.5 }}>Thanks for chatting.{canActivate && " Ready when you are — activate SetMo right on this page."}</p>
             <button onClick={onClose} style={{ background: "linear-gradient(135deg,#8b5cf6,#7c3aed)", color: "#fff", border: "none", borderRadius: 999, padding: "12px 24px", fontWeight: 600, cursor: "pointer" }}>Done</button>
           </>
         ) : (
@@ -92,7 +92,7 @@ function Inner({ auditId, onClose }: { auditId: string; onClose: () => void }) {
   );
 }
 
-export function SettyConversation(props: { auditId: string; onClose: () => void }) {
+export function SettyConversation(props: { auditId: string; canActivate: boolean; onClose: () => void }) {
   return (
     <ConversationProvider>
       <Inner {...props} />

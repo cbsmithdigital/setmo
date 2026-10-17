@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { resolveReferral } from "@/lib/partners";
 import { seedOfficeServices } from "@/lib/office-services";
+import { LEGAL_EFFECTIVE } from "@/lib/legal";
 
 // Self-serve account provisioning, shared by the direct signup and the
 // assessment→account conversion. Creates the Supabase auth user (auto-confirmed,
@@ -21,6 +22,7 @@ export async function provisionAccount(opts: {
   claimOfficeId?: string; // convert an existing prospect office (from an assessment)
   referralCode?: string | null; // first-touch partner attribution (direct signup)
   cookieReferralCode?: string | null; // the tracking cookie, if the form carried no code
+  termsAcceptedAt?: Date; // when they agreed to the Terms + Privacy Policy, kept on the login
 }): Promise<ProvisionResult> {
   const email = opts.email.trim().toLowerCase();
   // Resolve attribution for newly-created offices (first-touch): the link's code,
@@ -49,7 +51,10 @@ export async function provisionAccount(opts: {
   }
 
   const admin = getAdminClient();
-  const { data, error } = await admin.auth.admin.createUser({ email, password: opts.password, email_confirm: true });
+  // Agreement to the Terms is recorded on the auth user (app_metadata, which
+  // only the server can write), with the version they saw.
+  const terms = opts.termsAcceptedAt ? { app_metadata: { terms_accepted_at: opts.termsAcceptedAt.toISOString(), terms_version: LEGAL_EFFECTIVE } } : {};
+  const { data, error } = await admin.auth.admin.createUser({ email, password: opts.password, email_confirm: true, ...terms });
   if (error || !data?.user) {
     const msg = error?.message ?? "";
     const dupe = /already|registered|exists/i.test(msg);

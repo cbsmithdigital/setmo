@@ -47,6 +47,7 @@ export async function POST(req: Request) {
   const creatorScope = isGroup ? "GROUP" : "OFFICE";
   const organizationId = isGroup ? user.organizationId : null;
   if (isGroup && !organizationId) return error("No organization on your account", 400);
+  if (!isGroup && !user.officeId) return error("No practice on your account", 400);
 
   // Gift cards are paid by SetMo, so they're off until we turn them on for the account.
   if (b.rewardType === "GIFT_CARD") {
@@ -54,8 +55,11 @@ export async function POST(req: Request) {
     if (!access.enabled) return error("Gift cards aren't turned on for your account yet. Request them in the reward options, or use a custom reward.", 403);
   }
 
-  // Resolve the practice context + validate ownership.
-  let officeId: string | null = null;
+  // Resolve the practice context + validate ownership. An office goal belongs to
+  // the creator's practice whether it's for the whole team or individual setters —
+  // its list, reward queue, approvals and archive all key on officeId. A group's
+  // setter goal can span locations, so it carries only the organization.
+  let officeId: string | null = isGroup ? null : user.officeId;
   if (b.targetType === "TEAM") {
     officeId = isGroup ? b.officeId ?? null : user.officeId;
     if (!officeId) return error("Team goal needs a practice", 422);

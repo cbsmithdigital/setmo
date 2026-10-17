@@ -62,6 +62,8 @@ See `.env.example` for the full, commented list. Minimum to run the app + log in
 - `DATABASE_URL` (Supabase **pooled**, port 6543, `?pgbouncer=true`) and
   `DIRECT_URL` (Supabase **direct**, port 5432 — used by migrations).
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+- `SETMO_DEMO_PASSWORD` — the password `pnpm db:seed` gives the demo logins. Pick your
+  own and keep it in `.env.local` only; never commit it.
 
 To run a **live practice call**, also set:
 - `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_IMPLANT`, and `ELEVENLABS_WEBHOOK_SECRET`
@@ -70,8 +72,10 @@ To run a **live practice call**, also set:
 
 ### Demo logins
 
-After `pnpm db:seed` (with Supabase keys set), password for all accounts is
-`SetMo-demo-2026`:
+After `pnpm db:seed` (with Supabase keys set), every demo account's password is the
+`SETMO_DEMO_PASSWORD` from your `.env.local` (the seed stops if it isn't set). The seed
+only sets it when it creates a login, so changing the variable later doesn't change
+existing logins:
 
 - Setter: `sam@brightworkdental.com`
 - Office admin: `lena@brightworkdental.com`

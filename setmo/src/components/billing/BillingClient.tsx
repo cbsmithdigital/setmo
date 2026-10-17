@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
 import { InviteModal } from "@/components/billing/InviteModal";
 import { MinutePurchase } from "@/components/billing/MinutePurchase";
@@ -23,6 +24,8 @@ type BillingData = {
   promo: { monthlyTokens: number; annualTokens: number; endsAt: string } | null;
 };
 
+const SIGNED_OUT = "Your session has ended — sign in again, then try once more.";
+
 export function BillingClient({
   data,
   practiceName,
@@ -44,10 +47,74 @@ export function BillingClient({
   recommendPeople: number;
   pricing?: PricingConfig;
 }) {
+  const router = useRouter();
   const [invite, setInvite] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [accessErr, setAccessErr] = useState<string | null>(null);
   const [autoTopUp, setAutoTopUp] = useState(data.autoTopUp);
   const [autoBusy, setAutoBusy] = useState(false);
+  const [slow, setSlow] = useState(false);
+  const [arrivedPurchasedMin] = useState(data.balance.purchasedMin); // tokens bought before this visit
+
+  // Back from a Stripe checkout, the webhook can land several seconds after the
+  // customer does. Until what they paid for shows, re-read the page every few
+  // seconds; give up after ~30s.
+  //  - Activation (?activate=success, or ?access=success for an access-only one):
+  //    a finishing state stands in for the Activate button until access shows.
+  //  - Switch to annual (?access=annual): the Switch button holds until the plan
+  //    reads annual, so nobody pays for a second year.
+  //  - Activation or a token purchase (?minutes=success): quietly, until the new
+  //    tokens show. Counted from the balance on arrival, so an office that had
+  //    tokens before (one reactivating, say) still waits for these.
+  const activated = activateStatus === "success" || accessStatus === "success";
+  const toAnnual = accessStatus === "annual";
+  const finishing = (activated || toAnnual) && !data.subscribed;
+  const switching = toAnnual && data.subscribed && data.plan === "monthly";
+  const tokensPending = (activated || minutesStatus === "success") && data.balance.purchasedMin <= arrivedPurchasedMin;
+  const awaiting = finishing || switching || tokensPending;
+  useEffect(() => {
+    if (!awaiting) return;
+    const poll = setInterval(() => {
+      // Offline, a refresh turns into a full page load (and the offline screen).
+      if (navigator.onLine) router.refresh();
+    }, 2500);
+    const stop = setTimeout(() => {
+      clearInterval(poll);
+      setSlow(true);
+    }, 30_000);
+    return () => {
+      clearInterval(poll);
+      clearTimeout(stop);
+    };
+  }, [awaiting, router]);
+
+  // Once it has all shown (or the quiet wait for tokens gave up), take the
+  // ?…=success off the address, so a later reload of this tab starts fresh
+  // instead of waiting again. Only the address changes; the page on screen,
+  // banner included, stays as it is. Deferred a tick: on the first render this
+  // effect runs before Next's router has hooked window.history, and Next must
+  // see the change to keep Back working.
+  const backFromCheckout = activated || toAnnual || minutesStatus === "success";
+  const settled = !finishing && !switching && (!tokensPending || slow);
+  useEffect(() => {
+    if (!backFromCheckout || !settled) return;
+    const tidy = setTimeout(() => window.history.replaceState(null, "", window.location.pathname), 0);
+    return () => clearTimeout(tidy);
+  }, [backFromCheckout, settled]);
+
+  // Back from Stripe without a reload (the back/forward cache, or an in-app
+  // browser sheet closing on a phone): the buttons work again.
+  useEffect(() => {
+    const ready = () => {
+      if (document.visibilityState === "visible") setBusy(false);
+    };
+    window.addEventListener("pageshow", ready);
+    document.addEventListener("visibilitychange", ready);
+    return () => {
+      window.removeEventListener("pageshow", ready);
+      document.removeEventListener("visibilitychange", ready);
+    };
+  }, []);
 
   async function toggleAutoTopUp(next: boolean) {
     setAutoTopUp(next);
@@ -67,28 +134,40 @@ export function BillingClient({
   const low = purchasedMin > 0 && remainingMin <= purchasedMin * 0.2;
   const tok = (m: number) => m * 10; // 1 min = 10 SetMo Tokens
 
+  // Both go to a Stripe page; on a refusal, say why under the buttons.
   async function manageAccess() {
     setBusy(true);
+    setAccessErr(null);
     try {
       const res = await fetch("/api/office/billing-portal", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
       const j = await res.json().catch(() => ({}));
-      if (j.url) window.location.href = j.url;
-      else setBusy(false);
+      if (res.ok && j.url) {
+        window.location.href = j.url;
+        return;
+      }
+      setAccessErr(res.status === 401 ? SIGNED_OUT : j.error ?? "Couldn't open the billing portal. Try again in a minute, or email hello@growdental.ai.");
     } catch {
-      setBusy(false);
+      setAccessErr("Couldn't reach SetMo — check your connection and try again.");
     }
+    setBusy(false);
   }
 
   async function switchToAnnual() {
     setBusy(true);
+    setAccessErr(null);
     try {
       const res = await fetch("/api/office/subscription/checkout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan: "annual" }) });
       const j = await res.json().catch(() => ({}));
-      if (j.url) window.location.href = j.url;
-      else setBusy(false);
+      if (res.ok && j.url) {
+        window.location.href = j.url;
+        return;
+      }
+      if (res.status === 409) router.refresh(); // already annual (another tab, say): catch the card up
+      setAccessErr(res.status === 401 ? SIGNED_OUT : j.error ?? "Couldn't start the switch to annual. Try again in a minute, or email hello@growdental.ai.");
     } catch {
-      setBusy(false);
+      setAccessErr("Couldn't reach SetMo — check your connection and try again.");
     }
+    setBusy(false);
   }
 
   return (
@@ -106,9 +185,11 @@ export function BillingClient({
       </div>
 
       <div className="content">
-        {activateStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>You&apos;re live! Practice Access is active and your starter tokens are being added — give it a few seconds.</div>}
+        {activateStatus === "success" && data.subscribed && <div className="banner mint" style={{ marginBottom: 18 }}>You&apos;re live! Practice Access is active and your starter tokens are being added — give it a few seconds.</div>}
         {activateStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Activation cancelled — no charge was made.</div>}
-        {accessStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Practice Access is active — thanks! Any sign-up bonus tokens land in your balance within a few seconds.</div>}
+        {accessStatus === "success" && data.subscribed && <div className="banner mint" style={{ marginBottom: 18 }}>Practice Access is active — thanks! Any sign-up bonus tokens land in your balance within a few seconds.</div>}
+        {switching && <div className="banner mint" style={{ marginBottom: 18 }}>Thanks! Moving you to the annual plan — this page updates by itself in a few seconds.</div>}
+        {toAnnual && data.subscribed && data.plan === "annual" && <div className="banner mint" style={{ marginBottom: 18 }}>You&apos;re on the annual plan now — thanks!</div>}
         {accessStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Checkout cancelled — no charge was made.</div>}
         {minutesStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Payment received — your tokens will be added within a few seconds.</div>}
         {minutesStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Checkout cancelled — no charge was made.</div>}
@@ -135,13 +216,20 @@ export function BillingClient({
                 <b>{data.nextInvoiceDate ?? "—"}</b>
               </div>
               {data.plan === "monthly" && (
-                <button className="btn btn-primary" style={{ width: "100%", marginTop: 14 }} onClick={switchToAnnual} disabled={busy}>
-                  <Icon name="spark" size={16} /> Switch to annual — 2 months free + {data.annualDiscountPct}% off tokens
+                <button className="btn btn-primary" style={{ width: "100%", marginTop: 14 }} onClick={switchToAnnual} disabled={busy || switching}>
+                  <Icon name="spark" size={16} /> {switching ? "Switching you to annual…" : `Switch to annual — 2 months free + ${data.annualDiscountPct}% off tokens`}
                 </button>
               )}
               <button className="btn btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={manageAccess} disabled={busy}>
                 <Icon name="card" size={16} /> Manage access
               </button>
+              {switching && slow && (
+                <p style={{ color: "var(--amber)", fontSize: 13, marginTop: 10 }}>
+                  This is taking longer than usual — refresh in a minute, or email{" "}
+                  <a href="mailto:hello@growdental.ai?subject=SetMo%20annual%20plan" style={{ color: "var(--purple)" }}>hello@growdental.ai</a>.
+                </p>
+              )}
+              {accessErr && <p role="alert" style={{ color: "var(--amber)", fontSize: 13, marginTop: 10 }}>{accessErr}</p>}
             </div>
 
             {/* token balance */}
@@ -187,19 +275,37 @@ export function BillingClient({
           </div>
         )}
 
-        {/* buy minutes (slider) — combined activation when not yet subscribed */}
+        {/* buy tokens (slider) — combined activation when not yet subscribed; just
+            back from paying for that, a finishing state instead of a second Activate */}
         <div id="activate-card" style={{ marginBottom: 24 }}>
-          <MinutePurchase
-            defaultPeople={recommendPeople}
-            cfg={pricing}
-            mode={data.subscribed ? "topup" : "activate"}
-            accessMonthly={data.accessMonthly}
-            annualAccess={data.annualAccess}
-            discountPct={data.accountDiscountPct}
-            monthlyDiscountPct={data.monthlyDiscountPct}
-            annualDiscountPct={data.annualDiscountPct}
-            promo={data.promo}
-          />
+          {finishing ? (
+            <div className="card card-pad rise" role="status">
+              <h3 style={{ fontSize: 18, marginBottom: 4, display: "flex", alignItems: "center", gap: 10 }}>
+                {!slow && <span className="live-dot" />}Finishing your activation…
+              </h3>
+              <p className="muted" style={{ fontSize: 13.5 }}>
+                Thanks! We&apos;re switching on Practice Access and adding your tokens. It usually takes a few seconds, and this page updates by itself.
+              </p>
+              {slow && (
+                <p style={{ color: "var(--amber)", fontSize: 13, marginTop: 10 }}>
+                  This is taking longer than usual — refresh in a minute, or email{" "}
+                  <a href="mailto:hello@growdental.ai?subject=SetMo%20activation" style={{ color: "var(--purple)" }}>hello@growdental.ai</a>.
+                </p>
+              )}
+            </div>
+          ) : (
+            <MinutePurchase
+              defaultPeople={recommendPeople}
+              cfg={pricing}
+              mode={data.subscribed ? "topup" : "activate"}
+              accessMonthly={data.accessMonthly}
+              annualAccess={data.annualAccess}
+              discountPct={data.accountDiscountPct}
+              monthlyDiscountPct={data.monthlyDiscountPct}
+              annualDiscountPct={data.annualDiscountPct}
+              promo={data.promo}
+            />
+          )}
         </div>
 
         {/* invoices */}

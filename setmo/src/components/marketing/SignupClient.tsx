@@ -6,9 +6,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
+import { activationFrom, type ActivationCost } from "@/lib/pricing";
 import type { PromoInfo } from "@/lib/config";
 
-export function SignupClient({ promo = null }: { promo?: PromoInfo | null }) {
+// $44.95, $159 — cents only when there are some.
+const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+
+// `start`: the day-one cost from the live platform config when the page passes
+// it, otherwise from the code's default pricing.
+export function SignupClient({ promo = null, start = activationFrom() }: { promo?: PromoInfo | null; start?: ActivationCost }) {
   const router = useRouter();
   const [kind, setKind] = useState<"practice" | "group">("practice");
   const [contactName, setContactName] = useState("");
@@ -30,7 +36,7 @@ export function SignupClient({ promo = null }: { promo?: PromoInfo | null }) {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind, contactName, practiceName, orgName: kind === "group" ? orgName : undefined, email, password, ref }),
+        body: JSON.stringify({ kind, contactName, practiceName, orgName: kind === "group" ? orgName : undefined, email, password, ref, agree }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) { setError(j.error ?? "Could not create your account."); setLoading(false); return; }
@@ -57,7 +63,11 @@ export function SignupClient({ promo = null }: { promo?: PromoInfo | null }) {
           </div>
           <h1 style={{ fontSize: 34, marginBottom: 8 }}>Get SetMo now.</h1>
           <p className="muted" style={{ fontSize: 15.5, marginBottom: 24 }}>
-            $44.95/mo per location · unlimited users · all features. Create your account free — activate access &amp; add tokens when you&apos;re ready.
+            Create your account free. When you&apos;re ready to go live, activation is {usd(start.access)}/mo per location{" "}
+            {promo && promo.monthlyTokens > 0
+              ? <>— the sign-up offer&apos;s free tokens are your starter balance.</>
+              : <>plus starter tokens from {usd(start.starter)} ({usd(start.total)} on day one, before tax).</>}
+            {" "}Unlimited users, all features.
           </p>
 
           {/* sign-up promo, compact — only on mobile, where the right panel
@@ -102,7 +112,7 @@ export function SignupClient({ promo = null }: { promo?: PromoInfo | null }) {
             )}
             <div className="field">
               <label htmlFor="practice">{kind === "group" ? "First location name" : "Practice name"}</label>
-              <input id="practice" className="input" required value={practiceName} onChange={(e) => setPracticeName(e.target.value)} placeholder="Brightwork Dental" />
+              <input id="practice" className="input" required value={practiceName} onChange={(e) => setPracticeName(e.target.value)} placeholder="Sample Family Dental" />
             </div>
             <div className="field">
               <label htmlFor="email">Work email</label>

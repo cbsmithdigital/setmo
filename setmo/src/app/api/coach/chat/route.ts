@@ -18,17 +18,27 @@ import {
   coachCallCenterGrounding,
 } from "@/lib/coach-prompts";
 import { error, json } from "@/lib/api";
+import { withinLimits, tooMany, HOUR, DAY } from "@/lib/rate-limit";
 
 export const maxDuration = 60;
 
 const MODEL = process.env.SETMO_COACH_MODEL || "claude-sonnet-4-6";
 
+// What one request may carry. The person's new message is capped; everything
+// else (the coach's replies can run long) only counts toward the conversation
+// total. The total is in UTF-8 bytes, not characters: Claude bills by tokens,
+// and in other scripts a character can be several of them (English is the same
+// either way). CoachChat sends just the latest turns that fit — keep its copy of
+// these numbers in step.
+const MAX_MESSAGE_CHARS = 4000;
+const MAX_HISTORY_MESSAGES = 30;
+const MAX_HISTORY_BYTES = 30_000;
+
 const Body = z.object({
   sessionId: z.string().optional(),
   messages: z
     .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() }))
-    .min(1)
-    .max(40),
+    .min(1),
 });
 
 type Action = { type: string; summary: string };
@@ -45,6 +55,41 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid request", 422);
   const { sessionId, messages } = parsed.data;
+  // Only the new message is held to its cap; earlier turns count toward the
+  // total. Re-checking them would refuse every later message from a page that
+  // kept a refused one in its thread, as the chat did before these caps.
+  const latest = messages[messages.length - 1];
+  if (latest.role === "user" && latest.content.length > MAX_MESSAGE_CHARS) {
+    return error(`That message is too long for Setty — please keep it under ${MAX_MESSAGE_CHARS.toLocaleString("en-US")} characters.`, 413);
+  }
+  if (messages.length > MAX_HISTORY_MESSAGES || messages.reduce((n, m) => n + utf8Bytes(m.content), 0) > MAX_HISTORY_BYTES) {
+    return error("This chat has gotten too long for Setty to follow. Refresh the page to start a fresh one.", 413);
+  }
+
+  // Chat is free for everyone, demo practices included, so these limits are what
+  // bound the Claude spend (call scoring uses the same key and model). Each one
+  // counts a message only once the one before it lets it through, so pressing
+  // send while held back doesn't use up the rest of the day, or a teammate's share.
+  let limit = await withinLimits([{ key: `coach-chat:${user.id}`, limit: 30, windowSeconds: HOUR }]);
+  if (limit.ok) limit = await withinLimits([{ key: `coach-chat-day:${user.id}`, limit: 200, windowSeconds: DAY }]);
+  if (!limit.ok) {
+    // Only the daily window can be more than an hour from resetting.
+    const wait = waitText(limit.retryAfter);
+    return tooMany(
+      limit.retryAfter,
+      limit.retryAfter > HOUR
+        ? `You've reached today's chat limit with Setty — it resets in about ${wait}.`
+        : `You've reached Setty's chat limit for now — you can pick this back up in about ${wait}.`
+    );
+  }
+  // Invites make new logins cheaply, so the whole practice (or group, or call
+  // center) also shares a daily ceiling, far above what a real team uses.
+  const team = user.organizationId ?? user.officeId ?? user.id;
+  const teamLimit = await withinLimits([{ key: `coach-chat-team-day:${team}`, limit: 1000, windowSeconds: DAY }]);
+  if (!teamLimit.ok) {
+    console.warn("[setmo:coach] a team reached its daily chat ceiling", { team });
+    return tooMany(teamLimit.retryAfter, `Your team has reached today's chat limit with Setty — it resets in about ${waitText(teamLimit.retryAfter)}.`);
+  }
 
   const first = user.firstName ?? "there";
   const apiMessages = messages.map((m) => ({ role: m.role, content: m.content }));
@@ -275,6 +320,19 @@ async function assignTraining(
   // Keep ctx in sync so the model doesn't double-assign within one turn.
   void officeId;
   return { ok: true, summary: `Assigned "${training.title}" to ${setter.name} (${training.skillKey ?? skillKey}).` };
+}
+
+/** Size in UTF-8 bytes, the measure for the conversation total (see the caps above). */
+function utf8Bytes(s: string): number {
+  return new TextEncoder().encode(s).length;
+}
+
+/** "20 minutes" / "5 hours" — how long until a limit lets the next message through. */
+function waitText(seconds: number): string {
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  const hours = Math.round(minutes / 60);
+  return `${hours} hour${hours === 1 ? "" : "s"}`;
 }
 
 function textOf(res: Anthropic.Message): string {

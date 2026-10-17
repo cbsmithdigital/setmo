@@ -1,8 +1,9 @@
 // Marketing demo for the CALL CENTER tenant: "BrightCall Partners" — two pods,
 // a senior manager + a floor manager per pod, phone agents shared across served
 // offices, sessions attributed to the call-center pool, and a funded pool. All
-// managers AND agents are login-able (pw SetMo-demo-2026). Re-runnable (upserts
-// structural entities; only sessions/assignments/bundles are rebuilt).
+// managers AND agents are login-able (password: SETMO_DEMO_PASSWORD from
+// .env.local, never committed). Re-runnable (upserts structural entities; only
+// sessions/assignments/bundles are rebuilt).
 // Run: pnpm exec tsx prisma/demo-callcenter.ts
 import { config } from "dotenv";
 config({ path: ".env.local" });
@@ -13,7 +14,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { pickCall, transcriptPayload } from "../src/lib/demo-content";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
-const DEMO_PASSWORD = "SetMo-demo-2026";
+const DEMO_PASSWORD = process.env.SETMO_DEMO_PASSWORD ?? "";
 
 const CC = "00000000-0000-0000-0000-00000000cc01";
 const POD_N = "cc-pod-north";
@@ -68,6 +69,10 @@ const agentEmail = (a: AgentCfg) => `${a.first.toLowerCase()}@brightcall.example
 async function main() {
   const sb = adminClient();
   if (!sb) console.warn("⚠ No Supabase admin — logins will NOT be created (dashboards still seed with fallback ids).");
+  else if (!DEMO_PASSWORD) {
+    console.error("✖ SETMO_DEMO_PASSWORD is not set. Add it to .env.local (never commit it) — it's the password the demo logins are created with. Nothing was changed.");
+    process.exit(1);
+  }
 
   // Volatile data only — structural entities are upserted (no FK-ordering pain).
   await prisma.session.deleteMany({ where: { callCenterOrgId: CC } });
@@ -77,15 +82,17 @@ async function main() {
   // cc-mgr-* ids), now superseded by email-keyed login-able users.
   await prisma.user.deleteMany({ where: { id: { startsWith: "cc-agent-" } } });
 
-  await prisma.organization.upsert({ where: { id: CC }, update: { name: "BrightCall Partners", type: "CALL_CENTER" }, create: { id: CC, name: "BrightCall Partners", type: "CALL_CENTER" } });
+  // A demo account, org and served offices alike (see Office.isDemo): kept out of
+  // metrics and nudges, and its logins can't buy anything or invite people.
+  await prisma.organization.upsert({ where: { id: CC }, update: { name: "BrightCall Partners", type: "CALL_CENTER", isDemo: true }, create: { id: CC, name: "BrightCall Partners", type: "CALL_CENTER", isDemo: true } });
   for (const [id, name] of [[POD_N, "Pod North"], [POD_S, "Pod South"]] as const) {
     await prisma.pod.upsert({ where: { id }, update: { name, organizationId: CC }, create: { id, organizationId: CC, name } });
   }
   for (const o of OFFICES) {
     await prisma.office.upsert({
       where: { id: o.id },
-      update: { name: o.name, city: o.city, servedByPodId: o.pod, isProspect: false, offerFraming: `${o.name}: free implant consult + 3D scan, financing available.` },
-      create: { id: o.id, name: o.name, city: o.city, isProspect: false, servedByPodId: o.pod, offerFraming: `${o.name}: free implant consult + 3D scan, financing available.` },
+      update: { name: o.name, city: o.city, servedByPodId: o.pod, isProspect: false, isDemo: true, offerFraming: `${o.name}: free implant consult + 3D scan, financing available.` },
+      create: { id: o.id, name: o.name, city: o.city, isProspect: false, isDemo: true, servedByPodId: o.pod, offerFraming: `${o.name}: free implant consult + 3D scan, financing available.` },
     });
     await prisma.officeService.upsert({ where: { officeId_serviceType: { officeId: o.id, serviceType: "IMPLANT" } }, update: { enabled: true }, create: { officeId: o.id, serviceType: "IMPLANT", enabled: true } });
   }
@@ -162,7 +169,7 @@ async function main() {
   await prisma.callCenterBundle.create({ data: { organizationId: CC, minutesPurchased: 6000, amountCents: 300000 } });
 
   console.log(`\n✅ BrightCall demo: ${AGENTS.length} agents · ${OFFICES.length} served offices · 2 pods · ${totalSessions} sessions · 6,000-min pool.`);
-  console.log(`Logins (pw ${DEMO_PASSWORD}):`);
+  console.log("Logins (password: your SETMO_DEMO_PASSWORD):");
   console.log(`  Managers: morgan@brightcall.example (senior) · jamie@brightcall.example (Pod North) · riley@brightcall.example (Pod South)`);
   console.log(`  Agents: ${AGENTS.map(agentEmail).join(" · ")}`);
   console.log(`  Served practice: casey@cedarparkdental.example (Cedar Park office admin — sees the call-center agents reporting)`);

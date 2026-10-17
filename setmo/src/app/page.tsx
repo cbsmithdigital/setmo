@@ -1,7 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
-import { getPricingConfig } from "@/lib/config";
+import { getPlatformConfig, getPricingConfig, promoInfo } from "@/lib/config";
+import { activationFrom } from "@/lib/pricing";
 import { PricingSlider } from "@/components/marketing/PricingSlider";
 import "./marketing.css";
 
@@ -38,10 +39,21 @@ function Wave() {
   );
 }
 
+// $44.95, $159 — cents only when there are some.
+const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+
 export default async function LandingPage() {
   const user = await getCurrentUser();
   const signedIn = Boolean(user);
   const pricing = await getPricingConfig();
+  const cfg = await getPlatformConfig();
+  // What going live costs on day one, from the live config. Starter tokens are
+  // required to activate unless a monthly sign-up promo is running, whose bonus
+  // tokens are the starter balance.
+  const start = activationFrom(pricing, cfg.monthlyTokenDiscountPct);
+  const promo = promoInfo(cfg);
+  const promoStart = promo && promo.monthlyTokens > 0 ? { endsAt: promo.endsAt, tokens: promo.monthlyTokens, hours: Math.round(promo.monthlyTokens / 600) } : null;
+  const freeEvery = cfg.assessmentCooldownDays;
 
   return (
     <div className="mkt">
@@ -94,7 +106,7 @@ export default async function LandingPage() {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--mint-deep)" strokeWidth="2.5"><path d="M20 6L9 17l-5-5" /></svg>
               <span><b>Your Setter Assessment is free.</b> No real leads at risk, ever.</span>
             </div>
-            <div className="founders"><span className="dotf" /> $44.95/mo per practice · unlimited users · month-to-month</div>
+            <div className="founders"><span className="dotf" /> {usd(start.access)}/mo per practice · {promoStart ? `${promoStart.hours} free hours to start` : `starter tokens from ${usd(start.starter)}`} · unlimited users</div>
           </div>
           <div className="device-stage">
             <div className="streak-chip"><span className="ico">🔥</span><span>7-day streak<br /><span style={{ color: "var(--mint-deep)", fontWeight: 700 }}>+12% this week</span></span></div>
@@ -119,18 +131,6 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      {/* trust */}
-      <section className="trust">
-        <div className="wrap">
-          <p>BUILT FOR THE PRACTICES AND GROUPS CHASING HIGH-TICKET CASES</p>
-          <div className="logos">
-            {["Brightwork Dental", "Lakeside Implants", "Meridian DSO", "Coastal Smiles", "Apex Oral Care"].map((n) => (
-              <div className="lg" key={n}><span className="m" />{n}</div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* roi */}
       <section className="sec" style={{ padding: "54px 0 0" }}>
         <div className="wrap">
@@ -146,7 +146,7 @@ export default async function LandingPage() {
         <div className="wrap stats-grid">
           <div className="stat reveal"><div className="deco" style={{ background: "var(--purple)" }} /><div className="big grad-text">0</div><p>real leads burned while your team learns. Every rep is against an AI patient.</p></div>
           <div className="stat reveal"><div className="deco" style={{ background: "var(--purple)" }} /><div className="big grad-text">8</div><p>skills scored on every single call — from rapport to closing the appointment.</p></div>
-          <div className="stat reveal"><div className="deco" style={{ background: "var(--m-mint)" }} /><div className="big mint-text">$44.95</div><p>per practice, per month. Unlimited users, all features — then pay-as-you-go tokens that roll over.</p></div>
+          <div className="stat reveal"><div className="deco" style={{ background: "var(--m-mint)" }} /><div className="big mint-text">{usd(start.access)}</div><p>per practice, per month. Unlimited users, all features — plus pay-as-you-go tokens that roll over.</p></div>
         </div>
       </section>
 
@@ -291,16 +291,16 @@ export default async function LandingPage() {
               <div className="darkpanel">
                 <div className="cc-head">
                   <div className="dp-label" style={{ margin: 0 }}>Group command center · set rate</div>
-                  <span style={{ fontSize: 11, color: "var(--d-muted)", background: "var(--d-3)", padding: "4px 10px", borderRadius: 999 }}>5 locations</span>
+                  <span style={{ fontSize: 11, color: "var(--d-muted)", background: "var(--d-3)", padding: "4px 10px", borderRadius: 999 }}>Sample group · 5 locations</span>
                 </div>
-                <div className="cc-row"><span className="cc-rank">1</span><span className="cc-nm">Lakeside Implants<small>Tucson, AZ</small></span><span className="cc-rate">68%</span></div>
-                <div className="cc-row"><span className="cc-rank">2</span><span className="cc-nm">Brightwork Dental<small>Austin, TX</small></span><span className="cc-rate">64%</span></div>
-                <div className="cc-row flag"><span className="cc-rank">3</span><span className="cc-nm">Coastal Smiles<small>Tampa, FL</small></span><span className="cc-flagchip">Outlier ▲14%</span><span className="cc-rate">61%</span></div>
-                <div className="cc-row"><span className="cc-rank">4</span><span className="cc-nm">Apex Oral Care<small>Denver, CO</small></span><span className="cc-rate">57%</span></div>
-                <div className="cc-row"><span className="cc-rank">5</span><span className="cc-nm">Summit Dental Co.<small>Boise, ID</small></span><span className="cc-rate">49%</span></div>
+                <div className="cc-row"><span className="cc-rank">1</span><span className="cc-nm">Tucson office<small>6 setters</small></span><span className="cc-rate">68%</span></div>
+                <div className="cc-row"><span className="cc-rank">2</span><span className="cc-nm">Austin office<small>4 setters</small></span><span className="cc-rate">64%</span></div>
+                <div className="cc-row flag"><span className="cc-rank">3</span><span className="cc-nm">Tampa office<small>5 setters</small></span><span className="cc-flagchip">Outlier ▲14%</span><span className="cc-rate">61%</span></div>
+                <div className="cc-row"><span className="cc-rank">4</span><span className="cc-nm">Denver office<small>3 setters</small></span><span className="cc-rate">57%</span></div>
+                <div className="cc-row"><span className="cc-rank">5</span><span className="cc-nm">Boise office<small>4 setters</small></span><span className="cc-rate">49%</span></div>
                 <div className="advisor">
                   <div className="ai"><Star /></div>
-                  <div className="tx"><b>Setty Advisor:</b> Coastal Smiles&apos; objection-handling is up 14% this month — here&apos;s the drill they ran. Roll it out to Summit and Apex next.</div>
+                  <div className="tx"><b>Setty Advisor:</b> Your Tampa office&apos;s objection-handling is up 14% this month — here&apos;s the drill they ran. Roll it out to Boise and Denver next.</div>
                 </div>
               </div>
             </div>
@@ -327,55 +327,36 @@ export default async function LandingPage() {
             <div className="feat-copy">
               <span className="eyebrow">Start with the numbers</span>
               <h2>See what your front desk is leaving on the table.</h2>
-              <p className="d">Before you change anything, find out what it&apos;s costing you. We&apos;ll score your setters&apos; calls and show you exactly where booked consults are slipping away.</p>
+              <p className="d">Before you change anything, find out what it&apos;s costing you. One of your setters takes a single practice call with an AI implant lead, right in the browser, and we show you exactly where booked consults are slipping away.</p>
               <ul className="feat-list">
-                <li><Ck />All five sessions scored on the same 8-point rubric your team trains against.</li>
-                <li><Ck />A report showing exactly where booked consults are slipping, call by call.</li>
-                <li><Ck />The gap translated into expected growth — recovered consults per month, and what that&apos;s worth in cases.</li>
+                <li><Ck />One call with an AI implant / full-arch lead, scored on the same 8-point rubric your team trains against.</li>
+                <li><Ck />A report on that call: your top leaking skills, whether the consult got booked, and the words to try next time.</li>
+                <li><Ck />The gap translated into expected growth — extra treatment starts per month, and what they&apos;re worth at your case value.</li>
               </ul>
-              <p style={{ fontSize: 15, color: "var(--ink-soft)", margin: "22px 0 6px" }}><b>The Setter Assessment is free</b> — for everyone, no card required.</p>
+              <p style={{ fontSize: 15, color: "var(--ink-soft)", margin: "22px 0 6px" }}><b>The Setter Assessment is free</b> — one call per email every {freeEvery} days, no card required.</p>
               <p style={{ fontSize: 14.5, color: "var(--m-muted)", maxWidth: "34em" }}>The report is yours to keep, whether you buy or not. But if the leak is as big as it usually is, SetMo is how you close it.</p>
               <div style={{ marginTop: 24 }}>
                 <Link className="btn btn-primary" href={AUDIT_HREF}>Get Your Free Audit <Arrow /></Link>
-                <p style={{ fontSize: 13, color: "var(--m-muted)", marginTop: 12 }}>No software to install. No real leads touched. Your calls, your numbers.</p>
+                <p style={{ fontSize: 13, color: "var(--m-muted)", marginTop: 12 }}>No software to install. No real leads touched. Your call, your numbers.</p>
               </div>
             </div>
             <div className="feat-art">
+              {/* sample report — same layout and recovery model as the real one (default $12k case, 20 leads/mo) */}
               <div className="darkpanel audit-rep">
-                <div className="dp-label">Setter Audit · Brightwork Dental</div>
+                <div className="dp-label">Setter Audit · Your Practice</div>
                 <div className="ar-top">
                   <div className="ar-score">3.4</div>
-                  <div><div className="lab">Overall · 5 leads scored</div><div className="sub">2 of 5 setable consults booked</div></div>
+                  <div><div className="lab">Overall readiness · 1 call scored</div><div className="sub">0 of 1 consult booked</div></div>
                 </div>
-                <div className="ar-leak">Top 3 leaking skills</div>
-                {[["Objection handling", 48, "2.4"], ["Pain-point discovery", 56, "2.8"], ["Closing the appt", 62, "3.1"]].map(([nm, w, sc]) => (
+                <div className="ar-leak">Top leaking skills</div>
+                {[["Objection handling", 48, "2.4"], ["Pain-point exploration", 56, "2.8"], ["Closing the appt", 62, "3.1"]].map(([nm, w, sc]) => (
                   <div className="skill-row" key={nm as string}><span className="nm">{nm}</span><span className="track"><span className="fill" style={{ width: `${w}%`, background: "linear-gradient(90deg,#f7b955,#f59e0b)" }} /></span><span className="sc">{sc}</span></div>
                 ))}
                 <div className="ar-recover">
                   <div className="l">Estimated recovery</div>
-                  <div className="v"><span>+6 booked consults / mo</span> · ~$72,000</div>
+                  <div className="v"><span>+1 treatment start / mo</span> · ~$12,000</div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* testimonials */}
-      <section className="sec" id="testimonials" style={{ paddingTop: 20 }}>
-        <div className="wrap">
-          <div className="tgrid">
-            <div className="tcard feat-t reveal">
-              <div className="quote">&ldquo;New hires used to cost us real consults while they found their feet. Now they walk in already sharp.&rdquo;</div>
-              <div className="who"><div className="av" /><div><b>Dr. Lena Okafor</b><span>Owner · Brightwork Dental</span></div></div>
-            </div>
-            <div className="tcard reveal">
-              <div className="quote">&ldquo;I used to guess who needed help. Now SetMo tells me who&apos;s slipping and hands me the drill to fix it — before it costs us a case.&rdquo;</div>
-              <div className="who"><div className="av" /><div><b>Renee Walsh</b><span>Office Manager · Coastal Smiles</span></div></div>
-            </div>
-            <div className="tcard reveal">
-              <div className="quote">&ldquo;We could finally see which offices were actually better, and why. We took our top location&apos;s playbook group-wide in a quarter.&rdquo;</div>
-              <div className="who"><div className="av" /><div><b>Marcus Webb</b><span>Director of Operations · Meridian DSO</span></div></div>
             </div>
           </div>
         </div>
@@ -387,7 +368,7 @@ export default async function LandingPage() {
           <div className="sec-head center reveal">
             <span className="eyebrow">Pricing</span>
             <h2>Everything SetMo does, for <span className="mint-text">one flat price</span>.</h2>
-            <p>$44.95 per location, month-to-month — unlimited users, every feature included, plus pay-as-you-go tokens that roll over. A serious edge for a single office, and it scales to a whole group at no extra tier.</p>
+            <p>{usd(start.access)} per location, month-to-month — unlimited users, every feature included, plus pay-as-you-go tokens that roll over. A serious edge for a single office, and it scales to a whole group at no extra tier.</p>
           </div>
 
           <div className="tiers" style={{ gridTemplateColumns: "1fr", margin: 0 }}>
@@ -395,10 +376,21 @@ export default async function LandingPage() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "8px 16px" }}>
                 <div>
                   <span className="ttag" style={{ marginBottom: 10 }}>Practice Access</span>
-                  <div className="tprice" style={{ margin: 0 }}>$44.95<small> / location / mo</small></div>
+                  <div className="tprice" style={{ margin: 0 }}>{usd(start.access)}<small> / location / mo</small></div>
                 </div>
                 <div className="tcad" style={{ margin: 0 }}>Month-to-month · unlimited users · cancel anytime</div>
               </div>
+              <p style={{ fontSize: 14.5, color: "var(--ink-soft)", margin: "16px 0 0", lineHeight: 1.55 }}>
+                {promoStart ? (
+                  <>
+                    <b>Day one: {usd(start.access)}.</b> Activate by {promoStart.endsAt} and your first {promoStart.hours} hours of practice ({promoStart.tokens.toLocaleString()} tokens) are on us, so starter tokens are optional. Plus tax where applicable.
+                  </>
+                ) : (
+                  <>
+                    <b>Day one: {usd(start.access)} plus starter tokens from {usd(start.starter)}</b> ({start.starterTokens.toLocaleString()} tokens) — {usd(start.total)} to go live. After that it&apos;s {usd(start.access)}/mo, and you buy tokens only when you need more. Plus tax where applicable.
+                  </>
+                )}
+              </p>
 
               <div className="price-grid" style={{ marginTop: 22 }}>
                 <div>
@@ -428,7 +420,7 @@ export default async function LandingPage() {
               </div>
 
               <div className="price-slider-row">
-                <PricingSlider cfg={pricing} />
+                <PricingSlider cfg={pricing} discountPct={cfg.monthlyTokenDiscountPct} />
                 <div style={{ textAlign: "center", marginTop: 20, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
                   <Link className="btn btn-primary" href={SIGNUP_HREF}>Get SetMo Now</Link>
                   <Link className="btn btn-ghost" href={AUDIT_HREF}>Get Your Free Audit</Link>
@@ -449,15 +441,15 @@ export default async function LandingPage() {
           <div className="faq">
             {[
               ["Is this a real phone call?", "No — it's an in-browser voice conversation with an AI patient. Your setter is logged in and practicing safely; no real leads or phone lines are involved.", true],
-              ["How is a setter scored?", "The AI grades each call across eight skills on a 1–5 scale — rapport, listening, discovery, pain-point exploration, objection handling, confidence, value building, and closing — with reasoning and specific feedback for each.", false],
-              ["How does the free Setter Audit work?", "Every office gets one free audit. Your setter runs a live browser session against five simulated-but-setable leads — nothing to upload. We score all five on the same 8-point rubric and send back a report showing where booked consults are leaking and what recovering them is worth. Additional audits are $50 each.", false],
-              ["What does it cost?", "$44.95 per practice per month, month-to-month, with unlimited users and every feature included. On top of that you buy tokens as you go (10 tokens ≈ a minute of live AI) — they roll over and never expire, and the per-token rate drops the more you buy. Groups get the multi-location command center and Setty Advisor free once they run 2+ locations.", false],
+              ["How is a setter scored?", "The AI grades each call across eight skills on a 1–5 scale — rapport, listening, objection handling, confidence, and closing on every call, plus three specific to the call type (on an implant call: discovery, pain-point exploration, and value building) — with reasoning and specific feedback for each.", false],
+              ["How does the free Setter Audit work?", `One of your setters (or you) takes one practice call in the browser with an AI implant / full-arch lead — nothing to install or upload, and no real leads involved. We score the call on the same 8-point rubric your team would train against and send back a report showing where booked consults are leaking and what recovering them is worth. It's free: one per email every ${freeEvery} days.`, false],
+              ["What does it cost?", `${usd(start.access)} per practice per month, month-to-month, with unlimited users and every feature included. On top of that you buy tokens as you go (10 tokens ≈ a minute of live AI) — they roll over and never expire, and the per-token rate drops the more you buy. ${promoStart ? `Activate by ${promoStart.endsAt} and your first ${promoStart.hours} hours of practice are free, so day one is ${usd(start.access)}.` : `You activate with a starter balance, from ${usd(start.starter)} for ${start.starterTokens.toLocaleString()} tokens, so day one is from ${usd(start.total)}.`} Plus tax where applicable. Groups get the multi-location command center and Setty Advisor free once they run 2+ locations.`, false],
               ["Who is Setty?", "Setty is SetMo's AI coach. For your office manager, Setty Office Coach reads every setter's scores, points out who's slipping and why, drafts the next training, and talks through the calls and decisions you're not sure about. For groups, Setty Advisor does the same across every location for your ops leaders. The data turns into action instead of another report.", false],
               ["How does SetMo work across multiple locations?", "Each location runs on the same flat access fee and its own token balance. Once you have 2+ locations you unlock — free — the Group command center that puts every office side by side (set rates, skill scores, trends), surfaces outliers automatically, and shows what your best offices do differently. Setty Advisor, trained on your data, recommends what to roll out where.", false],
-              ["Do I have to commit?", "No. SetMo is month-to-month — cancel anytime. There's no contract and no per-seat math; you pay the flat access fee per practice and buy tokens only as you need them.", false],
+              ["Do I have to commit?", `No. SetMo is month-to-month — cancel anytime. There's no contract and no per-seat math; you pay the flat access fee per practice${promoStart ? ", start on your free practice hours," : " plus a starter token balance,"} then top up only when you need more.`, false],
               ["What counts against my tokens?", "Only actual practice and coaching usage (10 tokens ≈ a minute of live AI). Tokens come out of your purchased balance, roll over month to month, and never expire. When you're running low you'll get a warning — never a surprise overage. The free Setter Assessment is always on us and never deducts from your balance.", false],
-              ["Which call types are supported?", "SetMo launches with the implant / full-arch / denture agent — the most complex, highest-value call. Cosmetic, ortho, wisdom teeth, and general are on the roadmap and slot right in.", false],
-              ["Is the assessment really free?", "Yes. Anyone can run a one-call Setter Assessment and get the full report at no charge — and for paying practices it never costs tokens. Prospects can take a fresh one every 30 days to track progress.", false],
+              ["Which call types are supported?", "All six are live: implants & full-arch, dentures & snap-in, cosmetic & veneers, ortho & Invisalign, wisdom teeth, and general & hygiene. Each has its own AI leads and its own 8-skill rubric. The free assessment is an implant / full-arch call — the most complex, highest-value one.", false],
+              ["Is the assessment really free?", `Yes. Anyone can run a one-call Setter Assessment and get the full report at no charge — and for paying practices it never costs tokens. Prospects can take a fresh one every ${freeEvery} days to track progress.`, false],
               ["Do you store patient data?", "No. Every persona is fictional and AI-generated. SetMo is a training tool — it handles employee performance and practice data only, with no patient health information involved.", false],
             ].map(([q, a, open]) => (
               <details className="qa" key={q as string} open={open as boolean}>
@@ -492,8 +484,8 @@ export default async function LandingPage() {
               <p>Train your front desk to set more high-ticket appointments — against a realistic AI patient, scored and coached. A Grow Dental AI product.</p>
             </div>
             <div className="ft-col"><h5>Product</h5><a href="#how">How it works</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#groups">For Groups</a><Link href="/login">Open the app</Link></div>
-            <div className="ft-col"><h5>Company</h5><a href="#">About Grow Dental</a><Link href="/partners/apply">Partner program</Link><a href="#">Careers</a><a href="#">Contact</a></div>
-            <div className="ft-col"><h5>Legal</h5><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><a href="#">Security</a></div>
+            <div className="ft-col"><h5>Company</h5><a href="https://growdental.ai" target="_blank" rel="noopener">About Grow Dental</a><Link href="/partners/apply">Partner program</Link><a href="mailto:hello@growdental.ai">Contact</a></div>
+            <div className="ft-col"><h5>Legal</h5><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div>
           </div>
           <div className="ft-bot">
             <span>© 2026 Grow Dental AI. All rights reserved.</span>

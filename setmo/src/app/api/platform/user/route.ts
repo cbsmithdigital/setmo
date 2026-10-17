@@ -28,6 +28,10 @@ export async function POST(req: Request) {
   });
   if (!target) return error("User not found", 404);
   if (isPlatformRole(target.role)) return error("Can't modify internal staff here", 403);
+  // The free assessment's stand-in setter isn't a person: there's no one to invite or reactivate.
+  if (target.email.endsWith("@prospect.setmo") && (action === "resend_invite" || action === "reactivate")) {
+    return error("That's the free assessment's placeholder setter, not a person.", 422);
+  }
   const name = fullName(target.firstName, target.lastName) || target.email;
 
   if (action === "resend_invite") {

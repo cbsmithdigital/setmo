@@ -27,9 +27,10 @@ export default async function OfficeBillingPage({
         </div>
         <div className="content">
           <div className="card card-pad" style={{ maxWidth: 560 }}>
-            <div className="muted" style={{ fontSize: 12.5, marginBottom: 4 }}>Practice minutes remaining</div>
+            <div className="muted" style={{ fontSize: 12.5, marginBottom: 4 }}>Tokens remaining</div>
             <div style={{ fontFamily: "var(--font-lato)", fontWeight: 900, fontSize: 32, marginBottom: 12 }}>
-              {Math.max(0, balance.remainingMin).toLocaleString()} min
+              {(Math.max(0, balance.remainingMin) * 10).toLocaleString()} tokens{" "}
+              <span className="muted" style={{ fontSize: 14, fontWeight: 600 }}>≈ {Math.max(0, balance.remainingMin).toLocaleString()} min</span>
             </div>
             <p className="muted" style={{ fontSize: 14 }}>{DEMO_BILLING_MESSAGE}</p>
           </div>

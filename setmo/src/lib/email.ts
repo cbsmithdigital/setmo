@@ -235,8 +235,6 @@ export async function sendTeamIdleNudge(opts: {
   );
 }
 
-const ADMIN_EMAIL = process.env.SETMO_ADMIN_EMAIL || process.env.RESEND_FROM_EMAIL;
-
 // Internal inboxes that receive sales / partner alerts. Override with
 // SETMO_ALERT_EMAILS (comma-separated); defaults to the two monitored addresses.
 const ALERT_EMAILS = (process.env.SETMO_ALERT_EMAILS || "hello@growdental.ai,adam@growdental.ai")
@@ -325,20 +323,29 @@ export async function sendDigestEmail(opts: { to: string; subject: string; html:
   return ok ? 1 : 0;
 }
 
-/** Verify-your-email link to unlock the Setter Audit report. */
-export async function sendAuditVerifyEmail(opts: { to: string; link: string; practiceName: string }): Promise<boolean> {
+/** The link that starts a prospect's free Setter Audit: sent to confirm their
+ *  email, again when they ask from another device ("resent"), and when the team
+ *  approves a personal-email assessment ("approved"). */
+export async function sendAuditVerifyEmail(opts: { to: string; link: string; practiceName: string; kind?: "resent" | "approved" }): Promise<boolean> {
+  const lead =
+    opts.kind === "approved"
+      ? "Thanks for waiting — you're approved. Open the link to start your call and unlock the report."
+      : opts.kind === "resent"
+        ? "Here's your link again — open it to pick up where you left off."
+        : "Confirm your email to start your call and unlock the report.";
   return send(
     {
       to: opts.to,
-      subject: "Confirm your free Setter Audit",
+      subject: opts.kind === "approved" ? "You're approved: start your free Setter Audit" : opts.kind === "resent" ? "Your free Setter Audit link" : "Confirm your free Setter Audit",
       html: wrap(`
         <h2 style="color:#7c3aed">Your free Setter Audit for ${esc(opts.practiceName)}</h2>
-        <p>Confirm your email to start your call and unlock the report.</p>
+        <p>${lead}</p>
+        <p>The call uses your microphone, so open the link on the device you'll call from. Headphones or a quiet room work best.</p>
         <p style="margin:28px 0">${button(opts.link, "Start my audit")}</p>
         ${pasteLink(opts.link)}
       `),
     },
-    "audit-verify",
+    opts.kind === "approved" ? "audit-approved" : "audit-verify",
   );
 }
 
@@ -448,21 +455,27 @@ export async function sendPasswordResetEmail(opts: { to: string; link: string })
   );
 }
 
-/** Notify the platform admin when an audit needs manual approval (free email / duplicate domain). */
-export async function sendAuditApprovalRequest(opts: { practiceName: string; email: string; reason: string; manageLink: string }): Promise<boolean> {
-  if (!ADMIN_EMAIL) return false;
+/** Tell the team an assessment is waiting for a review (a personal email
+ *  address). The button opens it in the platform console, where a super admin
+ *  approves it and the prospect is emailed their link. */
+export async function sendAuditApprovalRequest(opts: { practiceName: string; contactName: string; email: string; reason: string; manageLink: string }): Promise<boolean> {
+  if (ALERT_EMAILS.length === 0) return false;
   return send(
     {
-      to: ADMIN_EMAIL,
-      subject: `SetMo audit needs approval — ${opts.practiceName}`,
+      to: ALERT_EMAILS,
+      subject: `SetMo assessment needs a review — ${opts.practiceName}`,
       html: wrap(
         `
-        <h2 style="color:#7c3aed">Setter Audit pending approval</h2>
-        <p><strong>${esc(opts.practiceName)}</strong> (${esc(opts.email)}) requested a free audit.</p>
-        <p><strong>Reason:</strong> ${esc(opts.reason)}</p>
+        <h2 style="color:#7c3aed">A free assessment is waiting for review</h2>
+        <table style="font-size:14px;border-collapse:collapse;margin:8px 0 4px">
+          ${alertRow("Practice", opts.practiceName)}
+          ${alertRow("Contact", opts.contactName)}
+          ${alertRow("Email", opts.email)}
+          ${alertRow("Why", opts.reason)}
+        </table>
         <p style="margin:24px 0">${button(opts.manageLink, "Review &amp; approve")}</p>
       `,
-        520,
+        540,
       ),
     },
     "audit-approval",
@@ -520,6 +533,7 @@ export async function sendAuditSetterInvite(opts: { to: string; link: string; pr
       html: wrap(`
         <h2 style="color:#7c3aed">You've been asked to run a Setter Audit</h2>
         <p>${esc(opts.practiceName)} wants you to run one quick practice call. Open the link and start whenever you're ready.</p>
+        <p>The call uses your microphone, so open the link on the device you'll call from. Headphones or a quiet room work best.</p>
         <p style="margin:28px 0">${button(opts.link, "Start the call")}</p>
         ${pasteLink(opts.link)}
       `),

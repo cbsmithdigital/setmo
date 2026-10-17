@@ -27,6 +27,8 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid invite", 422);
   const { invitees, roles } = parsed.data;
+  // Reserved for the free assessment's stand-in setters, which the roster hides.
+  if (invitees.some((i) => i.email.trim().toLowerCase().endsWith("@prospect.setmo"))) return error("Enter your teammates' real email addresses.", 422);
 
   // Up to 25 addresses a send; this keeps a free account from mass-mailing.
   const limit = await withinLimits([

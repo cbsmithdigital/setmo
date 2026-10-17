@@ -35,7 +35,7 @@ export default async function GroupBillingPage() {
       <div className="topbar">
         <div className="tb-greet">
           <h1>Billing</h1>
-          <p>Your Setty Advisor voice wallet — {balance.freePerMonth} free min/month, then {cfg.groupTokenDiscountPct}% off tokens. Practice Access and tokens for each location are on <Link href="/group/locations">Locations</Link>.</p>
+          <p>Your Setty Advisor voice wallet — {tk(balance.freePerMonth)} free tokens a month (~{balance.freePerMonth} min), then {cfg.groupTokenDiscountPct}% off tokens. Practice Access and tokens for each location are on <Link href="/group/locations">Locations</Link>.</p>
         </div>
         <div className="tb-right" style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {hasCard && <GroupManageCardButton />}

@@ -6,6 +6,7 @@ const TAG: Record<string, string> = {
   "impersonate.start": "View as", "impersonate.stop": "Exit view-as",
   "minutes.grant": "Comp minutes", "access.activate": "Access on", "access.pause": "Access paused",
   "user.role": "Role change", "user.deactivate": "Deactivated", "user.reactivate": "Reactivated",
+  "assessment.approve": "Assessment approved",
 };
 
 export default async function PlatformAuditPage() {

@@ -44,6 +44,7 @@ export async function createAccessCheckout(opts: {
   plan?: "monthly" | "annual";
   bonusMinutes?: number;
   returnPath?: string; // where checkout comes back to (default the office's Billing)
+  switchToAnnual?: boolean; // an active monthly office moving to annual: comes back as ?access=annual
 }): Promise<string> {
   const stripe = getStripe();
   const cfg = await getPricingConfig();
@@ -78,11 +79,26 @@ export async function createAccessCheckout(opts: {
     ],
     subscription_data: { metadata: subMeta },
     metadata: meta,
-    success_url: `${opts.origin}${opts.returnPath ?? "/office/billing"}?access=success`,
+    success_url: `${opts.origin}${opts.returnPath ?? "/office/billing"}?access=${opts.switchToAnnual ? "annual" : "success"}`,
     cancel_url: `${opts.origin}${opts.returnPath ?? "/office/billing"}?access=cancel`,
   });
   if (!session.url) throw new Error("Stripe did not return a checkout URL");
   return session.url;
+}
+
+/** Whether the office already has a running annual Practice Access subscription
+ *  in Stripe — including one paid moments ago that the webhook hasn't recorded
+ *  yet. Running = active or trialing, not paused (a past-due year is owed, not
+ *  paid); annual = the plan metadata or a yearly price, as the webhook reads it. */
+export async function hasRunningAnnualAccess(customerId: string, officeId: string): Promise<boolean> {
+  const subs = await getStripe().subscriptions.list({ customer: customerId, limit: 20 });
+  return subs.data.some(
+    (s) =>
+      (s.status === "active" || s.status === "trialing") &&
+      !s.pause_collection &&
+      (!s.metadata?.officeId || s.metadata.officeId === officeId) &&
+      (s.metadata?.plan === "annual" || s.items.data[0]?.price?.recurring?.interval === "year"),
+  );
 }
 
 /** One-time token purchase (any amount on the slider). `discountPct` = account tier. */
@@ -454,6 +470,14 @@ export async function createBillingPortalSession(opts: { customerId: string; ret
   const stripe = getStripe();
   const session = await stripe.billingPortal.sessions.create({ customer: opts.customerId, return_url: opts.returnUrl });
   return session.url;
+}
+
+/** True when Stripe refused a portal session because the customer portal's
+ *  settings were never saved in this mode (live and test are set up separately,
+ *  in the Dashboard under Settings → Billing → Customer portal). */
+export function isPortalNotConfigured(e: unknown): boolean {
+  const err = e as { type?: string; message?: string } | null;
+  return err?.type === "StripeInvalidRequestError" && /default configuration|portal settings|settings\/billing\/portal/i.test(err.message ?? "");
 }
 
 export function constructWebhookEvent(rawBody: string, signature: string | null): Stripe.Event {

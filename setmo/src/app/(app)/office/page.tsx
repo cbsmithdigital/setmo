@@ -103,7 +103,7 @@ export default async function OfficeOverviewPage() {
 
         <div className="grid g-4 rise" style={{ marginBottom: 18 }}>
           <StatTile lab="Team average" val={o.teamAvg.toFixed(1)} grad="var(--grad-mint)" sub="across active setters" />
-          <StatTile lab="Active setters" val={String(o.activeSetters)} sub={`of ${o.seats} seats`} />
+          <StatTile lab="Active setters" val={String(o.activeSetters)} sub={o.team.length ? `of ${o.team.length} practiced this month` : "practiced this month"} />
           <StatTile lab="Sessions this week" val={String(o.sessionsThisWeek)} sub="office-wide" subClass="up" />
           <div className="stat-tile">
             <div className="lab">Office skills · this month</div>

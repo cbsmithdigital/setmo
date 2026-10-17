@@ -6,6 +6,28 @@ import { Icon } from "@/components/ui/Icon";
 type Action = { type: string; summary: string };
 type Turn = { role: "user" | "assistant"; content: string; actions?: Action[] };
 
+// What /api/coach/chat accepts in one request — keep in step with the route.
+// Your own message is capped; Setty's replies aren't, so a long chat sends only
+// the latest turns that fit (the call or team data comes from the server anyway).
+// The total is in UTF-8 bytes, as the route measures it.
+const MAX_MESSAGE_CHARS = 4000;
+const MAX_HISTORY_MESSAGES = 30;
+const MAX_HISTORY_BYTES = 30_000;
+
+/** The latest turns that fit those caps, starting on one of yours (Claude needs that). */
+function recentTurns(turns: Turn[]): Pick<Turn, "role" | "content">[] {
+  const out: Pick<Turn, "role" | "content">[] = [];
+  const utf8 = new TextEncoder();
+  let bytes = 0;
+  for (let i = turns.length - 1; i >= 0 && out.length < MAX_HISTORY_MESSAGES; i--) {
+    bytes += utf8.encode(turns[i].content).length;
+    if (bytes > MAX_HISTORY_BYTES) break;
+    out.unshift({ role: turns[i].role, content: turns[i].content });
+  }
+  while (out.length > 1 && out[0].role !== "user") out.shift();
+  return out;
+}
+
 export function CoachChat({
   sessionId,
   welcome,
@@ -27,31 +49,43 @@ export function CoachChat({
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [convo, loading]);
+  }, [convo, loading, err]);
 
   async function send(text: string) {
     const content = text.trim();
     if (!content || loading) return;
+    if (content.length > MAX_MESSAGE_CHARS) {
+      setErr(`That message is too long for Setty — please keep it under ${MAX_MESSAGE_CHARS.toLocaleString("en-US")} characters.`);
+      return;
+    }
     setErr(null);
     const next = [...convo, { role: "user" as const, content }];
     setConvo(next);
     setInput("");
     setLoading(true);
+    // No reply (a limit, or the coach failed): take the message back out of the
+    // thread and return it to the box, so it isn't lost or re-sent in the history.
+    // Anything typed while waiting stays, after it (the box is one line).
+    const giveBack = (message: string) => {
+      setConvo(convo);
+      setInput((typed) => (typed.trim() ? `${content} ${typed.trimStart()}` : content));
+      setErr(message);
+    };
     try {
       const res = await fetch("/api/coach/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sessionId, messages: next }),
+        body: JSON.stringify({ sessionId, messages: recentTurns(next) }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setErr(data.error ?? "Coach is unavailable right now.");
+        giveBack(data.error ?? "Coach is unavailable right now.");
         setLoading(false);
         return;
       }
       setConvo((c) => [...c, { role: "assistant", content: data.reply || "…", actions: data.actions ?? [] }]);
     } catch {
-      setErr("Couldn't reach the coach. Try again.");
+      giveBack("Couldn't reach the coach. Try again.");
     } finally {
       setLoading(false);
     }
@@ -116,7 +150,7 @@ export function CoachChat({
             Setty is thinking…
           </div>
         )}
-        {err && <div className="banner error">{err}</div>}
+        {err && <div className="banner error" role="alert">{err}</div>}
       </div>
 
       {convo.length === 0 && (

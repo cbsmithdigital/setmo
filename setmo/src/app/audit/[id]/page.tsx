@@ -1,11 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
-import { loadAuditByCookie } from "@/lib/audit-auth";
-import { auditCallCounts, buildAuditReport, AUDIT_CALLS, AUDIT_CALL_MAX_SECONDS } from "@/lib/audit";
-import { getPricingConfig } from "@/lib/config";
+import { prisma } from "@/lib/db";
+import { auditCallCounts, buildAuditReport, activationCost, loadAuditAccess, AUDIT_CALLS, AUDIT_CALL_MAX_SECONDS, AUDIT_MAX_ATTEMPTS } from "@/lib/audit";
+import { getPlatformConfig } from "@/lib/config";
 import { AuditRunner } from "@/components/audit/AuditRunner";
 import { AuditClaim } from "@/components/audit/AuditClaim";
-import { AuditRequestReview } from "@/components/audit/AuditRequestReview";
 import { SettyButton } from "@/components/audit/SettyButton";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import "../../marketing.css";
@@ -17,7 +16,7 @@ export const metadata = { title: "Your Setter Audit — SetMo" };
 const settyEnabled = Boolean(process.env.SETMO_SETTY_AGENT_ID);
 
 const PLATFORM_FEATURES: { icon: IconName; title: string; desc: string }[] = [
-  { icon: "mic", title: "Unlimited AI practice", desc: "Your whole team reps real inbound calls against a lifelike AI lead — no live leads at risk." },
+  { icon: "mic", title: "AI practice calls", desc: "Your whole team reps real inbound calls against a lifelike AI lead — no live leads at risk." },
   { icon: "chart", title: "8-point scoring every call", desc: "Objective rubric scoring with wins, misses, and the exact words to use next time." },
   { icon: "chat", title: "Setty coaching", desc: "On-demand voice + chat coaching that knows each setter's calls and weak spots." },
   { icon: "book", title: "Trainings library", desc: "Targeted video + workbook lessons that surface from how each setter actually scored." },
@@ -44,7 +43,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 export default async function AuditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const audit = await loadAuditByCookie(id);
+  const audit = await loadAuditAccess(id);
 
   if (!audit) {
     return (
@@ -63,12 +62,14 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
         <div className="audit-card">
           <h3 style={{ fontSize: 22, marginBottom: 10 }}>One quick check 🔍</h3>
           <p style={{ color: "var(--m-muted)", fontSize: 15.5, marginBottom: 10 }}>
-            It looks like <b style={{ color: "var(--ink-soft)" }}>{audit.email}</b> is a personal email. SetMo is built for dental practices, so the fastest way in is to start the audit again with your <b style={{ color: "var(--ink-soft)" }}>practice email</b>.
+            It looks like <b style={{ color: "var(--ink-soft)" }}>{audit.email}</b> is a personal email. SetMo is built for dental practices, so a personal address gets a quick look from our team first.
           </p>
           <p style={{ color: "var(--m-muted)", fontSize: 15.5 }}>
-            Some practices do use personal emails for staff or doctors. If that&apos;s you, request a review and we&apos;ll confirm your access by hand and email you your link.
+            We&apos;ve let them know, so there&apos;s nothing else you need to do. We&apos;ll email you at that address when your call is ready.
           </p>
-          <AuditRequestReview auditId={id} />
+          <p className="audit-note">
+            Have a practice email? <Link href="/audit" style={{ color: "var(--purple-deep)", fontWeight: 600 }}>Start again with it</Link> — it opens right away. Questions? <a href="mailto:hello@growdental.ai" style={{ color: "var(--purple-deep)", fontWeight: 600 }}>hello@growdental.ai</a>
+          </p>
         </div>
       </Shell>
     );
@@ -78,8 +79,16 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
     const r = await buildAuditReport(id);
     if (!r) return <Shell><div className="audit-card">Report unavailable.</div></Shell>;
     const rec = r.recovery;
-    // Quote the live price, never a hard-coded one — this is what Stripe charges.
-    const { accessMonthly } = await getPricingConfig();
+    // Quote the live price, never a hard-coded one — this is what Stripe charges:
+    // access plus the starter tokens activation needs (unless a promo is on).
+    const cfg = await getPlatformConfig();
+    const cost = activationCost(cfg);
+    const usd = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    // Already turned into an account, or opened from a setter link: the
+    // owner's login isn't offered here.
+    const claimed = (await prisma.office.findUnique({ where: { id: audit.officeId }, select: { isProspect: true } }))?.isProspect === false;
+    const asSetter = audit.asSetter;
+    const contactFirst = audit.contactName.split(/\s+/)[0] || "The practice owner";
     return (
       <Shell>
         <div className="sec-head" style={{ marginBottom: 22 }}>
@@ -191,7 +200,7 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
         {/* everything in SetMo — platform walkthrough */}
         <div className="audit-card" style={{ marginBottom: 18 }}>
           <h3 style={{ fontSize: 18, marginBottom: 4 }}>Everything you get with SetMo</h3>
-          <p style={{ color: "var(--m-muted)", fontSize: 14, marginBottom: 16 }}>One flat price per location — unlimited users, every feature included.</p>
+          <p style={{ color: "var(--m-muted)", fontSize: 14, marginBottom: 16 }}>One price per location — unlimited users, every feature included, plus pay-as-you-go tokens for practice time.</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 14 }}>
             {PLATFORM_FEATURES.map((f) => (
               <div key={f.title} style={{ display: "flex", gap: 12 }}>
@@ -211,15 +220,36 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
         <div className="audit-card">
           <h3 style={{ fontSize: 20, marginBottom: 6 }}>Turn this into your team&apos;s baseline</h3>
           <p style={{ color: "var(--m-muted)", fontSize: 14.5, marginBottom: 6 }}>
-            Activate SetMo for {r.practiceName} and put every setter on the same coaching — <b style={{ color: "var(--ink-soft)" }}>${accessMonthly.toFixed(2)}/month</b> per location, unlimited users, practice time pay-as-you-go.
+            Activate SetMo for {r.practiceName} and put every setter on the same coaching — <b style={{ color: "var(--ink-soft)" }}>{usd(cost.accessMonthly)}/month</b> per location, unlimited users.
           </p>
-          <AuditClaim auditId={id} />
+          <p style={{ color: "var(--m-muted)", fontSize: 14.5, marginBottom: 6 }}>
+            {cost.bonusTokens > 0 ? (
+              <>
+                Getting started is <b style={{ color: "var(--ink-soft)" }}>{usd(cost.dayOneUsd)} today</b>, your first month of Practice Access. Activate by {cost.promoEndsAt} and you also get {cost.bonusTokens.toLocaleString()} free tokens to practice on.
+              </>
+            ) : (
+              <>
+                Getting started is <b style={{ color: "var(--ink-soft)" }}>from {usd(cost.dayOneUsd)} today</b>: your first month of Practice Access ({usd(cost.accessMonthly)}) plus starter tokens (from ${cost.starterUsd.toLocaleString()} for {cost.starterTokens.toLocaleString()}), plus tax where it applies. After that, buy tokens as you need them.
+              </>
+            )}
+          </p>
+          {claimed ? (
+            <p style={{ fontSize: 14, color: "var(--ink-soft)", marginTop: 18 }}>
+              {r.practiceName} already has a SetMo account. <Link href="/login" style={{ color: "var(--purple-deep)", fontWeight: 600 }}>Sign in</Link>, or <Link href="/forgot-password" style={{ color: "var(--purple-deep)", fontWeight: 600 }}>reset your password</Link> if you need to.
+            </p>
+          ) : asSetter ? (
+            <p style={{ fontSize: 14, color: "var(--ink-soft)", marginTop: 18 }}>
+              {contactFirst} can make this {r.practiceName}&apos;s baseline and set up the SetMo account from the link in their own email.
+            </p>
+          ) : (
+            <AuditClaim auditId={id} email={audit.email} />
+          )}
           <p className="audit-note" style={{ textAlign: "center" }}>
-            This report is your baseline, saved {r.baselineAt ? new Date(r.baselineAt).toLocaleDateString() : "today"}. Questions? Tap <b style={{ color: "var(--ink-soft)" }}>Talk to Setty</b> — or <a href="mailto:hello@growdental.ai?subject=SetMo%20for%20our%20group" style={{ color: "var(--purple-deep)", fontWeight: 600 }}>talk to us about a group</a>.
+            This report is your baseline, saved {r.baselineAt ? new Date(r.baselineAt).toLocaleDateString() : "today"}. The free Setter Audit is one call per email every {cost.cooldownDays} days. Questions? Tap <b style={{ color: "var(--ink-soft)" }}>Talk to Setty</b> — or <a href="mailto:hello@growdental.ai?subject=SetMo%20for%20our%20group" style={{ color: "var(--purple-deep)", fontWeight: 600 }}>talk to us about a group</a>.
           </p>
         </div>
 
-        {settyEnabled && <SettyButton auditId={id} practiceName={r.practiceName} />}
+        {settyEnabled && <SettyButton auditId={id} practiceName={r.practiceName} canActivate={!claimed && !asSetter} />}
       </Shell>
     );
   }
@@ -239,6 +269,9 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
         totalCalls={AUDIT_CALLS}
         maxSeconds={AUDIT_CALL_MAX_SECONDS}
         initialCalls={counts.calls}
+        initialAttemptsLeft={counts.attemptsLeft}
+        maxAttempts={AUDIT_MAX_ATTEMPTS}
+        initialTooShort={counts.tooShort}
       />
     </Shell>
   );

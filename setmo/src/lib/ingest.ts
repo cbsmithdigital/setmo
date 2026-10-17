@@ -188,7 +188,18 @@ export async function scoreSession(
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.session.update({ where: { id: session.id }, data: { status: "SCORED" } });
+    if (session.isAudit && source === "too-short") {
+      // A free-assessment call too short to score doesn't use up the prospect's
+      // one call: it's closed out as FAILED (lib/audit leaves those out), so
+      // they can call again. A practice call keeps its "too short to score".
+      const seed = ((await tx.session.findUnique({ where: { id: session.id }, select: { personaSeed: true } }))?.personaSeed ?? {}) as Record<string, unknown>;
+      await tx.session.update({
+        where: { id: session.id },
+        data: { status: "FAILED", personaSeed: { ...seed, failReason: "too-short", failedAt: new Date().toISOString() } as object },
+      });
+    } else {
+      await tx.session.update({ where: { id: session.id }, data: { status: "SCORED" } });
+    }
     await tx.evaluation.update({
       where: { sessionId: session.id },
       data: {
