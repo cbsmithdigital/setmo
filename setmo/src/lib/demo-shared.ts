@@ -25,6 +25,16 @@ export const DEMO_INVITE_MESSAGE =
 export const DEMO_PERSONA_DOMAIN = "demo.setmo.invalid";
 export const isDemoPersonaEmail = (email: string | null | undefined) => Boolean(email?.toLowerCase().endsWith(`@${DEMO_PERSONA_DOMAIN}`));
 
+/** The seeded demo logins live on made-up addresses: reserved .example/.invalid
+ *  domains, plus brightworkdental.com, a real practice's domain we don't own. A
+ *  password-reset link for one would go nowhere or to a stranger. Real people
+ *  who sit in a demo account (partner reps, our own logins) aren't on these. */
+const SEEDED_DEMO_DOMAINS = ["brightworkdental.com"];
+export function isSeededDemoEmail(email: string | null | undefined): boolean {
+  const domain = email?.trim().toLowerCase().split("@")[1] ?? "";
+  return domain.endsWith(".example") || domain.endsWith(".invalid") || SEEDED_DEMO_DOMAINS.includes(domain);
+}
+
 /** What a demo admin sees when trying to manage a real login in the demo. */
 export const DEMO_MEMBER_MESSAGE =
   "In a demo account you can only manage the demo team, not the partner logins that share it.";
