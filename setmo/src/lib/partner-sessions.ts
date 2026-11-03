@@ -122,7 +122,8 @@ export async function createPartnerSession(caller: ApiCaller, input: z.infer<typ
       insufficient_tokens: "The practice token balance is used up, so new calls can't start until more tokens are added.",
       partner_disabled: "Practice calls are switched off for this partner. Contact the SetMo team.",
     };
-    return { ok: false, status: access.code, code: access.reason, message: messages[access.reason] ?? access.error };
+    // A call type the location doesn't run is a problem with the request (422), not a permission one.
+    return { ok: false, status: access.reason === "call_type_unavailable" ? 422 : access.code, code: access.reason, message: messages[access.reason] ?? access.error };
   }
 
   // Adaptive difficulty starts from this trainee's level on this call type.
