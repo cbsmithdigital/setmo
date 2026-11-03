@@ -25,6 +25,7 @@ export function AdminsManager({ admins, selfId }: { admins: Admin[]; selfId: str
   }
 
   async function add() {
+    if (!window.confirm(`Add ${email.trim()} as ${role === "PLATFORM_ADMIN" ? "a Super Admin" : "Success / Support"}?`)) return;
     const ok = await call({ action: "add", email, role, password: password || undefined }, "add");
     if (ok) { setEmail(""); setPassword(""); }
   }
@@ -34,12 +35,14 @@ export function AdminsManager({ admins, selfId }: { admins: Admin[]; selfId: str
       <div className="card card-pad">
         <h3 style={{ fontSize: 17, marginBottom: 12 }}>Add internal admin</h3>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <input className="input" type="email" placeholder="teammate@growdental.ai" value={email} onChange={(e) => setEmail(e.target.value)} style={{ flex: 1, minWidth: 220 }} />
+          {/* Not a sign-in form: without these hints the browser fills in YOUR
+              saved login here, and the add then changes your own access. */}
+          <input className="input" type="email" name="new-admin-email" autoComplete="off" data-1p-ignore data-lpignore="true" placeholder="teammate@growdental.ai" value={email} onChange={(e) => setEmail(e.target.value)} style={{ flex: 1, minWidth: 220 }} />
           <select className="input" value={role} onChange={(e) => setRole(e.target.value)} style={{ width: 180 }}>
             <option value="SUPPORT">Success / Support</option>
             <option value="PLATFORM_ADMIN">Super Admin</option>
           </select>
-          <input className="input" type="password" placeholder="Temp password (if new)" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: 200 }} />
+          <input className="input" type="password" name="new-admin-temp-password" autoComplete="new-password" data-1p-ignore data-lpignore="true" placeholder="Temp password (if new)" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: 200 }} />
           <button className="btn btn-primary" onClick={add} disabled={busy === "add" || !email} style={{ padding: "9px 16px" }}>{busy === "add" ? "Adding…" : "Add"}</button>
         </div>
         <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>If the email already has an account, the password is ignored. Otherwise it creates one they can reset later.</p>

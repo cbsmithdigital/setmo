@@ -24,6 +24,9 @@ export async function POST(req: Request) {
   if (action === "add") {
     if (!email || !role) return error("Email and role required", 422);
     const lower = email.trim().toLowerCase();
+    // Your own access is never changed from here (a browser autofilling your
+    // login into this form once turned a super admin into Support).
+    if (lower === actor.email?.trim().toLowerCase()) return error("That's your own email — enter the new admin's email instead.", 400);
     const admin = getAdminClient();
     // Find existing auth user; create with a password if not found.
     let authId: string | null = null;
