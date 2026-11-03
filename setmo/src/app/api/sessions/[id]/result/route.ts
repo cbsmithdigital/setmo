@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { sessionActor } from "@/lib/partner-launch";
 import { getSessionResult } from "@/lib/queries";
 import { kickOverdueScore } from "@/lib/rescore";
 import { error, json } from "@/lib/api";
@@ -8,13 +8,14 @@ import { error, json } from "@/lib/api";
 // webhook is still processing (the wrap screen polls this), or "failed" once
 // the call has been given up on (never scored, or no transcript ever came).
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getCurrentUser();
+  const { id } = await params;
+  // A signed-in SetMo user, or an embedded partner call (frame token for this call).
+  const user = await sessionActor(req, id);
   if (!user) return error("Unauthorized", 401);
 
-  const { id } = await params;
   const result = await getSessionResult(id, user);
   if (result) return json({ status: "scored", result });
 

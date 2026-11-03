@@ -68,6 +68,14 @@ export async function ensureRecording(session: {
   return path;
 }
 
+/** A short-lived signed link to a call recording (Partner API results). */
+export async function getRecordingUrl(path: string, expiresIn = 3600): Promise<string | null> {
+  const sb = getAdminClient();
+  const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(path, expiresIn);
+  if (error || !data) return null;
+  return data.signedUrl;
+}
+
 // ── Training assets (videos / workbook PDFs) ─────────────────────────────────
 const TRAININGS_BUCKET = "trainings";
 

@@ -63,6 +63,19 @@ enum PartnerPayoutMethod {
   CREDIT
 }
 
+// A partner integration (Partner API) runs in two separate worlds: TEST (keys
+// that start with setmo_test_, demo locations, a comped wallet) and LIVE.
+enum PartnerMode {
+  LIVE
+  TEST
+}
+
+// What a partner's own id points at in SetMo.
+enum PartnerRefKind {
+  LOCATION // an Office
+  TRAINEE // a User (DB-only setter, no login)
+}
+
 enum CommissionKind {
   ACCESS
   MINUTES
@@ -306,6 +319,7 @@ model Office {
   offerFraming     String?  @map("offer_framing")
   appointmentFraming String? @map("appointment_framing")
   depositPolicy    String?  @map("deposit_policy")
+  doctorName       String?  @map("doctor_name") // the practice's doctor, e.g. "Dr. Patel" — a lead who mentions the doctor uses this name
   seatCount        Int      @default(1) @map("seat_count")
   stripeCustomerId String?  @map("stripe_customer_id")
   isProspect       Boolean  @default(false) @map("is_prospect") // created by a pre-sale Setter Audit, not yet a customer
@@ -328,10 +342,15 @@ model Office {
   giftCardsRequestedAt DateTime? @map("gift_cards_requested_at")
   // Last "your team hasn't practiced this week" email to the admins (lib/nudges).
   idleNudgeAt      DateTime? @map("idle_nudge_at")
+  // A location run through a partner's API (e.g. Team Care): the partner bills
+  // it from its own wallet, so SetMo's own billing, alerts and emails stay off.
+  managedByPartnerId String? @map("managed_by_partner_id")
   createdAt        DateTime @default(now()) @map("created_at")
 
   organization Organization?       @relation(fields: [organizationId], references: [id])
   servedByPod  Pod?                @relation("PodOffices", fields: [servedByPodId], references: [id])
+  managedByPartner Partner?        @relation("PartnerManagedOffices", fields: [managedByPartnerId], references: [id], onDelete: Restrict)
+  partnerRefs  PartnerRef[]
   users        User[]
   services     OfficeService[]
   sessions     Session[]
@@ -345,6 +364,7 @@ model Office {
 
   @@index([organizationId])
   @@index([servedByPodId])
+  @@index([managedByPartnerId])
   @@map("office")
 }
 
@@ -410,6 +430,7 @@ model User {
   agentOffices    AgentOffice[] // call-center agent → assigned offices
   ghlUserMaps     GhlUserMap[] // GHL agent identity mapped to this user
   pushSubscriptions PushSubscription[] // phones/browsers that get SetMo notifications
+  partnerRefs     PartnerRef[] // a partner's own id for this person (Partner API trainee)
 
   @@index([officeId])
   @@index([organizationId])
@@ -489,6 +510,8 @@ model Partner {
   // The partner's demo organization (showcase practices for learning + demos).
   // Partner users get demo access to it; reps inherit it when invited.
   demoOrganizationId String?        @map("demo_organization_id")
+  // Partner API wallet: 0 healthy · 1 sent the "running low" email · 2 sent "empty".
+  walletAlertStage Int              @default(0) @map("wallet_alert_stage")
   createdAt     DateTime            @default(now()) @map("created_at")
 
   users           User[]
@@ -496,8 +519,143 @@ model Partner {
   codes           PartnerCode[]
   commissions     PartnerCommission[]
   payouts         PartnerPayout[]
+  // Partner API (integration partners like Team Care)
+  apiKeys         PartnerApiKey[]
+  integrations    PartnerIntegration[]
+  walletEntries   PartnerWalletEntry[]
+  refs            PartnerRef[]
+  managedOffices  Office[]            @relation("PartnerManagedOffices")
+  sessions        Session[]           @relation("PartnerSessions")
 
   @@map("partner")
+}
+
+// ---------- Partner API (Team Care and future integration partners) ----------
+
+// A secret key a partner's server uses to call /api/v1. Only a hash is kept;
+// the key itself is shown once, when it's made.
+model PartnerApiKey {
+  id          String      @id @default(uuid())
+  partnerId   String      @map("partner_id")
+  mode        PartnerMode
+  label       String?
+  prefix      String // the start of the key, shown in the console to tell keys apart
+  keyHash     String      @unique @map("key_hash") // sha256 of the whole key
+  createdById String?     @map("created_by_id")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  lastUsedAt  DateTime?   @map("last_used_at")
+  revokedAt   DateTime?   @map("revoked_at")
+
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId])
+  @@map("partner_api_key")
+}
+
+// Per partner and mode: where results are sent, which sites may show the call
+// in a frame, and the accent color of the embedded call screen.
+model PartnerIntegration {
+  id             String      @id @default(uuid())
+  partnerId      String      @map("partner_id")
+  mode           PartnerMode
+  webhookUrl     String?     @map("webhook_url")
+  webhookSecret  String      @map("webhook_secret") // signs every webhook (HMAC-SHA256)
+  allowedOrigins String[]    @default([]) @map("allowed_origins") // e.g. https://app.teamcaredental.com
+  accentColor    String?     @map("accent_color") // #RRGGBB
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerId, mode])
+  @@map("partner_integration")
+}
+
+// The partner's token wallet: every addition (a purchase SetMo billed, a comp,
+// a correction). Use is never stored here — it's the partner's calls'
+// durations, so the balance can't drift (like the call-center pool).
+model PartnerWalletEntry {
+  id          String      @id @default(uuid())
+  partnerId   String      @map("partner_id")
+  mode        PartnerMode
+  minutes     Int // tokens = minutes × 10; negative for a correction
+  amountCents Int?        @map("amount_cents") // what the partner paid SetMo for it (null/0 = comp)
+  note        String?
+  createdById String?     @map("created_by_id")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId, mode])
+  @@map("partner_wallet_entry")
+}
+
+// A partner's own id for one of its locations or trainees, so the partner
+// never has to store SetMo's ids.
+model PartnerRef {
+  id         String         @id @default(uuid())
+  partnerId  String         @map("partner_id")
+  mode       PartnerMode
+  kind       PartnerRefKind
+  externalId String         @map("external_id")
+  officeId   String?        @map("office_id")
+  userId     String?        @map("user_id")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  office  Office? @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerId, mode, kind, externalId])
+  @@index([officeId])
+  @@index([userId])
+  @@map("partner_ref")
+}
+
+// Opening a partner call in a frame. The launch link's token works once and
+// soon expires; opening it issues the frame token the call screen then sends
+// with every request (no cookies — they don't reach a frame on another site).
+// Only hashes of both tokens are kept.
+model PartnerLaunch {
+  id             String    @id @default(uuid())
+  sessionId      String    @map("session_id")
+  partnerId      String    @map("partner_id")
+  tokenHash      String    @unique @map("token_hash")
+  expiresAt      DateTime  @map("expires_at")
+  usedAt         DateTime? @map("used_at")
+  frameTokenHash String?   @unique @map("frame_token_hash")
+  frameExpiresAt DateTime? @map("frame_expires_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("partner_launch")
+}
+
+// Every webhook event for a partner, and how its delivery went. One event per
+// session per type; failed deliveries are retried with backoff for a day.
+model PartnerWebhookDelivery {
+  id            String      @id // evt_…
+  partnerId     String      @map("partner_id")
+  mode          PartnerMode
+  sessionId     String?     @map("session_id")
+  type          String // session.started | session.ended | session.completed | session.failed
+  payload       Json
+  status        String      @default("PENDING") // PENDING | DELIVERED | FAILED | SKIPPED (no webhook URL)
+  attempts      Int         @default(0)
+  nextAttemptAt DateTime?   @map("next_attempt_at")
+  lastAttemptAt DateTime?   @map("last_attempt_at")
+  lastStatus    Int?        @map("last_status")
+  lastError     String?     @map("last_error")
+  deliveredAt   DateTime?   @map("delivered_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@unique([sessionId, type])
+  @@index([status, nextAttemptAt])
+  @@index([partnerId, createdAt])
+  @@map("partner_webhook_delivery")
 }
 
 // One row per partner payout run (cash via Stripe Connect, or credit applied to
@@ -629,19 +787,29 @@ model Session {
   sharedAt               DateTime?     @map("shared_at")
   isAudit                Boolean       @default(false) @map("is_audit") // part of a pre-sale Setter Audit
   auditId                String?       @map("audit_id")
+  // Started through a partner's API (e.g. Team Care) → metered against that
+  // partner's wallet in this mode, NOT the office pool; results go to its webhook.
+  partnerId              String?       @map("partner_id")
+  partnerMode            PartnerMode?  @map("partner_mode")
+  partnerReference       String?       @map("partner_reference") // the partner's own id for this attempt (makes create idempotent)
+  partnerMeta            Json?         @map("partner_meta") // { metadata: the partner's own object (echoed back in its webhooks), createdAt }
 
   setter     User         @relation(fields: [setterId], references: [id])
   office     Office       @relation(fields: [officeId], references: [id])
   agent      Agent?       @relation(fields: [agentId], references: [id])
   evaluation Evaluation?
   audit      SetterAudit? @relation(fields: [auditId], references: [id])
+  partner    Partner?     @relation("PartnerSessions", fields: [partnerId], references: [id], onDelete: Restrict)
+  launches   PartnerLaunch[]
 
+  @@unique([partnerId, partnerMode, partnerReference])
   @@index([setterId])
   @@index([officeId])
   @@index([organizationId])
   @@index([callCenterOrgId])
   @@index([serviceType])
   @@index([auditId])
+  @@index([partnerId])
   @@map("session")
 }
 

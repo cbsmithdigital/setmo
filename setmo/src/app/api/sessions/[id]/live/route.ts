@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { sessionActor } from "@/lib/partner-launch";
+import { after } from "next/server";
 import { error, json } from "@/lib/api";
+import { emitSessionEvent } from "@/lib/partner-webhooks";
 
 const Body = z.object({ conversationId: z.string().min(1).max(200) });
 
@@ -11,9 +13,10 @@ const Body = z.object({ conversationId: z.string().min(1).max(200) });
 // again on the same session), and ties the session to its conversation early so
 // a late recording still finds it. Nothing here is trusted for scoring.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getCurrentUser();
-  if (!user) return error("Unauthorized", 401);
   const { id } = await params;
+  // A signed-in SetMo user, or an embedded partner call (frame token for this call).
+  const user = await sessionActor(req, id);
+  if (!user) return error("Unauthorized", 401);
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return error("Invalid request", 422);
 
@@ -31,5 +34,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       personaSeed: { ...seed, connectedAt: new Date().toISOString(), callbackState: "open" } as object,
     },
   });
+  // A call started through a partner's API: tell the partner it's under way.
+  after(() => emitSessionEvent(session.id, "session.started"));
   return json({ ok: true });
 }

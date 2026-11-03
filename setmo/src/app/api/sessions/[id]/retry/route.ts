@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { sessionActor } from "@/lib/partner-launch";
 import { checkPracticeOpen, callCenterOfficeInScope } from "@/lib/practice-access";
 import { CALLBACK_WINDOW_MS, callbackRootStart, hasComposedLead } from "@/lib/session-lead";
 import { markCallback } from "@/lib/realism/lead-card";
@@ -16,17 +16,21 @@ import type { ServiceKey } from "@/generated/prisma/client";
 // already be scored (that happens seconds after a drop); its results keep the
 // lead's answers back while it can still be called back (see leadInPlay). It
 // can't swap leads: the person is copied, not re-drawn.
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getCurrentUser();
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  // A signed-in SetMo user, or an embedded partner call (frame token for this call).
+  const user = await sessionActor(req, id);
   if (!user) return error("Unauthorized", 401);
 
-  const { id } = await params;
   const old = await prisma.session.findFirst({ where: { id, setterId: user.id } });
   if (!old) return error("Session not found", 404);
   const seed = (old.personaSeed ?? {}) as Record<string, unknown>;
 
   const cantCallBack = (why: string) => error(why, 409);
   if (old.isAudit || old.kind !== "PRACTICE" || !hasComposedLead(seed)) return cantCallBack("This call can't be called back.");
+  // A call started through a partner's API is one attempt on the partner's side;
+  // a callback would be a second, unrequested call on its wallet.
+  if (old.partnerId) return cantCallBack("This call can't be called back — get feedback on it instead.");
   if (!(old.status === "IN_PROGRESS" || old.status === "SCORED") || seed.callbackState !== "open") {
     return cantCallBack("Only a call that dropped can be called back — start a new call.");
   }

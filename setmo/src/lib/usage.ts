@@ -12,11 +12,12 @@ const MIN_START_SECONDS = 60;
 export async function getMinuteBalance(officeId: string): Promise<{ purchasedMin: number; usedMin: number; remainingMin: number; remainingSeconds: number }> {
   const [purchases, used] = await Promise.all([
     prisma.conversationBundle.aggregate({ where: { officeId }, _sum: { minutesPurchased: true } }),
-    // Exclude sessions metered against another pool: group/DSO coach (organizationId)
-    // and call-center agents' practice calls (callCenterOrgId) — neither draws this
+    // Exclude sessions metered against another pool: group/DSO coach (organizationId),
+    // call-center agents' practice calls (callCenterOrgId) and calls started through
+    // a partner's API (partnerId — the partner's wallet pays) — none draws this
     // office's balance, so a served office is never billed for a call center's agents.
     // kind LIVE excluded: ingested real calls never draw down the practice pool
-    prisma.session.aggregate({ where: { officeId, organizationId: null, callCenterOrgId: null, isAudit: false, kind: { not: "LIVE" }, status: { not: "FAILED" }, durationSeconds: { not: null } }, _sum: { durationSeconds: true } }),
+    prisma.session.aggregate({ where: { officeId, organizationId: null, callCenterOrgId: null, partnerId: null, isAudit: false, kind: { not: "LIVE" }, status: { not: "FAILED" }, durationSeconds: { not: null } }, _sum: { durationSeconds: true } }),
   ]);
   const purchasedMin = purchases._sum.minutesPurchased ?? 0;
   const usedMin = Math.round((used._sum.durationSeconds ?? 0) / 60);

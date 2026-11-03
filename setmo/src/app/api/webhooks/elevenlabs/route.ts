@@ -2,6 +2,7 @@ import { after } from "next/server";
 import { verifyWebhookSignature } from "@/lib/elevenlabs";
 import { ingestPostCall, ingestAudio, scoreSession } from "@/lib/ingest";
 import { captureError } from "@/lib/observability";
+import { emitSessionEvent } from "@/lib/partner-webhooks";
 import { error, json } from "@/lib/api";
 
 // The transcript is CAPTURED synchronously (fast, <5s) so the one webhook we get
@@ -46,6 +47,8 @@ export async function POST(req: Request) {
   if (result.needsScore && result.sessionId) {
     const id = result.sessionId;
     after(async () => {
+      // A call started through a partner's API: tell the partner it ended.
+      await emitSessionEvent(id, "session.ended");
       try {
         await scoreSession(id);
       } catch (e) {

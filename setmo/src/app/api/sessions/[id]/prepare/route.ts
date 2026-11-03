@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { sessionActor } from "@/lib/partner-launch";
 import { agentIdFor, isElevenLabsConfigured } from "@/lib/elevenlabs";
 import { buildSessionLead, hasComposedLead, resolveDifficulty } from "@/lib/session-lead";
 import { leadCardFromSeed } from "@/lib/realism/lead-card";
@@ -20,14 +20,15 @@ type SessionState = { status: string; completedAt: Date | null; personaSeed: unk
 //   • connected and then cut off → "call them back" or feedback;
 //   • claimed but never connected (mic blocked, network) → the card again, and
 //     Start tries the same session once more.
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getCurrentUser();
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  // A signed-in SetMo user, or an embedded partner call (frame token for this call).
+  const user = await sessionActor(req, id);
   if (!user) return error("Unauthorized", 401);
 
-  const { id } = await params;
   const session = await prisma.session.findFirst({
     where: { id, setterId: user.id },
-    include: { office: { select: { name: true, city: true, offerFraming: true, appointmentFraming: true } } },
+    include: { office: { select: { name: true, city: true, offerFraming: true, appointmentFraming: true, doctorName: true } } },
   });
   if (!session) return error("Session not found", 404);
 

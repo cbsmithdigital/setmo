@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { scoreSession, SCORE_LEASE_MS } from "@/lib/ingest";
 import { captureError } from "@/lib/observability";
+import { emitSessionEvent } from "@/lib/partner-webhooks";
 
 // Practice calls whose score didn't land. The post-call webhook scores in the
 // background once; if that dies (function cut off, Claude erroring past its
@@ -25,10 +26,11 @@ export async function markCallFailed(sessionId: string, reason: FailReason): Pro
   const s = await prisma.session.findUnique({ where: { id: sessionId }, select: { status: true, personaSeed: true } });
   if (!s || s.status === "SCORED" || s.status === "FAILED") return;
   const seed = (s.personaSeed ?? {}) as Record<string, unknown>;
-  await prisma.session.updateMany({
+  const r = await prisma.session.updateMany({
     where: { id: sessionId, status: { notIn: ["SCORED", "FAILED"] } },
     data: { status: "FAILED", personaSeed: { ...seed, failReason: reason, failedAt: new Date().toISOString() } as object },
   });
+  if (r.count === 1) await emitSessionEvent(sessionId, "session.failed");
 }
 
 const dueForRetry = (now: number): Prisma.EvaluationWhereInput => ({

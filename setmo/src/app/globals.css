@@ -1865,3 +1865,17 @@ body {
 .sb-getapp:hover {
   color: var(--text);
 }
+
+/* ---- Embedded partner call (a practice call inside a partner's app) ---- */
+.embed-root {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.embed-results {
+  position: relative;
+  z-index: 1;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 22px 16px 40px;
+}

@@ -1,6 +1,7 @@
 import { json, error } from "@/lib/api";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { sweepScoring } from "@/lib/rescore";
+import { sweepPartnerWebhooks, closeAbandonedPartnerCalls } from "@/lib/partner-webhooks";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -11,5 +12,9 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   if (!cronAuthorized(req)) return error("Unauthorized", 401);
   const result = await sweepScoring();
-  return json({ ok: true, ...result });
+  // Partner API: close out calls created a day ago and never started, then retry
+  // webhooks that didn't get through.
+  const abandoned = await closeAbandonedPartnerCalls().catch(() => 0);
+  const webhooks = await sweepPartnerWebhooks().catch(() => ({ attempted: 0, delivered: 0 }));
+  return json({ ok: true, ...result, partnerAbandoned: abandoned, partnerWebhooks: webhooks });
 }

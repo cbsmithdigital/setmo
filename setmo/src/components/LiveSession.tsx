@@ -68,17 +68,73 @@ function useDevice(): Device {
   return useSyncExternalStore(noSubscribe, readDevice, () => NO_DEVICE);
 }
 
+/** Set when the call runs inside a partner's app (an iframe on another site):
+ *  requests carry the frame token instead of a login, the results show in place,
+ *  nothing navigates to SetMo's own pages, and the parent page hears about each
+ *  step. */
+export type EmbedOptions = {
+  token: string;
+  /** Tell the partner's page what happened (postMessage). */
+  notify: (type: string, data?: Record<string, unknown>) => void;
+  /** The scored result is ready — show it in place. */
+  onScored: (result: unknown) => void;
+  /** The parent page asked to end the call. */
+  endSignal?: number;
+};
+
 function SessionInner({
   sessionId,
   serviceLabel,
   remainingMinutes,
+  embed,
 }: {
   sessionId: string;
   serviceLabel: string;
   remainingMinutes: number;
+  embed?: EmbedOptions;
 }) {
   const router = useRouter();
   const device = useDevice();
+  // Every request to SetMo for this call: a login cookie normally, the frame
+  // token when embedded.
+  const embedToken = embed?.token;
+  const api = useCallback(
+    (path: string, init: RequestInit = {}) =>
+      fetch(path, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), ...(embedToken ? { authorization: `Bearer ${embedToken}` } : {}) } }),
+    [embedToken]
+  );
+  const notifyRef = useRef(embed?.notify);
+  const scoredRef = useRef(embed?.onScored);
+  useEffect(() => {
+    notifyRef.current = embed?.notify;
+    scoredRef.current = embed?.onScored;
+  });
+  const notify = useCallback((type: string, data?: Record<string, unknown>) => notifyRef.current?.(type, data), []);
+  // Where "Back" goes: SetMo's practice page, or (embedded) nowhere — the partner's app owns the way out.
+  const leave = useCallback(() => {
+    if (embedToken) notify("close");
+    else router.push("/practice");
+  }, [embedToken, notify, router]);
+  // A scored call: SetMo's results page, or (embedded) the results in place.
+  const showResults = useCallback(
+    async (data?: unknown) => {
+      if (!embedToken) {
+        router.push(`/results/${sessionId}`);
+        return;
+      }
+      let result = data;
+      if (!result) {
+        const res = await api(`/api/sessions/${sessionId}/result`, { cache: "no-store" }).catch(() => null);
+        const body = res && res.ok ? await res.json().catch(() => null) : null;
+        result = body?.status === "scored" ? body.result : null;
+      }
+      if (result) {
+        notify("results.ready");
+        scoredRef.current?.(result);
+      }
+    },
+    [embedToken, router, sessionId, api, notify]
+  );
   const [phase, setPhase] = useState<Phase>("pre");
   const [secs, setSecs] = useState(0);
   const [muted, setMuted] = useState(false);
@@ -106,7 +162,8 @@ function SessionInner({
   // the lead's answers back.
   const endedRef = useRef<Promise<void> | null>(null);
   const reportEnded = useCallback(() => {
-    endedRef.current = fetch(`/api/sessions/${sessionId}/ended`, {
+    notify("call.ended");
+    endedRef.current = api(`/api/sessions/${sessionId}/ended`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ conversationId: conversationIdRef.current ?? undefined }),
@@ -115,16 +172,17 @@ function SessionInner({
       () => {} /* the webhook is authoritative regardless */
     );
     return endedRef.current;
-  }, [sessionId]);
+  }, [sessionId, api, notify]);
 
   const conversation = useConversation({
     micMuted: muted,
     onConnect: ({ conversationId }) => {
       connectedRef.current = true;
       conversationIdRef.current = conversationId;
+      notify("call.started");
       // Tell the server the call really connected: a drop from here on is a
       // "call them back", not a retry of the same session.
-      void fetch(`/api/sessions/${sessionId}/live`, {
+      void api(`/api/sessions/${sessionId}/live`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ conversationId }),
@@ -141,6 +199,7 @@ function SessionInner({
         void reportEnded();
       } else if (details.reason === "error" && connectedRef.current) {
         // Cut out mid-call. (A call that never connected is an error, below.)
+        notify("call.dropped");
         go("dropped");
       }
     },
@@ -153,8 +212,10 @@ function SessionInner({
       if (name === "NotAllowedError" || name === "SecurityError" || /permission|not ?allowed|denied/i.test(String(msg))) {
         setMicBlocked(true);
         setErrMsg("SetMo couldn't use your microphone.");
+        notify("mic.denied");
       } else {
         setErrMsg(typeof msg === "string" && msg ? msg : "The call hit an error.");
+        notify("error", { message: typeof msg === "string" ? msg : "The call hit an error." });
       }
       go("error");
     },
@@ -169,12 +230,14 @@ function SessionInner({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/sessions/${sessionId}/prepare`, { method: "POST" });
+        const res = await api(`/api/sessions/${sessionId}/prepare`, { method: "POST" });
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
         if (data.finished) {
-          if (data.status === "SCORED") router.replace(`/results/${sessionId}`);
-          else if (data.status === "COMPLETED") go("wrap");
+          if (data.status === "SCORED") {
+            if (embedToken) void showResults();
+            else router.replace(`/results/${sessionId}`);
+          } else if (data.status === "COMPLETED") go("wrap");
           else {
             setErrMsg("This call didn't go through.");
             go("error");
@@ -190,6 +253,8 @@ function SessionInner({
           callback: Boolean(data.callback),
         });
         if (data.card?.name) setPersonaName(data.card.name);
+        if (res.ok && data.ready) notify("lead.ready");
+        else if (!res.ok) notify("error", { message: data.error ?? "Couldn't load the lead." });
         if (data.interrupted) go("dropped");
       } catch {
         if (!cancelled) setPrep((p) => ({ ...p, status: "unavailable" }));
@@ -198,7 +263,7 @@ function SessionInner({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, router, go]);
+  }, [sessionId, router, go, api, embedToken, showResults, notify]);
 
   // elapsed timer while live
   useEffect(() => {
@@ -218,12 +283,12 @@ function SessionInner({
       tries++;
       try {
         await endedRef.current;
-        const res = await fetch(`/api/sessions/${sessionId}/result`, { cache: "no-store" });
+        const res = await api(`/api/sessions/${sessionId}/result`, { cache: "no-store" });
         if (res.ok) {
           const data = await res.json();
           if (data.status === "scored") {
             clearInterval(poll);
-            router.push(`/results/${sessionId}`);
+            void showResults(data.result);
             return;
           }
           if (data.status === "failed") {
@@ -233,6 +298,7 @@ function SessionInner({
                 ? "This call never reached us, so there's nothing to score. It didn't use any of your tokens."
                 : "Something went wrong scoring this call, and retrying didn't fix it. It didn't use any of your tokens."
             );
+            notify("call.failed", { reason: data.reason ?? "scoring" });
             go("unscored");
             return;
           }
@@ -242,21 +308,26 @@ function SessionInner({
       }
       if (tries > 72) {
         clearInterval(poll);
-        setWrapNote("This one's taking longer than usual. We'll keep at it — the result will be on your dashboard, and on your phone if notifications are on.");
+        setWrapNote(
+          embedToken
+            ? "This one's taking longer than usual. We'll keep at it — your results will come through shortly."
+            : "This one's taking longer than usual. We'll keep at it — the result will be on your dashboard, and on your phone if notifications are on."
+        );
       }
     }, 2500);
     return () => clearInterval(poll);
-  }, [phase, sessionId, router, go]);
+  }, [phase, sessionId, go, api, showResults, notify, embedToken]);
 
   const startCall = useCallback(async () => {
     setErrMsg(null);
     setMicBlocked(false);
     setBusy(true);
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/connect`, { method: "POST" });
+      const res = await api(`/api/sessions/${sessionId}/connect`, { method: "POST" });
       const cfg = await res.json();
       if (!res.ok) {
         setErrMsg(cfg.error ?? "Couldn't connect the call.");
+        notify("error", { message: cfg.error ?? "Couldn't connect the call.", status: res.status });
         go("error");
         return;
       }
@@ -294,7 +365,7 @@ function SessionInner({
     } finally {
       setBusy(false);
     }
-  }, [conversation, sessionId, go]);
+  }, [conversation, sessionId, go, api, notify]);
 
   const endCall = useCallback(async () => {
     endingRef.current = true;
@@ -314,6 +385,16 @@ function SessionInner({
     await reportEnded();
   }, [conversation, reportEnded, go]);
 
+  // The partner's page can end the call (its own "End" button, or the trainee
+  // leaving the form): same as pressing End here.
+  const endSignal = embed?.endSignal ?? 0;
+  const lastEndSignal = useRef(endSignal);
+  useEffect(() => {
+    if (endSignal === lastEndSignal.current) return;
+    lastEndSignal.current = endSignal;
+    if (phaseRef.current === "live") void endCall();
+  }, [endSignal, endCall]);
+
   // Whatever is left of a dropped call is closed before moving on.
   const closeLeftover = useCallback(() => {
     endingRef.current = true;
@@ -329,7 +410,7 @@ function SessionInner({
     closeLeftover();
     setBusy(true);
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/retry`, { method: "POST" });
+      const res = await api(`/api/sessions/${sessionId}/retry`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.sessionId) {
         setErrMsg(data.error ?? "Couldn't call them back. Start a new call from Practice.");
@@ -343,7 +424,7 @@ function SessionInner({
     } finally {
       setBusy(false);
     }
-  }, [sessionId, router, go, closeLeftover]);
+  }, [sessionId, router, go, closeLeftover, api]);
 
   // After a drop: score what happened before it cut out.
   const feedbackOnDrop = useCallback(async () => {
@@ -391,9 +472,11 @@ function SessionInner({
             </div>
           )}
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <button className="btn btn-ghost btn-lg" onClick={() => router.push("/practice")}>
-              Back to practice
-            </button>
+            {!embedToken && (
+              <button className="btn btn-ghost btn-lg" onClick={leave}>
+                Back to practice
+              </button>
+            )}
             {micBlocked && (
               <button className="btn btn-primary btn-lg" onClick={startCall} disabled={busy}>
                 Try again
@@ -412,9 +495,11 @@ function SessionInner({
         <div className="rise" style={{ textAlign: "center", maxWidth: 460 }}>
           <h2 style={{ fontSize: 24, marginBottom: 12 }}>We couldn&apos;t score this call</h2>
           <p className="muted" style={{ marginBottom: 24 }}>{errMsg}</p>
-          <button className="btn btn-primary btn-lg" onClick={() => router.push("/practice")}>
-            Back to practice
-          </button>
+          {!embedToken && (
+            <button className="btn btn-primary btn-lg" onClick={leave}>
+              Back to practice
+            </button>
+          )}
         </div>
       </Centered>
     );
@@ -454,13 +539,17 @@ function SessionInner({
           </div>
           <h2 style={{ fontSize: 26, marginBottom: 10 }}>{personaName ? `Lost ${personaName.split(" ")[0]}` : "The call dropped"}</h2>
           <p className="muted" style={{ marginBottom: 22 }}>
-            Call them back — same person, and they&apos;ll know the line cut out — or get feedback on what you had before it dropped.
+            {embedToken
+              ? "Get feedback on what you had before it dropped."
+              : "Call them back — same person, and they'll know the line cut out — or get feedback on what you had before it dropped."}
           </p>
           <div className="call-choice">
-            <button className="btn btn-primary btn-lg" onClick={callBack} disabled={busy}>
-              <Icon name="mic" /> {busy ? "Calling back…" : "Call them back"}
-            </button>
-            <button className="btn btn-ghost btn-lg" onClick={feedbackOnDrop} disabled={busy}>
+            {!embedToken && (
+              <button className="btn btn-primary btn-lg" onClick={callBack} disabled={busy}>
+                <Icon name="mic" /> {busy ? "Calling back…" : "Call them back"}
+              </button>
+            )}
+            <button className={"btn btn-lg " + (embedToken ? "btn-primary" : "btn-ghost")} onClick={feedbackOnDrop} disabled={busy}>
               Feedback on this call
             </button>
           </div>
@@ -515,9 +604,11 @@ function SessionInner({
             {device.touch ? "Headphones work best — on speaker, the lead can hear itself." : "SetMo needs your microphone for this call."}
           </p>
           <div className="call-choice">
-            <button className="btn btn-ghost btn-lg" onClick={() => router.push("/practice")}>
-              Back
-            </button>
+            {!embedToken && (
+              <button className="btn btn-ghost btn-lg" onClick={leave}>
+                Back
+              </button>
+            )}
             <button className="btn btn-primary btn-lg" onClick={startCall} disabled={busy || prep.status === "loading"}>
               <Icon name="mic" /> {busy ? "Connecting…" : "Allow mic & start call"}
             </button>
@@ -541,9 +632,11 @@ function SessionInner({
               <Icon name="doc" size={14} /> Lead card
             </button>
           )}
-          <div className="chip">
-            <Icon name="clock" size={14} /> {Math.max(0, Math.round(remainingMinutes) * 10).toLocaleString()} tokens left
-          </div>
+          {!embedToken && (
+            <div className="chip">
+              <Icon name="clock" size={14} /> {Math.max(0, Math.round(remainingMinutes) * 10).toLocaleString()} tokens left
+            </div>
+          )}
         </div>
       </div>
 
@@ -604,6 +697,7 @@ export function LiveSession(props: {
   sessionId: string;
   serviceLabel: string;
   remainingMinutes: number;
+  embed?: EmbedOptions;
 }) {
   return (
     <>

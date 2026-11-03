@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { sessionActor } from "@/lib/partner-launch";
 import { error, json } from "@/lib/api";
 
 const Body = z.object({
@@ -15,10 +15,11 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getCurrentUser();
+  const { id } = await params;
+  // A signed-in SetMo user, or an embedded partner call (frame token for this call).
+  const user = await sessionActor(req, id);
   if (!user) return error("Unauthorized", 401);
 
-  const { id } = await params;
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
   const conversationId = parsed.success ? parsed.data.conversationId : undefined;
 

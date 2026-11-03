@@ -24,6 +24,7 @@ type OfficeFacts = {
   city?: string | null;
   offerFraming?: string | null;
   appointmentFraming?: string | null;
+  doctorName?: string | null;
 };
 
 export async function buildImplantLead(opts: {

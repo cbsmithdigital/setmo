@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { sessionActor } from "@/lib/partner-launch";
 import { agentIdFor, getSignedCall, isElevenLabsConfigured } from "@/lib/elevenlabs";
 import { memoryForService } from "@/lib/memory";
 import { buildSessionLead, hasComposedLead, resolveDifficulty } from "@/lib/session-lead";
 import { error, json } from "@/lib/api";
-import { checkPracticeOpen } from "@/lib/practice-access";
+import { checkPracticeOpen, sessionPartner } from "@/lib/practice-access";
 import { captureError } from "@/lib/observability";
 import type { ServiceKey } from "@/generated/prisma/client";
 
@@ -13,13 +13,14 @@ import type { ServiceKey } from "@/generated/prisma/client";
 // config for the browser SDK to start the conversation. The lead itself was
 // normally composed already (/prepare, for the lead card) and is reused as-is.
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getCurrentUser();
+  const { id } = await params;
+  // A signed-in SetMo user, or an embedded partner call (frame token for this call).
+  const user = await sessionActor(req, id);
   if (!user) return error("Unauthorized", 401);
 
-  const { id } = await params;
   const session = await prisma.session.findFirst({
     where: { id, setterId: user.id },
   });
@@ -57,7 +58,7 @@ export async function POST(
   // Starting (not reconnecting): the same checks as creating the call — a lead
   // card can sit open while access lapses or the tokens run out.
   if (!isReconnect) {
-    const open = await checkPracticeOpen({ officeId: session.officeId, serviceType: session.serviceType as ServiceKey, callCenterOrgId: session.callCenterOrgId });
+    const open = await checkPracticeOpen({ officeId: session.officeId, serviceType: session.serviceType as ServiceKey, callCenterOrgId: session.callCenterOrgId, partner: sessionPartner(session) });
     if (!open.ok) return error(open.error, open.code);
   }
 

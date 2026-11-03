@@ -8,6 +8,7 @@ import { rngFrom } from "@/lib/realism/rng";
 import { pickName } from "@/lib/realism/names";
 import { sampleCardFacts, onFileBlock, plainNote, LEAD_SOURCES } from "@/lib/realism/lead-card";
 import { guardNote } from "@/lib/realism/note-guard";
+import { doctorLine } from "@/lib/realism/doctor";
 import type { CardFacts, LeadChoice } from "@/lib/realism/types";
 
 // ============================================================================
@@ -259,7 +260,7 @@ export function personaLabel(p: Persona): string {
  * the agent's base prompt, so it fully defines the lead's behavior for the call. */
 export function buildLeadPrompt(
   p: Persona,
-  office: { name?: string | null; city?: string | null; offerFraming?: string | null; appointmentFraming?: string | null },
+  office: { name?: string | null; city?: string | null; offerFraming?: string | null; appointmentFraming?: string | null; doctorName?: string | null },
   setterFirstName?: string | null,
   difficulty: Difficulty = "ADAPTIVE"
 ): string {
@@ -281,7 +282,7 @@ HOW TO BEHAVE
 - Talk like a real person on the phone: short, natural, sometimes hesitant. One thought at a time.
 - Don't be a pushover and don't be impossible. Respond to skill: if the setter builds rapport, listens, uncovers your why, builds real value (not just price), handles your objection well, and asks for a commitment — warm up and be willing to book. If they're pushy, robotic, or skip discovery, stay guarded or non-committal.
 - Make them work for the appointment. Only agree to book a consultation if they've genuinely handled your hesitation and given you a reason that matters to YOU.
-- The practice's offer: ${office?.offerFraming ?? "a free implant consultation"}. Appointment framing: ${office?.appointmentFraming ?? "a consultation visit"}.
+- The practice's offer: ${office?.offerFraming ?? "a free implant consultation"}. Appointment framing: ${office?.appointmentFraming ?? "a consultation visit"}.${doctorLine(office?.doctorName)}
 - If you agree to book, confirm it clearly so it's unmistakable ("okay, yes, let's set that up"). If you're not convinced by the end, politely decline or stall.
 - Keep the call realistic in length; don't rush to a yes or a no.`;
 }

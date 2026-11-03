@@ -4,6 +4,8 @@ import { updateSetterMemory } from "@/lib/memory";
 import { recomputeLeaderboards } from "@/lib/leaderboard";
 import { evaluateGoalsForSetter } from "@/lib/goals";
 import { evaluateMinuteThresholds } from "@/lib/usage";
+import { evaluatePartnerWallet } from "@/lib/partner-wallet";
+import { emitSessionEvent } from "@/lib/partner-webhooks";
 import { uploadRecording } from "@/lib/storage";
 import { parsePostCall, extractTranscript } from "@/lib/elevenlabs";
 import { scoreTranscript, isScorerConfigured } from "@/lib/scorer";
@@ -237,6 +239,10 @@ export async function scoreSession(
   // recommendations, or hit a leaderboard (the prospect isn't a customer).
   if (session.isAudit) return { ok: true, source: source + "-audit" };
 
+  // A call started through a partner's API: the results go to the partner first
+  // (a call too short to score reaches them as failed).
+  if (session.partnerId) await emitSessionEvent(session.id, source === "too-short" ? "session.failed" : "session.completed");
+
   // The score, on the setter's phone — unless they're still watching the app,
   // which opens the results itself.
   if (session.kind === "PRACTICE" && overall != null) {
@@ -257,9 +263,13 @@ export async function scoreSession(
   // refresh any active goals this call could move (the setter's + their team's)
   await evaluateGoalsForSetter(session.setterId).catch(() => {});
   // This call drew down a pool → low-balance alerts / auto top-up. A call-center
-  // agent's call draws the CALL-CENTER pool, not the served office, so skip the
-  // office evaluator here (pool alerts/top-up are a later phase).
-  if (!session.callCenterOrgId) await evaluateMinuteThresholds(session.officeId).catch(() => {});
+  // agent's call draws the CALL-CENTER pool, and a Partner API call the partner's
+  // wallet — not the office — so skip the office evaluator for both.
+  if (session.partnerId) {
+    if (session.partnerMode === "LIVE") await evaluatePartnerWallet(session.partnerId).catch(() => {});
+  } else if (!session.callCenterOrgId) {
+    await evaluateMinuteThresholds(session.officeId).catch(() => {});
+  }
 
   return { ok: true, source };
 }

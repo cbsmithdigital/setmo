@@ -19,6 +19,9 @@ export const INSTALLABLE_EVENT = "setmo:installable";
 // shows the Install button has mounted.
 export function PwaRegister() {
   useEffect(() => {
+    // Inside another site's frame (a partner's embedded call) SetMo isn't an app
+    // to install: no service worker, no install offer.
+    if (window.top !== window.self) return;
     if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
     }

@@ -2,6 +2,7 @@ import { json, error } from "@/lib/api";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { sweepGoals } from "@/lib/goals";
 import { sweepMinuteThresholds, sweepOrgCoachThresholds } from "@/lib/usage";
+import { sweepPartnerWallets } from "@/lib/partner-wallet";
 import { sweepRateLimits } from "@/lib/rate-limit";
 import { prisma } from "@/lib/db";
 
@@ -17,10 +18,11 @@ export async function GET(req: Request) {
   const result = await sweepGoals();
   const minutes = await sweepMinuteThresholds().catch(() => null);
   const groupCoach = await sweepOrgCoachThresholds().catch(() => null);
+  const partnerWallets = await sweepPartnerWallets().catch(() => null);
   await sweepRateLimits().catch(() => 0); // expired request counters
   // Stripe redelivers for days at most; 90 days of handled-event ids is plenty.
   await prisma.stripeEvent.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 90 * 86400_000) } } }).catch(() => {});
 
 
-  return json({ ok: true, ...result, ...(minutes ? { minuteChecks: minutes.checked } : {}), ...(groupCoach ? { groupCoachChecks: groupCoach.checked } : {}) });
+  return json({ ok: true, ...result, ...(minutes ? { minuteChecks: minutes.checked } : {}), ...(groupCoach ? { groupCoachChecks: groupCoach.checked } : {}), ...(partnerWallets ? { partnerWalletChecks: partnerWallets.checked } : {}) });
 }

@@ -30,8 +30,39 @@ function withRef(response: NextResponse, value: string | null): NextResponse {
 }
 
 // Next 16 renamed Middleware -> Proxy. This refreshes the Supabase auth session
-// on every request and gates app routes behind login.
+// on every request and gates app routes behind login — except the embedded
+// partner call, which has its own rules (embedResponse).
 export async function proxy(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith("/embed/")) return embedResponse(request);
+  const response = await route(request);
+  // SetMo's own pages are never shown inside another site's frame (clickjacking).
+  response.headers.set("X-Frame-Options", "SAMEORIGIN");
+  response.headers.set("Content-Security-Policy", "frame-ancestors 'self'");
+  return response;
+}
+
+// A partner's app (e.g. Team Care) shows a practice call in an iframe from a
+// one-time launch link: /embed/<token>. Only the sites the partner registered
+// may frame it, the page may use the microphone, and no SetMo login is involved
+// (the page authenticates with a token it holds in memory — see lib/partner-launch).
+async function embedResponse(request: NextRequest) {
+  const token = request.nextUrl.pathname.split("/")[2] ?? "";
+  let origins: string[] = [];
+  try {
+    const { embedFrameAncestors } = await import("@/lib/partner-launch");
+    origins = await embedFrameAncestors(token);
+  } catch {
+    origins = [];
+  }
+  const response = NextResponse.next({ request });
+  response.headers.set("Content-Security-Policy", `frame-ancestors ${origins.length ? origins.join(" ") : "'none'"}`);
+  response.headers.set("Permissions-Policy", "microphone=(self)");
+  // The URL carries the launch token; never pass it on to other sites.
+  response.headers.set("Referrer-Policy", "no-referrer");
+  return response;
+}
+
+async function route(request: NextRequest): Promise<NextResponse> {
   // "View as" is look-only: while platform staff are viewing as someone, no
   // request can change anything. Staff tools (/api/platform/*) act as the staff
   // member themselves — including stopping view-as — so they still work.

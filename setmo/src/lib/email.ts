@@ -21,6 +21,13 @@ const esc = (s: string) =>
 /** Subjects are plain text: no line breaks, bounded length. */
 const subj = (s: string) => s.replace(/[\r\n]+/g, " ").slice(0, 180);
 
+/** Reserved top-level domains (RFC 2606) that can never receive mail. */
+const RESERVED_TLDS = [".example", ".invalid", ".test", ".localhost"];
+export function isUndeliverable(address: string): boolean {
+  const domain = address.trim().toLowerCase().split("@")[1] ?? "";
+  return !domain || RESERVED_TLDS.some((tld) => domain.endsWith(tld));
+}
+
 /**
  * The one place mail leaves. Resend reports failures in its return value rather
  * than throwing, so a send only counts when that value has no error. Resend
@@ -33,9 +40,14 @@ async function send(msg: { to: string | string[]; subject: string; html: string;
   const resend = getResend();
   const from = process.env.RESEND_FROM_EMAIL;
   if (!resend || !from) return false;
+  // Made-up addresses never get mail: seeded demo logins, demo personas and
+  // Partner API trainees live on reserved domains (.example / .invalid), and a
+  // bounce there only hurts our sending reputation.
+  const to = (Array.isArray(msg.to) ? msg.to : [msg.to]).filter((a) => !isUndeliverable(a));
+  if (to.length === 0) return false;
   for (let attempt = 0; ; attempt++) {
     try {
-      const { error } = await resend.emails.send({ from, to: msg.to, subject: subj(msg.subject), html: msg.html, ...(msg.headers ? { headers: msg.headers } : {}) });
+      const { error } = await resend.emails.send({ from, to: to.length === 1 ? to[0] : to, subject: subj(msg.subject), html: msg.html, ...(msg.headers ? { headers: msg.headers } : {}) });
       if (!error) return true;
       if (error.name === "rate_limit_exceeded" && attempt < 3) {
         await new Promise((r) => setTimeout(r, 1100 * (attempt + 1)));
@@ -405,6 +417,50 @@ export async function sendDemoMinuteLowEmail(opts: { to: string[]; practiceName:
         `),
       },
       "demo-minute-low",
+    );
+    if (ok) sent++;
+  }
+  return sent;
+}
+
+/** A Partner API wallet (e.g. Team Care's) is low or empty. The partner bills
+ *  its own practices and SetMo bills the partner, so this goes to the partner's
+ *  admins and to the SetMo team, who add tokens from the platform console. */
+export async function sendPartnerWalletLowEmail(opts: {
+  to: string[];
+  audience: "partner" | "staff";
+  partnerName: string;
+  partnerId: string;
+  balanceTokens: number;
+  empty: boolean;
+}): Promise<number> {
+  if (opts.to.length === 0) return 0;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://setmo.growdental.ai";
+  const console_ = `${appUrl}/platform/partners/${opts.partnerId}`;
+  const left = Math.max(0, opts.balanceTokens).toLocaleString();
+  const status = opts.empty
+    ? `${esc(opts.partnerName)}'s SetMo token balance is used up, so new practice calls can't start until more tokens are added.`
+    : `${esc(opts.partnerName)} has about <strong>${left} tokens</strong> left for SetMo practice calls (1 token is about 6 seconds of a call).`;
+  const next =
+    opts.audience === "staff"
+      ? `<p style="margin:26px 0">${button(console_, "Add tokens on the partner page")}</p>`
+      : `<p>To add more, reply to this email or contact your SetMo team.</p>`;
+
+  let sent = 0;
+  for (const to of opts.to) {
+    const ok = await send(
+      {
+        to,
+        subject: opts.empty
+          ? `${opts.partnerName}: SetMo practice tokens have run out`
+          : `${opts.partnerName}: SetMo practice tokens are running low (${left} left)`,
+        html: wrap(`
+          <h2 style="color:#7c3aed">${opts.empty ? "Practice calls are paused" : "Practice tokens are running low"}</h2>
+          <p>${status}</p>
+          ${next}
+        `),
+      },
+      "partner-wallet-low",
     );
     if (ok) sent++;
   }

@@ -4,6 +4,7 @@ import { getViewerPartner, getPartnerDashboard } from "@/lib/partner-portal";
 import { refreshConnectStatus, getPartnerPayouts } from "@/lib/payouts";
 import { StatTile } from "@/components/ui/StatTile";
 import { CopyLink, PayoutToggle, ConnectButton } from "@/components/partner/PartnerWidgets";
+import { getPartnerApiSummary } from "@/lib/partner-console";
 
 const usd = (c: number) => `$${(c / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const STATUS: Record<string, { label: string; cls: string }> = {
@@ -17,7 +18,11 @@ export default async function PartnerDashboardPage({ searchParams }: { searchPar
   const ctx = await getViewerPartner(user);
   if (!ctx) return <div className="content"><div className="card card-pad muted">No partner account is linked to your login.</div></div>;
   const { connect } = await searchParams;
-  const [d, payouts] = await Promise.all([getPartnerDashboard(ctx.partnerId, ctx.memberUserId), ctx.isAdmin ? getPartnerPayouts(ctx.partnerId) : Promise.resolve([])]);
+  const [d, payouts, apiSummary] = await Promise.all([
+    getPartnerDashboard(ctx.partnerId, ctx.memberUserId),
+    ctx.isAdmin ? getPartnerPayouts(ctx.partnerId) : Promise.resolve([]),
+    ctx.isAdmin ? getPartnerApiSummary(ctx.partnerId) : Promise.resolve(null),
+  ]);
   if (!d) return <div className="content"><div className="card card-pad muted">Partner not found.</div></div>;
   const paid = d.partner.commissionsEnabled; // false = tracking-only: referrals, no earnings
   if (paid && ctx.isAdmin && (connect === "done" || connect === "refresh")) await refreshConnectStatus(ctx.partnerId);
@@ -53,6 +58,21 @@ export default async function PartnerDashboardPage({ searchParams }: { searchPar
             </>
           )}
         </div>
+
+        {apiSummary && (
+          <div className="card card-pad rise" style={{ marginBottom: 18 }}>
+            <h3 style={{ fontSize: 17, marginBottom: 4 }}>Practice calls in your app</h3>
+            <p className="muted" style={{ fontSize: 12.5, marginBottom: 14 }}>
+              Calls your practices run through {d.partner.name}&apos;s app draw from your SetMo token wallet (1 token is about 6 seconds of a call).
+            </p>
+            <div className="grid g-4">
+              <StatTile lab="Tokens left" val={Math.max(0, apiSummary.balanceTokens).toLocaleString()} grad="var(--grad-mint)" sub={`${apiSummary.usedTokens.toLocaleString()} used so far`} />
+              <StatTile lab="Locations" val={String(apiSummary.locations)} sub="practices set up" />
+              <StatTile lab="Trainees" val={String(apiSummary.trainees)} sub="people practicing" />
+              <StatTile lab="Calls" val={String(apiSummary.calls30)} sub="scored, last 30 days" />
+            </div>
+          </div>
+        )}
 
         {d.link && (
           <div className="card card-pad rise" style={{ marginBottom: 18 }}>

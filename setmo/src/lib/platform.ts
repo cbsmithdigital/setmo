@@ -47,13 +47,17 @@ function bucketMinutes(sessions: SessionLite[], isProspect: (officeId: string) =
 }
 
 export async function getPlatformOverview() {
-  const [offices, bundles, orgBundles, sessions, audits] = await Promise.all([
+  const [offices, bundles, orgBundles, partnerEntries, sessions, audits] = await Promise.all([
     // Demo / test accounts (partner demos, the marketing demo, internal test
-    // offices) are left out of every business number below.
-    prisma.office.findMany({ where: { isDemo: false }, select: { id: true, organizationId: true, isProspect: true, subscription: { select: { status: true } } } }),
+    // offices) are left out of every business number below. Locations a partner
+    // runs through the Partner API aren't SetMo's own accounts (the partner bills
+    // them); their calls still count as usage and the partner's wallet as revenue.
+    prisma.office.findMany({ where: { isDemo: false, managedByPartnerId: null }, select: { id: true, organizationId: true, isProspect: true, subscription: { select: { status: true } } } }),
     prisma.conversationBundle.findMany({ where: { office: { isDemo: false } }, select: { officeId: true, minutesPurchased: true, amountCents: true, purchasedAt: true } }),
     // Group/DSO coach-token purchases — a second token-revenue stream.
     prisma.orgTokenBundle.findMany({ where: { organization: { isDemo: false } }, select: { minutesPurchased: true, amountCents: true, purchasedAt: true } }),
+    // Partner API wallets (live) — what partners like Team Care bought.
+    prisma.partnerWalletEntry.findMany({ where: { mode: "LIVE" }, select: { minutes: true, amountCents: true, createdAt: true } }),
     prisma.session.findMany({ where: { durationSeconds: { not: null }, kind: { not: "LIVE" }, office: { isDemo: false } }, select: { officeId: true, durationSeconds: true, isAudit: true, startedAt: true } }),
     prisma.setterAudit.findMany({ where: { office: { isDemo: false } }, select: { status: true, office: { select: { isProspect: true } } } }),
   ]);
@@ -70,9 +74,10 @@ export async function getPlatformOverview() {
   const standalone = realOffices.filter((o) => !o.organizationId).length;
   const accounts = orgIdsWithReal.size + standalone;
 
-  // Token revenue/minutes span both office pools and group/DSO coach wallets.
-  const purchasedMin = bundles.reduce((a, b) => a + b.minutesPurchased, 0) + orgBundles.reduce((a, b) => a + b.minutesPurchased, 0);
-  const cashRev = bundles.reduce((a, b) => a + cashOf(b, cfg), 0) + orgBundles.reduce((a, b) => a + orgCashOf(b), 0);
+  // Token revenue/minutes span office pools, group/DSO coach wallets and partner wallets.
+  const purchasedMin =
+    bundles.reduce((a, b) => a + b.minutesPurchased, 0) + orgBundles.reduce((a, b) => a + b.minutesPurchased, 0) + partnerEntries.reduce((a, b) => a + b.minutes, 0);
+  const cashRev = bundles.reduce((a, b) => a + cashOf(b, cfg), 0) + orgBundles.reduce((a, b) => a + orgCashOf(b), 0) + partnerEntries.reduce((a, b) => a + orgCashOf(b), 0);
   const buckets = bucketMinutes(sessions, isProspect);
 
   const cogs = buckets.payingMin * MINUTE_COST_USD;
@@ -99,11 +104,12 @@ export async function getPlatformOverview() {
   const series = months.map((m) => {
     const mBundles = bundles.filter((b) => monthKey(b.purchasedAt) === m.key);
     const mOrgBundles = orgBundles.filter((b) => monthKey(b.purchasedAt) === m.key);
+    const mPartner = partnerEntries.filter((b) => monthKey(b.createdAt) === m.key);
     const mSessions = sessions.filter((s) => monthKey(s.startedAt) === m.key);
     const b = bucketMinutes(mSessions, isProspect);
     return {
       label: m.label,
-      cashRev: r2(mBundles.reduce((a, x) => a + cashOf(x, cfg), 0) + mOrgBundles.reduce((a, x) => a + orgCashOf(x), 0)),
+      cashRev: r2(mBundles.reduce((a, x) => a + cashOf(x, cfg), 0) + mOrgBundles.reduce((a, x) => a + orgCashOf(x), 0) + mPartner.reduce((a, x) => a + orgCashOf(x), 0)),
       access: r2(accessMRR), // current run-rate (historical sub counts not tracked) — approximate
       cogs: r2(b.payingMin * MINUTE_COST_USD),
       cac: r2(b.prospectMin * MINUTE_COST_USD),
@@ -147,9 +153,9 @@ async function officeStats(where: object): Promise<OfficeStat[]> {
   const [bundles, sessions, admins] = await Promise.all([
     prisma.conversationBundle.findMany({ where: { officeId: { in: ids } }, select: { officeId: true, minutesPurchased: true, amountCents: true, stripePaymentIntent: true } }),
     // Exclude sessions metered against another pool (group/DSO coach organizationId,
-    // and call-center agents' callCenterOrgId) so they don't inflate a served
-    // office's burn/balance — the office never bought those minutes.
-    prisma.session.findMany({ where: { officeId: { in: ids }, organizationId: null, callCenterOrgId: null, kind: { not: "LIVE" }, status: { not: "FAILED" }, durationSeconds: { not: null }, isAudit: false }, select: { officeId: true, durationSeconds: true, startedAt: true } }),
+    // call-center agents' callCenterOrgId, Partner API calls' partnerId) so they
+    // don't inflate an office's burn/balance — the office never bought those minutes.
+    prisma.session.findMany({ where: { officeId: { in: ids }, organizationId: null, callCenterOrgId: null, partnerId: null, kind: { not: "LIVE" }, status: { not: "FAILED" }, durationSeconds: { not: null }, isAudit: false }, select: { officeId: true, durationSeconds: true, startedAt: true } }),
     // Office admins → the default billing contact for each location.
     prisma.user.findMany({ where: { officeId: { in: ids }, role: "OFFICE_ADMIN" }, select: { officeId: true, email: true }, orderBy: { createdAt: "asc" } }),
   ]);
@@ -193,8 +199,9 @@ async function officeStats(where: object): Promise<OfficeStat[]> {
 
 export async function getPlatformAccounts() {
   const orgs = await prisma.organization.findMany({ select: { id: true, name: true, type: true } });
-  const offices = await prisma.office.findMany({ where: { isProspect: false }, select: { id: true, organizationId: true } });
-  const stats = await officeStats({ isProspect: false });
+  // Partner-run locations are listed on their partner's page, not here.
+  const offices = await prisma.office.findMany({ where: { isProspect: false, managedByPartnerId: null }, select: { id: true, organizationId: true } });
+  const stats = await officeStats({ isProspect: false, managedByPartnerId: null });
   const byId = new Map(stats.map((s) => [s.id, s]));
   const access = (await getPricingConfig()).accessMonthly;
 
@@ -301,7 +308,7 @@ export async function getPlatformAccountDetail(id: string) {
 // ---- alerts (push, don't make them dig) ----
 export async function getPlatformAlerts() {
   const cfg = await getPlatformConfig();
-  const all = await officeStats({ isProspect: false });
+  const all = await officeStats({ isProspect: false, managedByPartnerId: null }); // partner-run locations: the partner's wallet, not office balances
   // Demo accounts idle between demos and their balances aren't a liability, so
   // they're left out of everything EXCEPT low balance — that's how the super-admin
   // knows to top a demo account up.
@@ -347,7 +354,7 @@ export async function getPlatformAlerts() {
 export async function getPlatformProjections() {
   const cfg = await getPlatformConfig();
   const [stats, orgs, audits] = await Promise.all([
-    officeStats({ isProspect: false, isDemo: false }),
+    officeStats({ isProspect: false, isDemo: false, managedByPartnerId: null }),
     prisma.organization.findMany({ select: { id: true, name: true } }),
     prisma.setterAudit.findMany({ where: { office: { isDemo: false } }, select: { status: true, office: { select: { isProspect: true } } } }),
   ]);

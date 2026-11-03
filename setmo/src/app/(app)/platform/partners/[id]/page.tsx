@@ -8,6 +8,8 @@ import { fullName, relativeShort } from "@/lib/format";
 import { UserActions } from "@/components/platform/AdminActions";
 import { CopyLink } from "@/components/partner/PartnerWidgets";
 import { DemoResetButton, CommissionsToggle } from "@/components/platform/PartnerDetailActions";
+import { PartnerApiConsole, type ConsoleMode } from "@/components/platform/PartnerApiConsole";
+import { getPartnerApiConsole, type PartnerApiModeView } from "@/lib/partner-console";
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   active: { label: "Active", cls: "mint" },
@@ -38,6 +40,7 @@ export default async function PlatformPartnerDetailPage({ params }: { params: Pr
     : [];
   const demoBalances = await Promise.all(demoOffices.map(async (o) => ({ ...o, balance: (await getMinuteBalance(o.id)).remainingMin })));
   const lastReset = await prisma.adminAuditLog.findFirst({ where: { action: "partner.demo", targetId: id }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
+  const api = await getPartnerApiConsole(id);
 
   return (
     <>
@@ -92,6 +95,8 @@ export default async function PlatformPartnerDetailPage({ params }: { params: Pr
           </div>
         </div>
 
+        <PartnerApiConsole partnerId={id} partnerName={partner.name} live={toConsole(api.live)} test={toConsole(api.test)} canAct={isSuper} />
+
         <div className="card card-pad">
           <h3 style={{ fontSize: 17, marginBottom: 10 }}>Team logins ({people.length})</h3>
           {people.length === 0 && <p className="muted" style={{ fontSize: 13.5 }}>No logins yet.</p>}
@@ -140,4 +145,19 @@ export default async function PlatformPartnerDetailPage({ params }: { params: Pr
       </div>
     </>
   );
+}
+
+// Dates become strings on the way to the client console.
+function toConsole(v: PartnerApiModeView): ConsoleMode {
+  const d = (x: Date | null) => (x ? x.toISOString() : null);
+  return {
+    mode: v.mode,
+    wallet: { addedTokens: v.wallet.addedTokens, usedTokens: v.wallet.usedTokens, balanceTokens: v.wallet.balanceTokens },
+    entries: v.entries.map((e) => ({ id: e.id, minutes: e.minutes, amountCents: e.amountCents, note: e.note, createdAt: e.createdAt.toISOString() })),
+    keys: v.keys.map((k) => ({ id: k.id, label: k.label, prefix: k.prefix, createdAt: k.createdAt.toISOString(), lastUsedAt: d(k.lastUsedAt), revokedAt: d(k.revokedAt) })),
+    integration: v.integration,
+    locations: v.locations.map((l) => ({ id: l.id, externalId: l.externalId, name: l.name, city: l.city, doctorName: l.doctorName, trainees: l.trainees, calls: l.calls, tokens: l.tokens, lastCall: d(l.lastCall) })),
+    totals: v.totals,
+    deliveries: v.deliveries.map((x) => ({ ...x, createdAt: x.createdAt.toISOString(), deliveredAt: d(x.deliveredAt), nextAttemptAt: d(x.nextAttemptAt) })),
+  };
 }

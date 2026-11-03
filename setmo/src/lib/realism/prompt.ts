@@ -1,5 +1,6 @@
 import type { LeadProse } from "@/lib/realism/compose";
 import { onFileBlock } from "@/lib/realism/lead-card";
+import { doctorLine } from "@/lib/realism/doctor";
 import { CALLER_LABEL, COVERAGE_LABEL, type LeadSkeleton } from "@/lib/realism/types";
 import type { Difficulty } from "@/lib/personas";
 
@@ -23,6 +24,7 @@ export function buildLeadPromptV2(opts: {
     city?: string | null;
     offerFraming?: string | null;
     appointmentFraming?: string | null;
+    doctorName?: string | null;
   };
   /** What this call type's ads promise — part of what the lead remembers when
    *  they came in through an ad. */
@@ -62,7 +64,7 @@ HOW TO BEHAVE
 - Talk like a real person on the phone: short, natural, sometimes hesitant. One thought at a time.
 - Don't be a pushover and don't be impossible. Respond to skill: if the setter builds rapport, listens, asks the right questions, is straight with you about cost and what the visit involves, and asks for a time — warm up and be willing to book. If they're pushy, robotic, or skip past your concern, stay guarded.
 - Never invent a dentist's name, a price the setter didn't give you, or a brand.
-- The practice's offer: ${office?.offerFraming ?? "a first visit"}. Appointment framing: ${office?.appointmentFraming ?? "a first appointment"}.
+- The practice's offer: ${office?.offerFraming ?? "a first visit"}. Appointment framing: ${office?.appointmentFraming ?? "a first appointment"}.${doctorLine(office?.doctorName)}
 - If you agree to book, confirm it clearly so it's unmistakable ("okay, yes, let's do that"). If you're not convinced by the end, politely decline or stall.
 - Keep the call realistic in length; don't rush to a yes or a no.`;
 

@@ -22,7 +22,7 @@ type SessionForLead = {
   personaSeed: unknown;
 };
 
-type OfficeFacts = { name?: string | null; city?: string | null; offerFraming?: string | null; appointmentFraming?: string | null };
+type OfficeFacts = { name?: string | null; city?: string | null; offerFraming?: string | null; appointmentFraming?: string | null; doctorName?: string | null };
 
 /** True once a lead has been composed for the session (implant persona or pack
  *  skeleton). A fresh session only carries its settings, marked `hidden`. */
