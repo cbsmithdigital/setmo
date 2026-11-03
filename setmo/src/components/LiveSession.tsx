@@ -116,8 +116,12 @@ function SessionInner({
     else router.push("/practice");
   }, [embedToken, notify, router]);
   // A scored call: SetMo's results page, or (embedded) the results in place.
+  // Once only — two overlapping polls can both see the score land.
+  const resultsShownRef = useRef(false);
   const showResults = useCallback(
     async (data?: unknown) => {
+      if (resultsShownRef.current) return;
+      resultsShownRef.current = true;
       if (!embedToken) {
         router.push(`/results/${sessionId}`);
         return;
@@ -131,6 +135,8 @@ function SessionInner({
       if (result) {
         notify("results.ready");
         scoredRef.current?.(result);
+      } else {
+        resultsShownRef.current = false;
       }
     },
     [embedToken, router, sessionId, api, notify]

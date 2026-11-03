@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { SERVICE_META } from "@/lib/service-meta";
+import { packFor } from "@/lib/packs/registry";
 import { skillName, skillTier, rubricForEvaluation } from "@/lib/skills";
 import { callShowRate } from "@/lib/audit";
 import { leadRevealFromSeed } from "@/lib/realism/lead-card";
@@ -146,7 +147,7 @@ export async function serializePartnerSession(sessionId: string, opts: { recordi
     status,
     failure_reason: failureReason,
     call_type: s.serviceType,
-    call_type_name: SERVICE_META[s.serviceType as ServiceKey].name,
+    call_type_name: packFor(s.serviceType)?.name ?? SERVICE_META[s.serviceType as ServiceKey].name,
     challenge: s.difficulty.toLowerCase(),
     lead_choice: choice
       ? { gender: choice.gender ?? null, age: choice.age ?? null, caller: choice.caller ?? null, concern: choice.concern ?? null }

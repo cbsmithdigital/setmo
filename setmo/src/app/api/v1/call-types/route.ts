@@ -3,6 +3,7 @@ import { partnerRoute, apiJson } from "@/lib/partner-http";
 import { SERVICE_META, SERVICE_ORDER } from "@/lib/service-meta";
 import { rubricFor } from "@/lib/skills";
 import { leadChoiceOptions } from "@/lib/lead-choice";
+import { packFor } from "@/lib/packs/registry";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,9 @@ export async function GET(req: Request) {
       return {
         key,
         object: "call_type",
-        name: SERVICE_META[key].name,
-        description: SERVICE_META[key].desc,
+        // The names SetMo's own call picker shows.
+        name: packFor(key)?.name ?? SERVICE_META[key].name,
+        description: packFor(key)?.blurb ?? SERVICE_META[key].desc,
         status: STATUS[status.get(key) ?? "PLANNED"] ?? "coming_soon",
         skills: rubricFor(key).map((s) => ({ key: s.key, name: s.name, type: s.tier === "universal" ? "universal" : "call_type" })),
         lead_options: {

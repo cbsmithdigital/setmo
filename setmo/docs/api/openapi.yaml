@@ -1,0 +1,499 @@
+openapi: 3.1.0
+info:
+  title: SetMo Partner API
+  version: "1.0.0"
+  description: |
+    Run SetMo practice calls inside your own app: create a call, show it in an
+    iframe from a one-time launch link, and receive the results by webhook.
+    See README.md in this folder for the integration guide (iframe messages,
+    webhook signatures, test mode).
+servers:
+  - url: https://setmo.growdental.ai/api/v1
+security:
+  - bearerKey: []
+tags:
+  - name: Call types
+  - name: Locations
+  - name: Trainees
+  - name: Sessions
+  - name: Wallet
+paths:
+  /call-types:
+    get:
+      tags: [Call types]
+      summary: List call types
+      description: Every call type, whether it can run, the 8 skills it's scored on, and the "pick your lead" options.
+      operationId: listCallTypes
+      responses:
+        "200":
+          description: The call types and challenge levels.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [object, data, challenges]
+                properties:
+                  object: { type: string, const: list }
+                  data: { type: array, items: { $ref: "#/components/schemas/CallType" } }
+                  challenges:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { $ref: "#/components/schemas/Challenge" }
+                        label: { type: string }
+        "401": { $ref: "#/components/responses/Error" }
+  /locations/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ExternalId"
+    get:
+      tags: [Locations]
+      summary: Get a location
+      operationId: getLocation
+      responses:
+        "200": { description: The location., content: { application/json: { schema: { $ref: "#/components/schemas/Location" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Locations]
+      summary: Create or update a location
+      description: Creates the location (name required) or updates only the fields sent. `call_types` sets exactly which call types it runs; a new location runs all six unless told otherwise.
+      operationId: putLocation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LocationFields" }
+      responses:
+        "200": { description: Updated., content: { application/json: { schema: { $ref: "#/components/schemas/Location" } } } }
+        "201": { description: Created., content: { application/json: { schema: { $ref: "#/components/schemas/Location" } } } }
+        "422": { $ref: "#/components/responses/Error" }
+  /trainees/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ExternalId"
+    get:
+      tags: [Trainees]
+      summary: Get a trainee
+      operationId: getTrainee
+      responses:
+        "200": { description: The trainee., content: { application/json: { schema: { $ref: "#/components/schemas/Trainee" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Trainees]
+      summary: Create or update a trainee
+      description: Creates the trainee (`location_id` required) or updates the name / moves them to another of your locations. Trainees have no SetMo login and get no SetMo email.
+      operationId: putTrainee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/TraineeFields"
+                - type: object
+                  properties:
+                    location_id: { type: string, description: Your id for the trainee's location. }
+      responses:
+        "200": { description: Updated., content: { application/json: { schema: { $ref: "#/components/schemas/Trainee" } } } }
+        "201": { description: Created., content: { application/json: { schema: { $ref: "#/components/schemas/Trainee" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /sessions:
+    post:
+      tags: [Sessions]
+      summary: Start a practice call
+      description: |
+        Creates the call and returns a launch link for the iframe (opens once, within 10 minutes).
+        The location and trainee are created or updated on the way if you send more than their id.
+        Send `reference` (your attempt id): the same request again returns the same session.
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSession" }
+      responses:
+        "200": { description: An existing session with this reference (a retry)., content: { application/json: { schema: { $ref: "#/components/schemas/SessionWithLaunch" } } } }
+        "201": { description: Created., content: { application/json: { schema: { $ref: "#/components/schemas/SessionWithLaunch" } } } }
+        "402": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /sessions/{id}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [Sessions]
+      summary: Get a call
+      description: The call's state, and its results once scored, with a recording link good for one hour.
+      operationId: getSession
+      responses:
+        "200": { description: The session., content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /sessions/{id}/launch:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [Sessions]
+      summary: Get a fresh launch link
+      description: For a frame that reloads, or to show a finished call's results again. Each link opens once, within 10 minutes.
+      operationId: launchSession
+      responses:
+        "201":
+          description: A new launch link.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Launch"
+                  - type: object
+                    properties:
+                      object: { type: string, const: launch }
+        "404": { $ref: "#/components/responses/Error" }
+  /sessions/{id}/simulate:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [Sessions]
+      summary: Simulate a call (test keys only)
+      description: Plays a not-yet-started session's whole life in about ten seconds with a made-up call and score, sending the same webhooks a real call does.
+      operationId: simulateSession
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                outcome: { type: string, enum: [completed, too_short, no_transcript], default: completed }
+      responses:
+        "202":
+          description: Simulation started.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Session"
+                  - type: object
+                    properties:
+                      simulating: { type: string }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /wallet:
+    get:
+      tags: [Wallet]
+      summary: Token balance
+      description: The wallet this key's calls draw from (live and test are separate). 1 token = 6 seconds of practice call.
+      operationId: getWallet
+      responses:
+        "200":
+          description: The wallet.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object: { type: string, const: wallet }
+                  mode: { $ref: "#/components/schemas/Mode" }
+                  tokens_added: { type: integer }
+                  tokens_used: { type: integer }
+                  balance_tokens: { type: integer, description: Can be below zero briefly — a call already under way always finishes. }
+                  can_start_calls: { type: boolean }
+webhooks:
+  sessionEvent:
+    post:
+      summary: Session event
+      description: |
+        Sent for session.started, session.ended, session.completed and session.failed.
+        Headers: X-Setmo-Event-Id (dedupe on it), X-Setmo-Event-Type, X-Setmo-Timestamp (unix seconds),
+        X-Setmo-Signature = "sha256=" + hex HMAC-SHA256(webhook secret, "<timestamp>.<raw body>").
+        Answer 2xx within 10 seconds; otherwise it's retried for about a day.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Event" }
+      responses:
+        "200": { description: Received. }
+components:
+  securitySchemes:
+    bearerKey:
+      type: http
+      scheme: bearer
+      description: "Your secret key: setmo_test_… or setmo_live_…. Server-side only."
+  parameters:
+    ExternalId:
+      name: id
+      in: path
+      required: true
+      description: "Your own id (1–100 letters, digits, or . _ : -)."
+      schema: { type: string, pattern: "^[A-Za-z0-9._:-]{1,100}$" }
+    SessionId:
+      name: id
+      in: path
+      required: true
+      description: SetMo's session id.
+      schema: { type: string, format: uuid }
+  responses:
+    Error:
+      description: An error. Branch on `error.code`; `error.message` is safe to show.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Mode: { type: string, enum: [live, test] }
+    Challenge: { type: string, enum: [adaptive, warm, tough] }
+    CallTypeKey: { type: string, enum: [IMPLANT, DENTURE, COSMETIC, ORTHO, WISDOM, GENERAL] }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - unauthorized
+                - partner_disabled
+                - rate_limited
+                - invalid_json
+                - payload_too_large
+                - invalid_request
+                - invalid_lead
+                - call_type_unavailable
+                - insufficient_tokens
+                - location_not_found
+                - trainee_not_found
+                - session_not_found
+                - reference_conflict
+                - session_already_started
+                - test_mode_only
+                - server_error
+            message: { type: string }
+    Option:
+      type: object
+      properties:
+        key: { type: string }
+        label: { type: string }
+    CallType:
+      type: object
+      properties:
+        key: { $ref: "#/components/schemas/CallTypeKey" }
+        object: { type: string, const: call_type }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [live, beta, coming_soon] }
+        skills:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              name: { type: string }
+              type: { type: string, enum: [universal, call_type] }
+        lead_options:
+          type: object
+          properties:
+            genders: { type: array, items: { $ref: "#/components/schemas/Option" } }
+            ages: { type: [array, "null"], items: { $ref: "#/components/schemas/Option" }, description: Implant calls. }
+            callers: { type: [array, "null"], items: { $ref: "#/components/schemas/Option" }, description: Other call types. }
+            concerns: { type: array, items: { $ref: "#/components/schemas/Option" } }
+            concerns_by_age: { type: [object, "null"], additionalProperties: { type: array, items: { type: string } } }
+            concerns_by_caller: { type: [object, "null"], additionalProperties: { type: array, items: { type: string } } }
+    LocationFields:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 120, description: Required when creating. }
+        city: { type: [string, "null"], maxLength: 80 }
+        doctor_name: { type: [string, "null"], maxLength: 80, description: The lead uses this name if the doctor comes up. }
+        offer: { type: [string, "null"], maxLength: 600, description: "What the practice offers new leads, e.g. a free consultation." }
+        appointment: { type: [string, "null"], maxLength: 600 }
+        deposit: { type: [string, "null"], maxLength: 600 }
+        call_types: { type: array, items: { $ref: "#/components/schemas/CallTypeKey" }, minItems: 1 }
+    Location:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string, const: location }
+        mode: { $ref: "#/components/schemas/Mode" }
+        name: { type: string }
+        city: { type: [string, "null"] }
+        doctor_name: { type: [string, "null"] }
+        offer: { type: [string, "null"] }
+        appointment: { type: [string, "null"] }
+        deposit: { type: [string, "null"] }
+        call_types: { type: array, items: { $ref: "#/components/schemas/CallTypeKey" } }
+        created_at: { type: string, format: date-time }
+    TraineeFields:
+      type: object
+      properties:
+        first_name: { type: [string, "null"], maxLength: 60 }
+        last_name: { type: [string, "null"], maxLength: 60 }
+    Trainee:
+      type: object
+      properties:
+        id: { type: string }
+        object: { type: string, const: trainee }
+        mode: { $ref: "#/components/schemas/Mode" }
+        first_name: { type: [string, "null"] }
+        last_name: { type: [string, "null"] }
+        location_id: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+    CreateSession:
+      type: object
+      required: [location, trainee, call_type]
+      additionalProperties: false
+      properties:
+        reference: { type: string, description: Your attempt id. Makes retries safe. }
+        location:
+          allOf:
+            - $ref: "#/components/schemas/LocationFields"
+            - type: object
+              required: [id]
+              properties:
+                id: { type: string }
+        trainee:
+          allOf:
+            - $ref: "#/components/schemas/TraineeFields"
+            - type: object
+              required: [id]
+              properties:
+                id: { type: string }
+        call_type: { $ref: "#/components/schemas/CallTypeKey" }
+        challenge: { $ref: "#/components/schemas/Challenge" }
+        lead:
+          type: [object, "null"]
+          description: '"Pick your lead" — omit for a surprise. Values come from the call type''s lead_options.'
+          additionalProperties: false
+          properties:
+            gender: { type: string, enum: [female, male] }
+            age: { type: string }
+            caller: { type: string }
+            concern: { type: string }
+        metadata:
+          type: [object, "null"]
+          description: Up to 20 keys / 2 KB, echoed back on every response and webhook.
+    Launch:
+      type: object
+      properties:
+        url: { type: string, format: uri, description: "Put in <iframe allow=\"microphone\">. Opens once." }
+        expires_at: { type: string, format: date-time }
+    Session:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        object: { type: string, const: session }
+        mode: { $ref: "#/components/schemas/Mode" }
+        reference: { type: [string, "null"] }
+        metadata: { type: [object, "null"] }
+        status: { type: string, enum: [created, in_progress, ended, completed, failed] }
+        failure_reason: { type: [string, "null"], enum: [too_short, no_transcript, scoring_failed, abandoned, null] }
+        call_type: { $ref: "#/components/schemas/CallTypeKey" }
+        call_type_name: { type: string }
+        challenge: { $ref: "#/components/schemas/Challenge" }
+        lead_choice:
+          type: [object, "null"]
+          properties:
+            gender: { type: [string, "null"] }
+            age: { type: [string, "null"] }
+            caller: { type: [string, "null"] }
+            concern: { type: [string, "null"] }
+        location:
+          type: object
+          properties:
+            id: { type: [string, "null"] }
+            name: { type: string }
+        trainee:
+          type: object
+          properties:
+            id: { type: [string, "null"] }
+            first_name: { type: [string, "null"] }
+            last_name: { type: [string, "null"] }
+        created_at: { type: [string, "null"], format: date-time }
+        started_at: { type: [string, "null"], format: date-time }
+        ended_at: { type: [string, "null"], format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+        duration_seconds: { type: [integer, "null"] }
+        tokens_used: { type: integer }
+        recording:
+          type: [object, "null"]
+          description: A signed link to the MP3, good for one hour.
+          properties:
+            url: { type: string, format: uri }
+            expires_at: { type: string, format: date-time }
+        result: { oneOf: [{ $ref: "#/components/schemas/Result" }, { type: "null" }] }
+    SessionWithLaunch:
+      allOf:
+        - $ref: "#/components/schemas/Session"
+        - type: object
+          properties:
+            launch: { $ref: "#/components/schemas/Launch" }
+    Result:
+      type: object
+      properties:
+        score: { type: number, minimum: 1, maximum: 5, description: SetMo's overall score (rated as a whole, not a mean of the skills). }
+        score_pct: { type: integer, minimum: 0, maximum: 100, description: score / 5 × 100. }
+        appointment_set: { type: [boolean, "null"] }
+        likely_to_show_pct: { type: integer }
+        summary: { type: [string, "null"] }
+        skills:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              name: { type: string }
+              type: { type: string, enum: [universal, call_type] }
+              score: { type: number }
+              score_pct: { type: integer }
+              note: { type: [string, "null"] }
+        wins: { type: array, items: { type: string } }
+        growth: { type: array, items: { type: string } }
+        phrases:
+          type: array
+          items:
+            type: object
+            properties:
+              you_said: { type: string }
+              try_instead: { type: string }
+        coaching: { type: [string, "null"] }
+        next_step: { type: [string, "null"] }
+        lead:
+          type: [object, "null"]
+          properties:
+            name: { type: string }
+            age: { type: [integer, "null"] }
+            for_whom: { type: [string, "null"] }
+            situation: { type: [string, "null"] }
+            real_reason: { type: [string, "null"] }
+            hesitation: { type: [string, "null"] }
+            tone: { type: [string, "null"] }
+            difficulty: { type: [string, "null"] }
+        reveal:
+          type: [object, "null"]
+          properties:
+            found_real_reason: { type: string, enum: [yes, partly, "no"] }
+            found_note: { type: [string, "null"] }
+            handled_hesitation: { type: string, enum: [yes, partly, "no", not_raised] }
+            handled_note: { type: [string, "null"] }
+        transcript:
+          type: array
+          items:
+            type: object
+            properties:
+              speaker: { type: string, enum: [trainee, lead] }
+              text: { type: string }
+              at_seconds: { type: number }
+    Event:
+      type: object
+      properties:
+        id: { type: string, description: "evt_… — same as X-Setmo-Event-Id; stable across retries." }
+        object: { type: string, const: event }
+        type: { type: string, enum: [session.started, session.ended, session.completed, session.failed] }
+        created: { type: string, format: date-time }
+        mode: { $ref: "#/components/schemas/Mode" }
+        data:
+          type: object
+          properties:
+            session: { $ref: "#/components/schemas/Session" }
