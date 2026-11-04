@@ -580,9 +580,14 @@ export async function getOfficeBilling(officeId: string) {
   const { promoInfo } = await import("@/lib/config");
   const { hasSignupBonusGrant } = await import("@/lib/usage");
   const promo = !active && !(await hasSignupBonusGrant(officeId)) ? promoInfo(cfg) : null;
+  // A free trial (an account SetMo staff set up): how long it has, or that it ended.
+  const { getTrialInfo } = await import("@/lib/trials");
+  const trialInfo = active ? null : await getTrialInfo(officeId);
+  const trial = trialInfo && !trialInfo.activated ? { label: trialInfo.label, daysLeft: trialInfo.daysLeft, ended: trialInfo.ended } : null;
 
   return {
     promo,
+    trial,
     balance,
     accessMonthly,
     annualAccess: Math.round(accessMonthly * 10 * 100) / 100, // 2 months free

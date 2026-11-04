@@ -5,6 +5,8 @@ import { getPlatformAccountDetail } from "@/lib/platform";
 import { StatTile } from "@/components/ui/StatTile";
 import { LocationActions, UserActions, GiftCardSwitch } from "@/components/platform/AdminActions";
 import { relativeShort } from "@/lib/format";
+import { trialStatus } from "@/lib/trials";
+import { ExtendTrialButton } from "@/components/platform/TrialControls";
 
 const usd = (v: number) => `$${Math.round(v).toLocaleString()}`;
 
@@ -13,6 +15,7 @@ export default async function PlatformAccountDetailPage({ params }: { params: Pr
   const { id } = await params;
   const a = await getPlatformAccountDetail(id);
   if (!a) notFound();
+  const trial = a.trialEndsAt ? trialStatus(a.trialEndsAt) : null;
 
   return (
     <>
@@ -38,6 +41,17 @@ export default async function PlatformAccountDetailPage({ params }: { params: Pr
             <p className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>
               Kept out of revenue, platform metrics and the leaderboard. Its users can&apos;t buy anything — top it up with &quot;Grant minutes&quot; below.
             </p>
+          )}
+          {trial && a.locations.some((l) => !l.accessActive) && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+              <span className={"chip " + (trial.ended ? "amber" : "mint")} style={{ fontSize: 12 }}>
+                {trial.ended ? `Free trial ended ${trial.label}` : `Free trial until ${trial.label} · ${trial.daysLeft}d left`}
+              </span>
+              <span className="muted" style={{ fontSize: 12.5 }}>
+                {a.kind === "group" ? "Locations without Practice Access lose it when the trial ends." : "Practice calls stop when it ends unless they activate from Billing."}
+              </span>
+              <ExtendTrialButton accountId={a.id} />
+            </div>
           )}
         </div>
       </div>

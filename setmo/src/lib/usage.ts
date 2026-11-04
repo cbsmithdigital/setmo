@@ -85,24 +85,44 @@ export async function canStartSession(officeId: string, opts: { isAudit?: boolea
  *  it. Activating is how an office becomes one, and a super admin can turn it
  *  on for a comp or trial account (Platform → the account → Activate). Demo
  *  accounts never pay — the SetMo team tops them up — so they always count. */
-async function accessState(officeId: string): Promise<"current" | "lapsed" | "never"> {
+// A free trial (accounts SetMo staff set up — lib/trials) counts as current
+// until it ends; after that the account reads "trial-ended" until it activates.
+async function accessState(officeId: string): Promise<"current" | "lapsed" | "never" | "trial-ended"> {
   const o = await prisma.office.findUnique({
     where: { id: officeId },
-    select: { isDemo: true, organization: { select: { isDemo: true } }, subscription: { select: { status: true } } },
+    select: {
+      isDemo: true,
+      trialEndsAt: true,
+      organization: { select: { isDemo: true, trialEndsAt: true } },
+      subscription: { select: { status: true } },
+    },
   });
   if (!o) return "never";
   if (o.isDemo || o.organization?.isDemo) return "current";
   const status = o.subscription?.status;
   if (status === "ACTIVE" || status === "PAST_DUE") return "current";
-  return o.subscription ? "lapsed" : "never";
+  const trialEnd = o.trialEndsAt ?? o.organization?.trialEndsAt ?? null;
+  if (trialEnd && trialEnd.getTime() > Date.now()) return "current";
+  if (o.subscription) return "lapsed";
+  return trialEnd ? "trial-ended" : "never";
 }
 
 export async function hasCurrentAccess(officeId: string): Promise<boolean> {
   return (await accessState(officeId)) === "current";
 }
 
+/** Whether the location pays for Practice Access (or a super admin turned it
+ *  on as a comp) — a free trial doesn't count. Buying tokens on their own needs
+ *  this: a trial account activates (access plus tokens) instead. */
+export async function hasPaidAccess(officeId: string): Promise<boolean> {
+  const o = await prisma.office.findUnique({ where: { id: officeId }, select: { isDemo: true, organization: { select: { isDemo: true } }, subscription: { select: { status: true } } } });
+  if (!o) return false;
+  if (o.isDemo || o.organization?.isDemo) return true;
+  return o.subscription?.status === "ACTIVE" || o.subscription?.status === "PAST_DUE";
+}
+
 /** Whether this office's people can start a practice call right now, and if not, why. */
-export async function practiceAvailability(officeId: string): Promise<"open" | "never" | "lapsed" | "no-tokens"> {
+export async function practiceAvailability(officeId: string): Promise<"open" | "never" | "lapsed" | "trial-ended" | "no-tokens"> {
   const state = await accessState(officeId);
   if (state !== "current") return state;
   return (await canStartSession(officeId)).ok ? "open" : "no-tokens";
@@ -117,6 +137,8 @@ export async function practiceBlockedMessage(officeId: string): Promise<string |
       return "Practice Access isn't on for this practice right now. An office admin can turn it back on from Billing.";
     case "never":
       return "SetMo isn't activated for this practice yet. An office admin can activate it from Billing to start practicing.";
+    case "trial-ended":
+      return "Your free trial has ended. An office admin can activate SetMo from Billing to keep practicing — your scores and any unused tokens are still here.";
     case "no-tokens":
       return "Your practice is out of tokens. An office admin can add more from Billing.";
     default:

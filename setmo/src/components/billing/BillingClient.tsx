@@ -22,6 +22,7 @@ type BillingData = {
   nextInvoiceDate: string | null;
   invoices: { date: string; desc: string; amount: string; status: string; url: string | null }[];
   promo: { monthlyTokens: number; annualTokens: number; endsAt: string } | null;
+  trial?: { label: string; daysLeft: number; ended: boolean } | null;
 };
 
 const SIGNED_OUT = "Your session has ended — sign in again, then try once more.";
@@ -193,6 +194,23 @@ export function BillingClient({
         {accessStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Checkout cancelled — no charge was made.</div>}
         {minutesStatus === "success" && <div className="banner mint" style={{ marginBottom: 18 }}>Payment received — your tokens will be added within a few seconds.</div>}
         {minutesStatus === "cancel" && <div className="banner error" style={{ marginBottom: 18 }}>Checkout cancelled — no charge was made.</div>}
+
+        {/* A free trial (account set up by the SetMo team): what's left, or that it's over. */}
+        {!data.subscribed && data.trial && (
+          <div className={"banner " + (data.trial.ended ? "error" : "mint")} style={{ marginBottom: 18 }}>
+            {data.trial.ended ? (
+              <>
+                Your free trial ended on {data.trial.label}. Activate below to keep practicing — your scores
+                {data.balance.remainingMin > 0 ? ` and ${(data.balance.remainingMin * 10).toLocaleString()} unused tokens` : ""} are still here.
+              </>
+            ) : (
+              <>
+                <b>Free trial: {data.trial.daysLeft} day{data.trial.daysLeft === 1 ? "" : "s"} left</b> (ends {data.trial.label}). You have{" "}
+                {Math.max(0, data.balance.remainingMin * 10).toLocaleString()} tokens to practice with. To keep practicing after your trial, activate below — Practice Access plus a token balance.
+              </>
+            )}
+          </div>
+        )}
 
         {/* Once subscribed: access status + minute balance. Before that, the
             combined activation section below carries the access + minutes info. */}

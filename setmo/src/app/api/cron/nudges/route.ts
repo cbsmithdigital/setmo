@@ -1,6 +1,7 @@
 import { json, error } from "@/lib/api";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { nudgeQuietSetters, remindPendingInvites, nudgeQuietTeams, sendGroupUpdates } from "@/lib/nudges";
+import { sendTrialNotices } from "@/lib/trials";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -8,7 +9,8 @@ export const dynamic = "force-dynamic";
 // GET /api/cron/nudges — weekday mornings (US): adoption nudges (lib/nudges) —
 // quiet setters every 3 days, invite reminders on day 2 and 7, a weekly note
 // to admins whose team hasn't practiced, and every 5 days an update to
-// group/DSO admins on each of their practices. ?dryRun=1 lists who would be
+// group/DSO admins on each of their practices; and free-trial notices (3 days
+// before a trial ends, and when it has ended). ?dryRun=1 lists who would be
 // nudged without sending anything. Protected by CRON_SECRET (Vercel injects it).
 export async function GET(req: Request) {
   if (!cronAuthorized(req)) return error("Unauthorized", 401);
@@ -19,6 +21,7 @@ export async function GET(req: Request) {
   const invites = await remindPendingInvites(opts);
   const teams = await nudgeQuietTeams(opts);
   const groups = await sendGroupUpdates(opts);
+  const trials = await sendTrialNotices(opts);
   return json({
     ok: true,
     dryRun: opts.dryRun,
@@ -26,6 +29,7 @@ export async function GET(req: Request) {
     invites: { considered: invites.considered, reminded: invites.reminded },
     teams: { considered: teams.considered, nudged: teams.nudged },
     groups: { considered: groups.considered, sent: groups.sent },
-    ...(opts.dryRun ? { plan: { setters: setters.plan, invites: invites.plan, teams: teams.plan, groups: groups.plan } } : {}),
+    trials: { considered: trials.considered, sent: trials.sent },
+    ...(opts.dryRun ? { plan: { setters: setters.plan, invites: invites.plan, teams: teams.plan, groups: groups.plan, trials: trials.plan } } : {}),
   });
 }

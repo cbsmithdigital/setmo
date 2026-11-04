@@ -210,6 +210,12 @@ model Organization {
   // on; on for a group covers every location. Admins ask from the goal builder.
   giftCardsEnabled     Boolean   @default(false) @map("gift_cards_enabled")
   giftCardsRequestedAt DateTime? @map("gift_cards_requested_at")
+  // Free trial SetMo staff gave this group when they set it up (Platform → New
+  // account): every location has Practice Access until then. After it, each
+  // location activates from Locations. trialNoticeStage: 0 none · 1 "ends soon"
+  // email sent · 2 "ended" email sent.
+  trialEndsAt          DateTime? @map("trial_ends_at")
+  trialNoticeStage     Int       @default(0) @map("trial_notice_stage")
 
   offices           Office[]
   users             User[]
@@ -342,6 +348,12 @@ model Office {
   giftCardsRequestedAt DateTime? @map("gift_cards_requested_at")
   // Last "your team hasn't practiced this week" email to the admins (lib/nudges).
   idleNudgeAt      DateTime? @map("idle_nudge_at")
+  // Free trial SetMo staff gave this practice when they set it up (Platform →
+  // New account): Practice Access is on until then, then they activate from
+  // Billing. (A group's trial lives on its Organization.) trialNoticeStage: 0
+  // none · 1 "ends soon" email sent · 2 "ended" email sent.
+  trialEndsAt      DateTime? @map("trial_ends_at")
+  trialNoticeStage Int       @default(0) @map("trial_notice_stage")
   // A location run through a partner's API (e.g. Team Care): the partner bills
   // it from its own wallet, so SetMo's own billing, alerts and emails stay off.
   managedByPartnerId String? @map("managed_by_partner_id")

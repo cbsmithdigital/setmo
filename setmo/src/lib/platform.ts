@@ -198,9 +198,9 @@ async function officeStats(where: object): Promise<OfficeStat[]> {
 }
 
 export async function getPlatformAccounts() {
-  const orgs = await prisma.organization.findMany({ select: { id: true, name: true, type: true } });
+  const orgs = await prisma.organization.findMany({ select: { id: true, name: true, type: true, trialEndsAt: true } });
   // Partner-run locations are listed on their partner's page, not here.
-  const offices = await prisma.office.findMany({ where: { isProspect: false, managedByPartnerId: null }, select: { id: true, organizationId: true } });
+  const offices = await prisma.office.findMany({ where: { isProspect: false, managedByPartnerId: null }, select: { id: true, organizationId: true, trialEndsAt: true } });
   const stats = await officeStats({ isProspect: false, managedByPartnerId: null });
   const byId = new Map(stats.map((s) => [s.id, s]));
   const access = (await getPricingConfig()).accessMonthly;
@@ -218,7 +218,7 @@ export async function getPlatformAccounts() {
     };
   };
 
-  const accounts: { id: string; name: string; kind: "group" | "single"; type: string; isDemo: boolean; locations: number; activeAccess: number; mrr: number; balanceMin: number; cashLifetime: number; burnPerDay: number; daysToEmpty: number | null; lastActivity: Date | null }[] = [];
+  const accounts: { id: string; name: string; kind: "group" | "single"; type: string; isDemo: boolean; trialEndsAt: Date | null; locations: number; activeAccess: number; mrr: number; balanceMin: number; cashLifetime: number; burnPerDay: number; daysToEmpty: number | null; lastActivity: Date | null }[] = [];
 
   // Demo accounts stay listed (so they can be managed and topped up) but sort to
   // the bottom and are marked, and the page leaves them out of its totals.
@@ -228,25 +228,25 @@ export async function getPlatformAccounts() {
     const ids = offices.filter((o) => o.organizationId === org.id).map((o) => o.id);
     if (ids.length === 0) continue;
     const r = roll(ids);
-    accounts.push({ id: org.id, name: org.name, kind: "group", type: ids.length > 1 ? "Group / DSO" : "Group", isDemo: allDemo(ids), ...r, daysToEmpty: r.burnPerDay > 0 ? Math.round(r.balanceMin / r.burnPerDay) : null });
+    accounts.push({ id: org.id, name: org.name, kind: "group", type: ids.length > 1 ? "Group / DSO" : "Group", isDemo: allDemo(ids), trialEndsAt: org.trialEndsAt, ...r, daysToEmpty: r.burnPerDay > 0 ? Math.round(r.balanceMin / r.burnPerDay) : null });
   }
   for (const o of offices.filter((x) => !x.organizationId)) {
     const r = roll([o.id]);
     const st = byId.get(o.id);
-    accounts.push({ id: o.id, name: st?.name ?? "Practice", kind: "single", type: "Single practice", isDemo: Boolean(st?.isDemo), ...r, daysToEmpty: r.burnPerDay > 0 ? Math.round(r.balanceMin / r.burnPerDay) : null });
+    accounts.push({ id: o.id, name: st?.name ?? "Practice", kind: "single", type: "Single practice", isDemo: Boolean(st?.isDemo), trialEndsAt: o.trialEndsAt, ...r, daysToEmpty: r.burnPerDay > 0 ? Math.round(r.balanceMin / r.burnPerDay) : null });
   }
   return accounts.sort((a, b) => Number(a.isDemo) - Number(b.isDemo) || b.mrr - a.mrr || b.cashLifetime - a.cashLifetime);
 }
 
 export async function getPlatformAccountDetail(id: string) {
-  const org = await prisma.organization.findUnique({ where: { id }, select: { id: true, name: true, type: true, isDemo: true, referredByPartnerId: true, referralCode: true, referredAt: true, giftCardsEnabled: true, giftCardsRequestedAt: true } });
+  const org = await prisma.organization.findUnique({ where: { id }, select: { id: true, name: true, type: true, isDemo: true, referredByPartnerId: true, referralCode: true, referredAt: true, giftCardsEnabled: true, giftCardsRequestedAt: true, trialEndsAt: true } });
   const officeWhere = org ? { organizationId: org.id, isProspect: false } : { id, isProspect: false };
   const locations = await officeStats(officeWhere);
   if (locations.length === 0 && !org) return null;
 
   // Who referred this account (the office's own attribution, else its org's) and
   // through which code — so a partner's rep shows by name.
-  const office = org ? null : await prisma.office.findUnique({ where: { id }, select: { referredByPartnerId: true, referralCode: true, referredAt: true, giftCardsEnabled: true, giftCardsRequestedAt: true } });
+  const office = org ? null : await prisma.office.findUnique({ where: { id }, select: { referredByPartnerId: true, referralCode: true, referredAt: true, giftCardsEnabled: true, giftCardsRequestedAt: true, trialEndsAt: true } });
 
   // Gift cards: a group's switch lives on the org; any location may have asked.
   const askedAt = org
@@ -296,6 +296,8 @@ export async function getPlatformAccountDetail(id: string) {
     isDemo: locations.length > 0 ? locations.every((l) => l.isDemo) : Boolean(org?.isDemo),
     referral,
     giftCards,
+    // A free trial from the SetMo team (Platform → New account), if it had one.
+    trialEndsAt: org?.trialEndsAt ?? office?.trialEndsAt ?? null,
     mrr: r2(locations.filter((l) => l.accessActive).length * cfg.accessMonthly),
     balanceMin: locations.reduce((a, l) => a + l.balanceMin, 0),
     cashLifetime: r2(locations.reduce((a, l) => a + l.cashLifetime, 0)),

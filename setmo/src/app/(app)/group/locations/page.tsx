@@ -5,6 +5,7 @@ import { getMinuteBalance, hasSignupBonusGrant } from "@/lib/usage";
 import { inDemoAccount } from "@/lib/demo-shared";
 import { InviteButton } from "@/components/office/InviteButton";
 import { GroupLocations, type LocationRow } from "@/components/group/GroupLocations";
+import { trialStatus } from "@/lib/trials";
 
 // The group's locations: add one, activate it (Practice Access + starter
 // tokens), top up its tokens, and invite its people — all without SetMo.
@@ -20,7 +21,8 @@ export default async function GroupLocationsPage({ searchParams }: { searchParam
   const { activate, access, minutes } = await searchParams;
   const paid = [activate, access, minutes].includes("success");
 
-  const [offices, cfg, pricing] = await Promise.all([
+  const [org, offices, cfg, pricing] = await Promise.all([
+    prisma.organization.findUnique({ where: { id: user.organizationId }, select: { trialEndsAt: true } }),
     prisma.office.findMany({
       where: { organizationId: user.organizationId },
       select: {
@@ -54,6 +56,9 @@ export default async function GroupLocationsPage({ searchParams }: { searchParam
     })
   );
 
+  // A free trial the SetMo team gave the group: every location has access until it ends.
+  const trial = org?.trialEndsAt ? trialStatus(org.trialEndsAt) : null;
+
   return (
     <>
       <div className="topbar">
@@ -71,6 +76,13 @@ export default async function GroupLocationsPage({ searchParams }: { searchParam
             Payment received — thanks! It can take a few seconds to show here; refresh if it hasn&apos;t yet.
           </div>
         )}
+        {trial && !rows.every((r) => r.status === "ACTIVE") && (
+          <div className={"banner " + (trial.ended ? "error" : "mint")} style={{ marginBottom: 18 }}>
+            {trial.ended
+              ? `Your free trial ended on ${trial.label}. Activate each location below to keep practicing — your scores and unused tokens are still here.`
+              : `Free trial: ${trial.daysLeft} day${trial.daysLeft === 1 ? "" : "s"} left (ends ${trial.label}). To keep practicing after your trial, activate each location below — Practice Access plus a token balance.`}
+          </div>
+        )}
         <GroupLocations
           rows={rows}
           demo={inDemoAccount(user)}
@@ -79,6 +91,7 @@ export default async function GroupLocationsPage({ searchParams }: { searchParam
           annualAccess={Math.round(cfg.accessMonthly * 10 * 100) / 100}
           monthlyDiscountPct={cfg.monthlyTokenDiscountPct}
           annualDiscountPct={cfg.annualTokenDiscountPct}
+          trialActive={Boolean(trial && !trial.ended)}
         />
       </div>
     </>

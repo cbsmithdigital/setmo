@@ -16,6 +16,11 @@ const PERKS: [IconName, string, string][] = [
 export default function InvitePage() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
+  // The owner of an account the SetMo team set up: they get the account (not
+  // "you've been invited"), and agree to the Terms here, as sign-up asks.
+  const [owner, setOwner] = useState(false);
+  const [needsTerms, setNeedsTerms] = useState(false);
+  const [agree, setAgree] = useState(false);
   const [checking, setChecking] = useState(true);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -28,6 +33,9 @@ export default function InvitePage() {
       try {
         const { data } = await createClient().auth.getUser();
         setEmail(data.user?.email ?? null);
+        const meta = (data.user?.app_metadata ?? {}) as Record<string, unknown>;
+        setOwner(Boolean(meta.setmo_owner));
+        setNeedsTerms(Boolean(meta.terms_required && !meta.terms_accepted_at));
       } catch {
         setEmail(null);
       } finally {
@@ -36,7 +44,7 @@ export default function InvitePage() {
     })();
   }, []);
 
-  const ready = firstName.trim() && lastName.trim() && password.length >= 6;
+  const ready = firstName.trim() && lastName.trim() && password.length >= 6 && (!needsTerms || agree);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,7 +61,7 @@ export default function InvitePage() {
       const res = await fetch("/api/auth/accept-invite", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ firstName, lastName }),
+        body: JSON.stringify({ firstName, lastName, agree: needsTerms ? agree : undefined }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -98,11 +106,13 @@ export default function InvitePage() {
           ) : (
             <>
               <div className="chip purple" style={{ marginBottom: 18, width: "fit-content" }}>
-                <Icon name="team" size={14} /> You&apos;ve been invited
+                <Icon name="team" size={14} /> {owner ? "Your SetMo account is ready" : "You've been invited"}
               </div>
               <h1 style={{ fontSize: 34, marginBottom: 10 }}>Set up your account.</h1>
               <p className="muted" style={{ fontSize: 16, marginBottom: 28 }}>
-                Finish setting up to start practicing your lead calls on SetMo.
+                {owner
+                  ? "Choose a password to get started. Then invite your team, and add a card from Billing whenever you're ready."
+                  : "Finish setting up to start practicing your lead calls on SetMo."}
               </p>
               <form onSubmit={submit}>
                 {err && <div className="banner error" style={{ marginBottom: 16 }}>{err}</div>}
@@ -130,6 +140,16 @@ export default function InvitePage() {
                     placeholder="At least 6 characters"
                   />
                 </div>
+                {needsTerms && (
+                  <label style={{ display: "flex", gap: 10, alignItems: "flex-start", margin: "4px 0 14px", cursor: "pointer", fontSize: 13.5, lineHeight: 1.5, color: "var(--text-2)" }}>
+                    <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--purple)", flexShrink: 0 }} />
+                    <span>
+                      I agree to SetMo&apos;s{" "}
+                      <Link href="/terms" target="_blank" style={{ color: "var(--purple-2)", fontWeight: 600 }}>Terms of Service</Link>{" "}and{" "}
+                      <Link href="/privacy" target="_blank" style={{ color: "var(--purple-2)", fontWeight: 600 }}>Privacy Policy</Link>.
+                    </span>
+                  </label>
+                )}
                 <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={!ready || loading}>
                   {loading ? "Setting up…" : "Create account & start"} <Icon name="arrow" />
                 </button>

@@ -31,6 +31,7 @@ const GROUP_UPDATE_DAYS = 5; // group/DSO admins: an update this often, covering
 const BLOCKED_NOTE: Partial<Record<string, string>> = {
   never: "Not activated yet — nobody can practice",
   lapsed: "Practice Access is off — nobody can practice",
+  "trial-ended": "Free trial ended — nobody can practice until it's activated",
   "no-tokens": "Out of tokens — nobody can practice until more are added",
 };
 

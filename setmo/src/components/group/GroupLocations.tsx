@@ -33,9 +33,12 @@ export function GroupLocations({
   annualAccess,
   monthlyDiscountPct,
   annualDiscountPct,
+  trialActive = false,
 }: {
   rows: LocationRow[];
   demo: boolean;
+  /** The group is on a free trial: locations not activated yet still have access. */
+  trialActive?: boolean;
   pricing: PricingConfig;
   accessMonthly: number;
   annualAccess: number;
@@ -104,7 +107,7 @@ export function GroupLocations({
 
         {rows.map((r, i) => {
           const active = r.status === "ACTIVE";
-          const st = r.status ? STATUS[r.status] ?? STATUS.CANCELED : { label: "Not activated", cls: "amber" };
+          const st = r.status ? STATUS[r.status] ?? STATUS.CANCELED : trialActive ? { label: "Free trial", cls: "mint" } : { label: "Not activated", cls: "amber" };
           const isOpen = open === r.id;
           return (
             <div key={r.id} style={{ borderTop: i || adding ? "1px solid var(--line-soft)" : "none", padding: "12px 4px" }}>

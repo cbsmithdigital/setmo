@@ -133,11 +133,40 @@ export async function resendInvite(opts: { email: string; contextName: string; i
   if (opts.email.endsWith("@prospect.setmo")) return { ok: false }; // assessment stand-in, not a person
   const admin = getAdminClient();
   const redirectTo = `${opts.origin}/auth/confirm?next=/invite`;
-  const { data, error: linkErr } = await admin.auth.admin.generateLink({ type: "invite", email: opts.email, options: { redirectTo } });
-  const link = confirmLink(opts.origin, data?.properties?.hashed_token, "invite", "/invite");
+  let linkType: "invite" | "magiclink" = "invite";
+  let { data, error: linkErr } = await admin.auth.admin.generateLink({ type: "invite", email: opts.email, options: { redirectTo } });
+  // An owner whose login existed before their account was set up (lib/staff-accounts)
+  // can't take an invite; a one-time sign-in link opens the same setup page.
+  if (linkErr && data?.user == null && /already|registered|exists/i.test(linkErr.message)) {
+    const owner = await prisma.user.findFirst({ where: { email: { equals: opts.email, mode: "insensitive" } }, select: { status: true } });
+    if (owner?.status === "INVITED") {
+      linkType = "magiclink";
+      ({ data, error: linkErr } = await admin.auth.admin.generateLink({ type: "magiclink", email: opts.email, options: { redirectTo } }));
+    }
+  }
+  const link = confirmLink(opts.origin, data?.properties?.hashed_token, linkType, "/invite");
   if (linkErr || !link) return { ok: false };
-  const sent = isEmailConfigured()
-    ? await sendInviteEmail({ to: opts.email, link, officeName: opts.contextName, inviterName: opts.inviterName, reminder: opts.reminder }).catch(() => false)
-    : false;
+  let sent = false;
+  if (isEmailConfigured()) {
+    // An account the SetMo team set up for its owner gets the "your account is
+    // ready" email (with the trial), not "X invited you to join".
+    if ((data?.user?.app_metadata as Record<string, unknown> | undefined)?.setmo_owner) {
+      const owner = await prisma.user.findFirst({
+        where: { email: { equals: opts.email, mode: "insensitive" } },
+        select: { firstName: true, office: { select: { name: true, trialEndsAt: true } }, organization: { select: { name: true, trialEndsAt: true } } },
+      });
+      const { sendAccountReadyEmail } = await import("@/lib/email");
+      sent = await sendAccountReadyEmail({
+        to: opts.email,
+        link,
+        accountName: owner?.organization?.name ?? owner?.office?.name ?? opts.contextName,
+        firstName: owner?.firstName,
+        trialEndsAt: owner?.office?.trialEndsAt ?? owner?.organization?.trialEndsAt ?? null,
+        reminder: opts.reminder,
+      }).catch(() => false);
+    } else {
+      sent = await sendInviteEmail({ to: opts.email, link, officeName: opts.contextName, inviterName: opts.inviterName, reminder: opts.reminder }).catch(() => false);
+    }
+  }
   return { ok: true, previewLink: sent ? undefined : link };
 }

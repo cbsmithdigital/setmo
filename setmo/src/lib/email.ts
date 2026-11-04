@@ -97,6 +97,77 @@ export async function sendInviteEmail(opts: { to: string; link: string; officeNa
   );
 }
 
+/** An account the SetMo team set up for its owner (Platform → New account):
+ *  their setup link, and the free trial if it has one. `reminder` = the invite
+ *  is still waiting (lib/nudges, or "Resend invite" on Platform). */
+export async function sendAccountReadyEmail(opts: {
+  to: string;
+  link: string;
+  accountName: string;
+  firstName?: string | null;
+  trialEndsAt: Date | null;
+  reminder?: boolean;
+}): Promise<boolean> {
+  const { trialDateLabel, TRIAL_DAYS, TRIAL_MINUTES } = await import("@/lib/trials");
+  const trialOpen = opts.trialEndsAt && opts.trialEndsAt.getTime() > Date.now();
+  const trial = trialOpen
+    ? `<p>Your <strong>free ${TRIAL_DAYS}-day trial</strong> includes Practice Access and a complimentary hour of practice calls (${(TRIAL_MINUTES * 10).toLocaleString()} tokens). It runs until <strong>${trialDateLabel(opts.trialEndsAt!)}</strong>. To keep practicing after that, activate SetMo from Billing.</p>`
+    : "";
+  return send(
+    {
+      to: opts.to,
+      subject: opts.reminder ? `Reminder: your SetMo account for ${opts.accountName} is ready` : `Your SetMo account for ${opts.accountName} is ready`,
+      html: wrap(`
+        <h2 style="color:#7c3aed">${opts.reminder ? "Your SetMo account is waiting" : "Your SetMo account is ready"}</h2>
+        ${opts.firstName ? `<p>Hi ${esc(opts.firstName)},</p>` : ""}
+        <p>The SetMo team set up <strong>${esc(opts.accountName)}</strong> on SetMo for you. Your team practices high-value lead calls with an AI patient and gets scored and coached on every one.</p>
+        ${trial}
+        <p style="margin:28px 0">${button(opts.link, "Set up your account")}</p>
+        ${pasteLink(opts.link)}
+        <p style="color:#64708a;font-size:13px">Setting up takes a minute: choose a password and agree to the Terms.</p>
+      `),
+    },
+    opts.reminder ? "account-ready-reminder" : "account-ready",
+  );
+}
+
+/** A free trial ends in a few days, or has ended (lib/trials, nudges cron). */
+export async function sendTrialNoticeEmail(opts: { to: string[]; accountName: string; endsAt: Date; ended: boolean; group: boolean; link: string }): Promise<number> {
+  if (opts.to.length === 0) return 0;
+  const { trialDateLabel } = await import("@/lib/trials");
+  const when = trialDateLabel(opts.endsAt);
+  const how = opts.group
+    ? "Activate each location from Locations: Practice Access plus a token balance, at standard pricing."
+    : "Activate from Billing: Practice Access plus a token balance, at standard pricing.";
+  let sent = 0;
+  for (const to of opts.to) {
+    const ok = await send(
+      {
+        to,
+        subject: opts.ended ? `${opts.accountName}: your SetMo trial has ended` : `${opts.accountName}: your SetMo trial ends ${when}`,
+        html: wrap(
+          opts.ended
+            ? `
+          <h2 style="color:#7c3aed">Your free trial has ended</h2>
+          <p>The free SetMo trial for <strong>${esc(opts.accountName)}</strong> ended on ${when}, so practice calls are paused. Everything your team did is still there — scores, progress and any unused tokens.</p>
+          <p>${how}</p>
+          <p style="margin:28px 0">${button(opts.link, "Activate SetMo")}</p>
+        `
+            : `
+          <h2 style="color:#7c3aed">Your free trial ends ${when}</h2>
+          <p>To keep <strong>${esc(opts.accountName)}</strong> practicing after that, activate SetMo before the trial ends. Anything left of your complimentary hour stays on your balance.</p>
+          <p>${how}</p>
+          <p style="margin:28px 0">${button(opts.link, "Activate SetMo")}</p>
+        `,
+        ),
+      },
+      opts.ended ? "trial-ended" : "trial-ending",
+    );
+    if (ok) sent++;
+  }
+  return sent;
+}
+
 /** Footer + one-click unsubscribe headers for the optional emails (weekly
  *  summaries, practice reminders) — the account and billing ones go regardless. */
 const unsubscribeFooter = (url: string) =>
