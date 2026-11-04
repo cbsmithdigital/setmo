@@ -1,0 +1,110 @@
+---
+title: "Sessions"
+description: "Create a practice call, choose the lead, and follow it from start to score."
+---
+
+A **session** is one practice call by one trainee. You create it from your server, show it in your page, and SetMo tells you how it went.
+
+## Create a session
+
+```bash
+curl https://setmo.growdental.ai/api/v1/sessions \
+  -H "Authorization: Bearer $SETMO_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reference": "attempt_8812",
+    "location": { "id": "loc_123", "name": "Smile Dental — Boise", "doctor_name": "Dr. Patel" },
+    "trainee": { "id": "user_77", "first_name": "Jess", "last_name": "Lee" },
+    "call_type": "IMPLANT",
+    "challenge": "adaptive",
+    "lead": { "gender": "female", "age": "60s", "concern": "cost" },
+    "metadata": { "form_id": "F-1029" }
+  }'
+```
+
+<ParamField body="reference" type="string">
+  Your id for this attempt. **Always send it.** Send the same request again (after a timeout, say) and you get the same session back with `200`. Reuse a reference for a different trainee, location or call type and you get `409 reference_conflict`.
+</ParamField>
+<ParamField body="location" type="object" required>
+  `{ "id": "<your id>" }` for a location that exists, or include its fields (`name`, `city`, `doctor_name`, `offer`, …) to create or update it on the way. See [Locations and trainees](/guides/locations-and-trainees).
+</ParamField>
+<ParamField body="trainee" type="object" required>
+  `{ "id": "<your id>" }`, plus `first_name` / `last_name` to create or update. The trainee is placed at this location.
+</ParamField>
+<ParamField body="call_type" type="string" required>
+  `IMPLANT`, `DENTURE`, `COSMETIC`, `ORTHO`, `WISDOM` or `GENERAL`. It must be on at the location.
+</ParamField>
+<ParamField body="challenge" type="string" default="adaptive">
+  `adaptive` starts at the trainee's level and rises as they improve. `warm` is receptive and opens up with light prompting. `tough` is guarded and holds their hesitation firmly.
+</ParamField>
+<ParamField body="lead" type="object">
+  "Pick your lead". Leave it out for a surprise. Values come from the call type's `lead_options` in [`GET /call-types`](/api-reference/call-types/list-call-types):
+  - `gender`: `female` or `male`
+  - `age`: implant calls, for example `40s-50s`, `60s`, `70s`
+  - `caller`: other call types, who's on the phone, for example `SELF` or `PARENT`
+  - `concern`: what's holding them back, for example `cost`
+
+  Some combinations don't go together: `concerns_by_age` and `concerns_by_caller` list the ones that do. An impossible pick returns `422 invalid_lead`.
+</ParamField>
+<ParamField body="metadata" type="object">
+  Up to 20 keys and 2 KB of your own data. It comes back on every response and webhook for this session.
+</ParamField>
+
+The response (`201`) is the [session object](/guides/results) with `status: "created"`, plus `launch`:
+
+```json
+{
+  "id": "a28d62a0-53da-42bd-8e43-6b9a46f7fc80",
+  "object": "session",
+  "mode": "live",
+  "reference": "attempt_8812",
+  "status": "created",
+  "call_type": "IMPLANT",
+  "launch": {
+    "url": "https://setmo.growdental.ai/embed/…",
+    "expires_at": "2026-11-03T18:55:24.974Z"
+  }
+}
+```
+
+<Warning>
+Handle these when you create a session:
+- `402 insufficient_tokens`: the wallet is empty, so show your out-of-credits screen.
+- `422 call_type_unavailable`: that call type is off at the location.
+- `422 invalid_lead`: the lead pick doesn't exist or doesn't go together.
+</Warning>
+
+## Lifecycle
+
+| `status` | Meaning |
+|---|---|
+| `created` | Made, not started. |
+| `in_progress` | The trainee is on the call. |
+| `ended` | The call ended; SetMo is scoring it (about a minute). |
+| `completed` | Scored. `result` is filled in. |
+| `failed` | It won't be scored. See `failure_reason`. |
+
+| `failure_reason` | What happened | Tokens |
+|---|---|---|
+| `too_short` | Under a minute, or only a line or two from the trainee. | The few it used |
+| `no_transcript` | The call never reached SetMo (for example, it never connected). | None |
+| `scoring_failed` | Scoring failed after retries. | None |
+| `abandoned` | Created but never started within 24 hours. | None |
+
+You hear about every change by [webhook](/guides/webhooks), and you can always read the latest with `GET /sessions/{id}`.
+
+## Show the call again
+
+A launch link opens **once** and expires after **10 minutes**. Ask for a fresh one whenever you need to show the frame:
+
+```bash
+curl -X POST https://setmo.growdental.ai/api/v1/sessions/$SESSION_ID/launch \
+  -H "Authorization: Bearer $SETMO_KEY"
+```
+
+Opening a link for a finished session shows its results in the frame, so you can link "See my results" straight back to it.
+
+## What SetMo doesn't do for a partner call
+
+- **No "call them back".** If the connection drops mid-call, the trainee gets feedback on what they had. Start a new session to try again.
+- **No SetMo login or email** for your trainees: your app is their front door.

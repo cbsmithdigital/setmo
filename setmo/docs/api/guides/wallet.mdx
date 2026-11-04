@@ -1,0 +1,40 @@
+---
+title: "Tokens and your wallet"
+description: "How calls are metered, and what happens when the balance runs out."
+---
+
+Every call started through the API draws from **your token wallet**. Your practices don't need their own SetMo plan, and calls never touch a practice's own SetMo balance. You bill your practices; SetMo bills you.
+
+- **1 token = 6 seconds** of practice call (10 tokens a minute). A typical call runs 6–7 minutes, about 65 tokens.
+- A call is metered on how long it actually ran, once it ends.
+- Calls that fail with `no_transcript`, `scoring_failed` or `abandoned` cost nothing. A `too_short` call uses the few tokens it ran.
+- Test and live have separate wallets. Test tokens are free; ask the SetMo team for more any time.
+
+## Check the balance
+
+```bash
+curl https://setmo.growdental.ai/api/v1/wallet \
+  -H "Authorization: Bearer $SETMO_KEY"
+```
+
+```json
+{
+  "object": "wallet",
+  "mode": "live",
+  "tokens_added": 50000,
+  "tokens_used": 12345,
+  "balance_tokens": 37655,
+  "can_start_calls": true
+}
+```
+
+## Running low
+
+- A new call needs at least a minute (10 tokens) left. Below that, `POST /sessions` returns `402 insufficient_tokens`.
+- A call that's already under way always finishes, so `balance_tokens` can dip slightly below zero.
+- If the wallet runs out between creating a session and starting the call, the frame tells the trainee and posts an `error` message to your page.
+- SetMo emails your account admins and the SetMo team when the live wallet runs low, and again when it's empty. To add tokens, contact the SetMo team.
+
+<Tip>
+Show your own out-of-credits screen on `402 insufficient_tokens`. You can also check `GET /wallet` before letting a trainee start.
+</Tip>

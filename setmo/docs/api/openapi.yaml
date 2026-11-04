@@ -5,8 +5,7 @@ info:
   description: |
     Run SetMo practice calls inside your own app: create a call, show it in an
     iframe from a one-time launch link, and receive the results by webhook.
-    See README.md in this folder for the integration guide (iframe messages,
-    webhook signatures, test mode).
+    The guides cover the iframe and its messages, webhook signatures, and test mode.
 servers:
   - url: https://setmo.growdental.ai/api/v1
 security:
@@ -63,6 +62,14 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/LocationFields" }
+            example:
+              name: Smile Dental — Boise
+              city: Boise
+              doctor_name: Dr. Patel
+              offer: Free implant consultation with a 3D scan
+              appointment: a 45-minute consultation with the doctor
+              deposit: No deposit required
+              call_types: [IMPLANT, GENERAL]
       responses:
         "200": { description: Updated., content: { application/json: { schema: { $ref: "#/components/schemas/Location" } } } }
         "201": { description: Created., content: { application/json: { schema: { $ref: "#/components/schemas/Location" } } } }
@@ -92,6 +99,10 @@ paths:
                 - type: object
                   properties:
                     location_id: { type: string, description: Your id for the trainee's location. }
+            example:
+              first_name: Jess
+              last_name: Lee
+              location_id: loc_123
       responses:
         "200": { description: Updated., content: { application/json: { schema: { $ref: "#/components/schemas/Trainee" } } } }
         "201": { description: Created., content: { application/json: { schema: { $ref: "#/components/schemas/Trainee" } } } }
@@ -111,6 +122,14 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/CreateSession" }
+            example:
+              reference: attempt_8812
+              location: { id: loc_123, name: Smile Dental — Boise, doctor_name: Dr. Patel }
+              trainee: { id: user_77, first_name: Jess, last_name: Lee }
+              call_type: IMPLANT
+              challenge: adaptive
+              lead: { gender: female, age: 60s, concern: cost }
+              metadata: { form_id: F-1029 }
       responses:
         "200": { description: An existing session with this reference (a retry)., content: { application/json: { schema: { $ref: "#/components/schemas/SessionWithLaunch" } } } }
         "201": { description: Created., content: { application/json: { schema: { $ref: "#/components/schemas/SessionWithLaunch" } } } }
@@ -211,6 +230,122 @@ webhooks:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/Event" }
+            example:
+              {
+                "id": "evt_6f2c41a0b7d94e0f9a3b1c2d4e5f6a7b",
+                "object": "event",
+                "type": "session.completed",
+                "created": "2026-11-03T18:47:16.000Z",
+                "mode": "live",
+                "data": {
+                  "session": {
+                    "id": "a28d62a0-53da-42bd-8e43-6b9a46f7fc80",
+                    "object": "session",
+                    "mode": "live",
+                    "reference": "attempt_8812",
+                    "metadata": {
+                      "form_id": "F-1029"
+                    },
+                    "status": "completed",
+                    "failure_reason": null,
+                    "call_type": "IMPLANT",
+                    "call_type_name": "Implants & full-arch",
+                    "challenge": "adaptive",
+                    "lead_choice": {
+                      "gender": "female",
+                      "age": "60s",
+                      "caller": null,
+                      "concern": "cost"
+                    },
+                    "location": {
+                      "id": "loc_123",
+                      "name": "Smile Dental — Boise"
+                    },
+                    "trainee": {
+                      "id": "user_77",
+                      "first_name": "Jess",
+                      "last_name": "Lee"
+                    },
+                    "created_at": "2026-11-03T18:40:02.120Z",
+                    "started_at": "2026-11-03T18:41:10.004Z",
+                    "ended_at": "2026-11-03T18:46:22.310Z",
+                    "completed_at": "2026-11-03T18:47:15.871Z",
+                    "duration_seconds": 312,
+                    "tokens_used": 52,
+                    "recording": {
+                      "url": "https://…",
+                      "expires_at": "2026-11-03T19:47:16.000Z"
+                    },
+                    "result": {
+                      "score": 3.6,
+                      "score_pct": 72,
+                      "appointment_set": true,
+                      "likely_to_show_pct": 58,
+                      "summary": "Booked Linda for Thursday at 2 by tying the visit to her daughter's wedding.",
+                      "skills": [
+                        {
+                          "key": "rapport",
+                          "name": "Rapport & warmth",
+                          "type": "universal",
+                          "score": 4.2,
+                          "score_pct": 84,
+                          "note": "Warm and unhurried from the first line."
+                        },
+                        {
+                          "key": "discovery",
+                          "name": "Discovery — the 'why'",
+                          "type": "call_type",
+                          "score": 3.1,
+                          "score_pct": 62,
+                          "note": "Found the wedding, but didn't ask why it mattered now."
+                        }
+                      ],
+                      "wins": [
+                        "Asked what made her reach out before pitching."
+                      ],
+                      "growth": [
+                        "Moved to scheduling before exploring the cost worry."
+                      ],
+                      "phrases": [
+                        {
+                          "you_said": "Let's get you in.",
+                          "try_instead": "Would it help to see what this could look like before the wedding?"
+                        }
+                      ],
+                      "coaching": "Linda opens up when you show interest in her life.",
+                      "next_step": "Try a tough lead who brings up cost early.",
+                      "lead": {
+                        "name": "Linda Hayes",
+                        "age": 62,
+                        "for_whom": null,
+                        "situation": "Wears a partial she hates.",
+                        "real_reason": "Doesn't want to hide in her daughter's wedding photos.",
+                        "hesitation": "Worried about the cost.",
+                        "tone": "warm but guarded",
+                        "difficulty": "Balanced"
+                      },
+                      "reveal": {
+                        "found_real_reason": "yes",
+                        "found_note": "At 0:34, after a follow-up question.",
+                        "handled_hesitation": "partly",
+                        "handled_note": "Financing came up, but no monthly number."
+                      },
+                      "transcript": [
+                        {
+                          "speaker": "lead",
+                          "text": "Hello?",
+                          "at_seconds": 0
+                        },
+                        {
+                          "speaker": "trainee",
+                          "text": "Hi Linda — this is Jess from Smile Dental.",
+                          "at_seconds": 3
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
       responses:
         "200": { description: Received. }
 components:

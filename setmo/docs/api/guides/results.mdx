@@ -1,0 +1,112 @@
+---
+title: "Results"
+description: "The session object: state, score, skills, the lead, the transcript and the recording."
+---
+
+`GET /sessions/{id}`, `POST /sessions` and every webhook return the same **session object**. Fields are only ever added, never renamed.
+
+```json
+{
+  "id": "a28d62a0-53da-42bd-8e43-6b9a46f7fc80",
+  "object": "session",
+  "mode": "live",
+  "reference": "attempt_8812",
+  "metadata": { "form_id": "F-1029" },
+  "status": "completed",
+  "failure_reason": null,
+  "call_type": "IMPLANT",
+  "call_type_name": "Implants & full-arch",
+  "challenge": "adaptive",
+  "lead_choice": { "gender": "female", "age": "60s", "caller": null, "concern": "cost" },
+  "location": { "id": "loc_123", "name": "Smile Dental — Boise" },
+  "trainee": { "id": "user_77", "first_name": "Jess", "last_name": "Lee" },
+  "created_at": "2026-11-03T18:40:02.120Z",
+  "started_at": "2026-11-03T18:41:10.004Z",
+  "ended_at": "2026-11-03T18:46:22.310Z",
+  "completed_at": "2026-11-03T18:47:15.871Z",
+  "duration_seconds": 312,
+  "tokens_used": 52,
+  "recording": { "url": "https://…", "expires_at": "2026-11-03T19:47:16.000Z" },
+  "result": {
+    "score": 3.6,
+    "score_pct": 72,
+    "appointment_set": true,
+    "likely_to_show_pct": 58,
+    "summary": "Booked Linda for Thursday at 2 by tying the visit to her daughter's wedding…",
+    "skills": [
+      { "key": "rapport", "name": "Rapport & warmth", "type": "universal", "score": 4.2, "score_pct": 84, "note": "…" }
+    ],
+    "wins": ["Asked what made her reach out before pitching."],
+    "growth": ["Moved to scheduling before exploring the cost worry."],
+    "phrases": [{ "you_said": "Let's get you in.", "try_instead": "Would it help to see what this could look like for the wedding?" }],
+    "coaching": "…",
+    "next_step": "Try a tough lead who brings up cost early.",
+    "lead": {
+      "name": "Linda Hayes", "age": 62, "for_whom": null,
+      "situation": "…", "real_reason": "…", "hesitation": "…",
+      "tone": "warm but guarded", "difficulty": "Balanced"
+    },
+    "reveal": { "found_real_reason": "yes", "found_note": "…", "handled_hesitation": "partly", "handled_note": "…" },
+    "transcript": [{ "speaker": "lead", "text": "Hello?", "at_seconds": 0 }]
+  }
+}
+```
+
+## The session
+
+<ResponseField name="status" type="string">
+  `created`, `in_progress`, `ended`, `completed` or `failed`. See [Sessions](/guides/sessions#lifecycle).
+</ResponseField>
+<ResponseField name="failure_reason" type="string | null">
+  When `status` is `failed`: `too_short`, `no_transcript`, `scoring_failed` or `abandoned`.
+</ResponseField>
+<ResponseField name="duration_seconds" type="integer | null">
+  How long the call ran, once it has ended.
+</ResponseField>
+<ResponseField name="tokens_used" type="integer">
+  Tokens this call drew from your wallet (1 token = 6 seconds). `0` when the call failed with `no_transcript`, `scoring_failed` or `abandoned`.
+</ResponseField>
+<ResponseField name="recording" type="object | null">
+  `url` (an MP3) and `expires_at`. The link works for one hour; fetch the session again for a fresh one.
+</ResponseField>
+
+## The result
+
+Present once the call is `completed`.
+
+<ResponseField name="score" type="number">
+  SetMo's overall score, 1–5 to one decimal. It's rated on the call as a whole, not averaged from the skills.
+</ResponseField>
+<ResponseField name="score_pct" type="integer">
+  The same score on 0–100 (`score / 5 × 100`).
+</ResponseField>
+<ResponseField name="appointment_set" type="boolean | null">
+  Whether the lead agreed to an appointment on this call.
+</ResponseField>
+<ResponseField name="likely_to_show_pct" type="integer">
+  SetMo's estimate of how likely a booked lead is to show up, based on how the call went.
+</ResponseField>
+<ResponseField name="summary" type="string | null">
+  One or two sentences on how the call went.
+</ResponseField>
+<ResponseField name="skills" type="object[]">
+  The 8 skills, each with `key`, `name`, `type` (`universal` or `call_type`), `score` (1–5), `score_pct` (0–100) and `note`. The `key`s are fixed per call type; see `GET /call-types`.
+</ResponseField>
+<ResponseField name="wins" type="string[]">
+  What the trainee did well.
+</ResponseField>
+<ResponseField name="growth" type="string[]">
+  Where to grow.
+</ResponseField>
+<ResponseField name="phrases" type="object[]">
+  `{ you_said, try_instead }`: lines from the call with a better way to say them.
+</ResponseField>
+<ResponseField name="lead" type="object | null">
+  Who the trainee was really talking to: `name`, `age`, `for_whom` (when calling about someone else), `situation`, `real_reason`, `hesitation`, `tone`, `difficulty`. The trainee doesn't see the real reason or hesitation until the results.
+</ResponseField>
+<ResponseField name="reveal" type="object | null">
+  Whether the trainee got there. `found_real_reason` is `yes`, `partly` or `no`, and `handled_hesitation` is `yes`, `partly`, `no` or `not_raised`. Each comes with a note pointing to the moment in the call.
+</ResponseField>
+<ResponseField name="transcript" type="object[]">
+  The conversation turns: `speaker` (`trainee` or `lead`), `text`, `at_seconds`.
+</ResponseField>

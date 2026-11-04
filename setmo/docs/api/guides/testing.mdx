@@ -1,0 +1,45 @@
+---
+title: "Test mode"
+description: "Build and test the whole integration before anything is billed."
+---
+
+A test key (`setmo_test_…`) works against **test mode**, SetMo's sandbox. Everything behaves as it does live:
+- the same API, frame and webhooks;
+- real AI calls and real scoring.
+
+It just keeps its own data:
+
+| | Test mode | Live mode |
+|---|---|---|
+| Key | `setmo_test_…` | `setmo_live_…` |
+| Locations, trainees, calls | Test only, never mixed with live | Your real ones |
+| Tokens | A free test wallet | Your live wallet, billed |
+| Webhook URL | Your test URL | Your live URL |
+| Sites that can show the frame | Can include `http://localhost:<port>` | `https` sites only |
+
+## Simulate a call
+
+You don't need a microphone, or anyone on a call, to build your webhook handling. With a test key, `simulate` plays a session that hasn't started through its whole life in about ten seconds, with a made-up lead, conversation and score:
+
+```bash
+curl -X POST https://setmo.growdental.ai/api/v1/sessions/$SESSION_ID/simulate \
+  -H "Authorization: Bearer $SETMO_TEST_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "outcome": "completed" }'
+```
+
+| `outcome` | Webhooks you receive |
+|---|---|
+| `completed` (default) | `session.started` → `session.ended` → `session.completed`, with a full `result` |
+| `too_short` | `session.started` → `session.ended` → `session.failed` (`too_short`) |
+| `no_transcript` | `session.failed` (`no_transcript`) |
+
+The response is `202` with the session; the events follow over the next ~10 seconds. A simulated call uses test tokens like a real one.
+
+## A real call in test mode
+
+Register a local origin (for example `http://localhost:3000`) with the SetMo team, then frame a launch link on that page. Allow the microphone, talk to the lead, and hang up. Real calls in test mode are scored like live ones, so this is the way to check the full experience, including phones.
+
+<Note>
+Test the frame on an **iPhone in Safari** early. Phones are the strictest about microphones in frames, and headphones make a big difference to call quality.
+</Note>

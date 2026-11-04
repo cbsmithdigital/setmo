@@ -1,0 +1,51 @@
+---
+title: "Introduction"
+description: "Run SetMo practice calls inside your own app."
+---
+
+SetMo trains dental appointment setters on high-value lead calls. The trainee talks to a realistic AI patient, then SetMo scores the call on 8 skills and explains what to say next time.
+
+The Partner API lets your app run those calls for your own users, inside your own product:
+
+<Columns cols={3}>
+  <Card title="1. Create a call" icon="phone" href="/guides/sessions">
+    Your server asks SetMo for a practice call for one of your trainees and gets a one-time launch link.
+  </Card>
+  <Card title="2. Show it in your page" icon="window-maximize" href="/guides/embed">
+    Put the launch link in an iframe. The trainee sees the lead card, makes the call, and gets their results there.
+  </Card>
+  <Card title="3. Get the results" icon="webhook" href="/guides/webhooks">
+    SetMo sends signed webhooks as the call starts, ends and is scored, with the full results.
+  </Card>
+</Columns>
+
+## What you work with
+
+| | |
+|---|---|
+| **Base URL** | `https://setmo.growdental.ai/api/v1` |
+| **Authentication** | `Authorization: Bearer <key>`, server-side only. See [Keys and errors](/guides/authentication). |
+| **Format** | JSON in and out, `snake_case` fields, ISO 8601 times in UTC. |
+| **Your ids** | You refer to your practices and people by **your own ids**. You don't need to store SetMo's ids, except the session id. |
+| **Modes** | `test` and `live` keys. Each mode has its own locations, trainees, calls and token wallet. |
+
+## How a call flows
+
+<Steps>
+  <Step title="Your server creates a session">
+    `POST /sessions` with your location, trainee, call type and (optionally) the kind of lead to call. SetMo returns the session and a `launch.url`.
+  </Step>
+  <Step title="Your page shows the call">
+    The trainee opens your training screen; you load `launch.url` in an `<iframe allow="microphone">`. The frame tells your page what's happening with `postMessage`.
+  </Step>
+  <Step title="The trainee makes the call">
+    They read the lead card, allow the microphone, and talk to the AI lead. The call ends when they hang up, the lead hangs up, or the time limit is reached.
+  </Step>
+  <Step title="SetMo scores it and tells your server">
+    About a minute after the call ends, your webhook receives `session.completed` with the score, the 8 skills, what the trainee did well, where to grow, the transcript and a recording link. The trainee sees the same results in the frame.
+  </Step>
+</Steps>
+
+<Tip>
+New here? The [Quickstart](/quickstart) takes you from a test key to a finished call, using the simulator, in about ten minutes. No microphone needed.
+</Tip>

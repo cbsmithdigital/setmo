@@ -1,0 +1,70 @@
+---
+title: "Keys and errors"
+description: "Test and live keys, rate limits, and the error format."
+---
+
+## Keys
+
+Send your key on every request:
+
+```http
+Authorization: Bearer setmo_test_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+```
+
+| Key | Prefix | What it touches |
+|---|---|---|
+| Test | `setmo_test_` | Test locations, test trainees, test calls and a free test wallet. Nothing is billed. |
+| Live | `setmo_live_` | Your real locations and trainees. Calls draw from your live token wallet. |
+
+Test and live data never mix. A location you create with a test key doesn't exist for your live key, and the reverse.
+
+<Warning>
+Keys are for your **server only**. Never put one in a browser, a mobile app, a frontend bundle or a repository. The SetMo team issues and revokes keys; ask them for a new key straight away if one leaks.
+</Warning>
+
+## Rate limits
+
+| Limit | |
+|---|---|
+| Requests | 300 a minute per key |
+| New sessions | 120 a minute per mode |
+
+Over a limit, you get `429` with a `Retry-After` header (seconds).
+
+## Errors
+
+Every error has the same shape:
+
+```json
+{
+  "error": {
+    "code": "insufficient_tokens",
+    "message": "The practice token balance is used up, so new calls can't start until more tokens are added."
+  }
+}
+```
+
+Branch on `code`. `message` is written to be safe to show to a person.
+
+| HTTP | `code` | Meaning |
+|---|---|---|
+| 400 | `invalid_json` | The body isn't valid JSON. |
+| 401 | `unauthorized` | No key, a wrong key, or a revoked key. |
+| 402 | `insufficient_tokens` | The wallet for this key's mode is empty. Show your out-of-credits screen. |
+| 403 | `partner_disabled` | API access is switched off for your account. |
+| 403 | `test_mode_only` | `simulate` needs a test key. |
+| 404 | `location_not_found` | No location with that id in this mode. |
+| 404 | `trainee_not_found` | No trainee with that id in this mode. |
+| 404 | `session_not_found` | No session with that id for your account in this mode. |
+| 409 | `reference_conflict` | You reused a `reference` for a different trainee, location or call type. |
+| 409 | `session_already_started` | Only a session that hasn't started can be simulated. |
+| 413 | `payload_too_large` | The body is over 64 KB. |
+| 422 | `invalid_request` | A field is missing or wrong. The message names the field. |
+| 422 | `invalid_lead` | That "pick your lead" choice doesn't exist for this call type, or doesn't go together. |
+| 422 | `call_type_unavailable` | That call type is off at this location. |
+| 429 | `rate_limited` | Slow down; see `Retry-After`. |
+| 500 | `server_error` | Something failed on SetMo's side. It's logged; retry. |
+
+<Tip>
+`POST /sessions` is safe to retry when you send a `reference`: the same request again returns the same session. Retry `5xx` and network errors with a short backoff.
+</Tip>

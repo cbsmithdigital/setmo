@@ -1,0 +1,100 @@
+---
+title: "Show the call"
+description: "The iframe, its rules, and the messages it sends your page."
+---
+
+The call runs on SetMo's page inside an iframe on yours. The trainee:
+1. sees the lead card;
+2. allows the microphone;
+3. talks to the AI lead;
+4. gets their results in the same frame.
+
+There's no SetMo login: the launch link carries everything the frame needs.
+
+```html
+<iframe
+  src="LAUNCH_URL"
+  allow="microphone"
+  style="width: 100%; height: 760px; border: 0"
+></iframe>
+```
+
+<Warning>
+`allow="microphone"` is required. Without it the browser never asks for the microphone and the call can't start.
+</Warning>
+
+## Rules
+
+- **One-time links.** A launch link opens once and expires after 10 minutes. Mint one on your server right before you show the frame, and mint a fresh one if the frame reloads (`POST /sessions/{id}/launch`).
+- **Registered sites only.** The frame only appears on the site origins you've given the SetMo team, for example `https://app.yourcompany.com`. Anywhere else it's blank (the browser enforces a `frame-ancestors` rule). In test mode, `http://localhost:<port>` can be registered for development.
+- **Size.** About 760px tall fits the lead card and call screen without scrolling on a laptop. The page is responsive down to phone width.
+- **Phones.** Headphones work best; on speaker, the lead can hear itself. The frame asks for headphones when it detects a phone.
+- **Colors.** The screen is dark, with your accent color on buttons and highlights. Send the SetMo team your hex color.
+
+## Messages from the frame
+
+The frame posts messages to your page, only to your registered origins. They're for your UI (progress, buttons). Your server should rely on [webhooks](/guides/webhooks) for the outcome.
+
+```js
+const SETMO = "https://setmo.growdental.ai";
+
+window.addEventListener("message", (event) => {
+  if (event.origin !== SETMO || event.data?.source !== "setmo") return;
+  const { type, sessionId } = event.data;
+  // e.g. show "On a call…" on call.started, enable "Next" on results.ready
+});
+```
+
+Every message looks like `{ source: "setmo", type, sessionId, ...details }`:
+
+| `type` | When |
+|---|---|
+| `ready` | The frame loaded. |
+| `lead.ready` | The lead card is showing. |
+| `call.started` | The call connected. |
+| `call.dropped` | The connection was lost mid-call. The trainee is offered feedback on what they had. |
+| `call.ended` | The call ended: hung up, the time limit, or the trainee ended it. |
+| `mic.denied` | The browser blocked the microphone. The frame shows how to turn it back on. |
+| `results.ready` | The results are showing in the frame. |
+| `call.failed` | The call couldn't be scored. `reason` is `no-transcript` or `scoring`. |
+| `error` | Something went wrong. `message` says what. |
+
+## Messages to the frame
+
+To end a live call from your page, for example from your own "End" button or when the trainee leaves the screen, post:
+
+```js
+iframe.contentWindow.postMessage({ type: "setmo:end-call" }, "https://setmo.growdental.ai");
+```
+
+It's the same as the trainee pressing "End call": the call is scored as usual.
+
+## A React example
+
+```jsx
+import { useEffect, useState } from "react";
+
+export function PracticeCall({ launchUrl, onDone }) {
+  const [state, setState] = useState("loading");
+
+  useEffect(() => {
+    const onMessage = (e) => {
+      if (e.origin !== "https://setmo.growdental.ai" || e.data?.source !== "setmo") return;
+      if (e.data.type === "call.started") setState("on-call");
+      if (e.data.type === "results.ready") { setState("done"); onDone?.(e.data.sessionId); }
+      if (e.data.type === "mic.denied") setState("mic-blocked");
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [onDone]);
+
+  return (
+    <iframe
+      src={launchUrl}
+      allow="microphone"
+      title="SetMo practice call"
+      style={{ width: "100%", height: 760, border: 0, borderRadius: 12 }}
+    />
+  );
+}
+```

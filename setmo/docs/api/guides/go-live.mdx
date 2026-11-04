@@ -1,0 +1,35 @@
+---
+title: "Going live"
+description: "The checklist before your practices use it for real."
+---
+
+<Steps>
+  <Step title="Get your live setup from the SetMo team">
+    - A live key (`setmo_live_…`) for your server's secrets store.
+    - Tokens in your live wallet.
+    - Your live webhook URL registered, and its signing secret (`whsec_…`).
+    - Your live site origins (https) registered for the frame.
+    - Your accent color.
+  </Step>
+  <Step title="Verify and dedupe webhooks">
+    Check `X-Setmo-Signature` on every request, reject stale timestamps, and dedupe on `X-Setmo-Event-Id`. See [Webhooks](/guides/webhooks).
+  </Step>
+  <Step title="Make retries safe">
+    Always send `reference` when you create a session, so a retry after a timeout returns the same session instead of a second one.
+  </Step>
+  <Step title="Handle the unhappy paths">
+    - `402 insufficient_tokens` → your out-of-credits screen.
+    - `mic.denied` from the frame → help the trainee allow the microphone (the frame shows how too).
+    - `session.failed` → let the trainee try again with a new session.
+  </Step>
+  <Step title="Mint launch links just in time">
+    Create or refresh the launch link right before you show the frame (links open once and last 10 minutes).
+  </Step>
+  <Step title="Try it on a phone">
+    Run at least one real call on an iPhone in Safari, with headphones, before you roll out.
+  </Step>
+</Steps>
+
+<Warning>
+Keep live keys out of browsers, apps and repositories. If one leaks, tell the SetMo team straight away; they revoke it and issue a new one.
+</Warning>

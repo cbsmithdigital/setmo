@@ -1,0 +1,74 @@
+---
+title: "Locations and trainees"
+description: "Your practices and people, by your own ids."
+---
+
+You refer to practices (**locations**) and people (**trainees**) by **your own ids**. Ids are 1–100 characters: letters, digits, `.`, `_`, `:` and `-`. SetMo keeps the link between your id and its records, so you never store SetMo's ids for them.
+
+You can set both up ahead of time with the endpoints below, or simply send them with each [new session](/guides/sessions); SetMo creates or updates them on the way.
+
+## Locations
+
+A location is a dental practice your trainees call for. What you tell SetMo about it shapes the AI lead: the lead reached out to **this** practice, about **its** offer.
+
+```bash
+curl -X PUT https://setmo.growdental.ai/api/v1/locations/loc_123 \
+  -H "Authorization: Bearer $SETMO_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Smile Dental — Boise",
+    "city": "Boise",
+    "doctor_name": "Dr. Patel",
+    "offer": "Free implant consultation with a 3D scan",
+    "appointment": "a 45-minute consultation with the doctor",
+    "deposit": "No deposit required",
+    "call_types": ["IMPLANT", "GENERAL"]
+  }'
+```
+
+<ParamField body="name" type="string">
+  Required when you create a location. Up to 120 characters.
+</ParamField>
+<ParamField body="city" type="string">
+  Where the practice is. The lead mentions it naturally.
+</ParamField>
+<ParamField body="doctor_name" type="string">
+  The practice's doctor, for example `Dr. Patel`. If the doctor comes up on the call, the lead uses this name instead of making one up.
+</ParamField>
+<ParamField body="offer" type="string">
+  What the practice offers new leads. Up to 600 characters.
+</ParamField>
+<ParamField body="appointment" type="string">
+  How the practice describes the first appointment.
+</ParamField>
+<ParamField body="deposit" type="string">
+  The practice's deposit policy, if any.
+</ParamField>
+<ParamField body="call_types" type="string[]">
+  Exactly which call types this location runs. A new location runs all six unless you send this. Sending it later turns the listed ones on and the rest off.
+</ParamField>
+
+`PUT` returns `201` when it creates the location and `200` when it updates it. Only the fields you send change.
+
+## Trainees
+
+A trainee is a person who practices: a setter, front-desk member or agent. Trainees have **no SetMo login** and never get email from SetMo; your app is their front door.
+
+```bash
+curl -X PUT https://setmo.growdental.ai/api/v1/trainees/user_77 \
+  -H "Authorization: Bearer $SETMO_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "first_name": "Jess", "last_name": "Lee", "location_id": "loc_123" }'
+```
+
+<ParamField body="first_name" type="string">
+  The lead knows the trainee by this name.
+</ParamField>
+<ParamField body="last_name" type="string" />
+<ParamField body="location_id" type="string">
+  Your id for the trainee's location. Required when you create a trainee; send it later to move them to another of your locations.
+</ParamField>
+
+<Note>
+SetMo remembers each trainee's level per call type. With the `adaptive` challenge, their leads get tougher as they improve, so keep using the same trainee id for the same person.
+</Note>

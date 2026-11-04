@@ -1,0 +1,94 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "SetMo Partner API",
+  "description": "Run SetMo practice calls inside your own app: create a call, show it in an iframe, and get the results by webhook.",
+  "colors": {
+    "primary": "#7c3aed",
+    "light": "#a78bfa",
+    "dark": "#7c3aed"
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
+    "href": "https://setmo.growdental.ai"
+  },
+  "favicon": "/favicon.png",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": ["index", "quickstart"]
+          },
+          {
+            "group": "Build the integration",
+            "pages": [
+              "guides/authentication",
+              "guides/locations-and-trainees",
+              "guides/sessions",
+              "guides/embed",
+              "guides/webhooks",
+              "guides/results"
+            ]
+          },
+          {
+            "group": "Tokens, testing and launch",
+            "pages": ["guides/wallet", "guides/testing", "guides/go-live"]
+          }
+        ]
+      },
+      {
+        "tab": "API reference",
+        "groups": [
+          {
+            "group": "Call types",
+            "openapi": "openapi.yaml",
+            "pages": ["GET /call-types"]
+          },
+          {
+            "group": "Locations",
+            "openapi": "openapi.yaml",
+            "pages": ["PUT /locations/{id}", "GET /locations/{id}"]
+          },
+          {
+            "group": "Trainees",
+            "openapi": "openapi.yaml",
+            "pages": ["PUT /trainees/{id}", "GET /trainees/{id}"]
+          },
+          {
+            "group": "Sessions",
+            "openapi": "openapi.yaml",
+            "pages": ["POST /sessions", "GET /sessions/{id}", "POST /sessions/{id}/launch", "POST /sessions/{id}/simulate"]
+          },
+          {
+            "group": "Wallet",
+            "openapi": "openapi.yaml",
+            "pages": ["GET /wallet"]
+          },
+          {
+            "group": "Webhooks",
+            "pages": ["api-reference/session-event"]
+          }
+        ]
+      }
+    ]
+  },
+  "api": {
+    "playground": {
+      "display": "simple"
+    }
+  },
+  "seo": {
+    "metatags": {
+      "robots": "noindex"
+    }
+  },
+  "footer": {
+    "socials": {
+      "website": "https://setmo.growdental.ai"
+    }
+  }
+}

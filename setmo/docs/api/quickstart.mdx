@@ -1,0 +1,115 @@
+---
+title: "Quickstart"
+description: "From a test key to a scored practice call in about ten minutes."
+---
+
+This walks through the whole flow in **test mode**. Test mode uses its own locations, trainees and free test tokens, and nothing in it is billed.
+
+<Info>
+You need a **test key** (`setmo_test_…`) from the SetMo team. To receive webhooks, also send them your **test webhook URL** (public https; a tunnel such as ngrok works). To show the call in a frame, send them the **site origins** that will host it (in test mode, `http://localhost:<port>` is allowed).
+</Info>
+
+<Steps>
+  <Step title="Check your key">
+    List the call types. A `200` means your key works.
+
+    ```bash
+    curl https://setmo.growdental.ai/api/v1/call-types \
+      -H "Authorization: Bearer $SETMO_KEY"
+    ```
+
+    Each call type has a `key` (for example `IMPLANT`), the 8 `skills` it's scored on, and the `lead_options` a trainee can pick from.
+  </Step>
+
+  <Step title="Create a practice call">
+    Send the location and trainee along with the call. SetMo creates them (or updates them) the first time it sees their ids.
+
+    <CodeGroup>
+    ```bash cURL
+    curl https://setmo.growdental.ai/api/v1/sessions \
+      -H "Authorization: Bearer $SETMO_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "reference": "attempt_0001",
+        "location": { "id": "loc_123", "name": "Smile Dental — Boise", "doctor_name": "Dr. Patel" },
+        "trainee": { "id": "user_77", "first_name": "Jess", "last_name": "Lee" },
+        "call_type": "IMPLANT",
+        "challenge": "adaptive",
+        "lead": { "gender": "female" },
+        "metadata": { "form_id": "F-1029" }
+      }'
+    ```
+
+    ```js Node
+    const res = await fetch("https://setmo.growdental.ai/api/v1/sessions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.SETMO_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        reference: "attempt_0001", // your attempt id: makes retries safe
+        location: { id: "loc_123", name: "Smile Dental — Boise", doctor_name: "Dr. Patel" },
+        trainee: { id: "user_77", first_name: "Jess", last_name: "Lee" },
+        call_type: "IMPLANT",
+        challenge: "adaptive",
+        lead: { gender: "female" },
+        metadata: { form_id: "F-1029" },
+      }),
+    });
+    const session = await res.json(); // session.id, session.launch.url
+    ```
+    </CodeGroup>
+
+    The response is `201` with the session (`status: "created"`) and `launch.url`. Keep `session.id`.
+  </Step>
+
+  <Step title="Run the call">
+    <Tabs>
+      <Tab title="Simulate (no microphone)">
+        Play the call's whole life in about ten seconds with a made-up conversation and score:
+
+        ```bash
+        curl -X POST https://setmo.growdental.ai/api/v1/sessions/$SESSION_ID/simulate \
+          -H "Authorization: Bearer $SETMO_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{ "outcome": "completed" }'
+        ```
+
+        Your webhook receives `session.started`, `session.ended`, then `session.completed`, exactly as for a real call.
+      </Tab>
+      <Tab title="Real call in a frame">
+        Load the launch link in a page served from one of your registered origins:
+
+        ```html
+        <iframe src="LAUNCH_URL" allow="microphone"
+                style="width:100%;height:760px;border:0"></iframe>
+        ```
+
+        Allow the microphone, make the call, and hang up. The results appear in the frame about a minute later. A launch link opens **once** and expires after 10 minutes; get a fresh one with `POST /sessions/{id}/launch`.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Get the results">
+    Your webhook's `session.completed` carries the full session. You can also fetch it at any time:
+
+    ```bash
+    curl https://setmo.growdental.ai/api/v1/sessions/$SESSION_ID \
+      -H "Authorization: Bearer $SETMO_KEY"
+    ```
+
+    `status` is `completed`, and `result` has the score (`score` 1–5 and `score_pct` 0–100), `appointment_set`, the 8 `skills`, `wins`, `growth`, `phrases`, the lead's real reason and hesitation, and the `transcript`. See [Results](/guides/results).
+  </Step>
+</Steps>
+
+## Next
+
+<Columns cols={2}>
+  <Card title="Verify webhooks" icon="shield-check" href="/guides/webhooks">
+    Check every event's signature before you trust it.
+  </Card>
+  <Card title="Embed the call" icon="window-maximize" href="/guides/embed">
+    Frame rules, messages from the frame, and phones.
+  </Card>
+</Columns>

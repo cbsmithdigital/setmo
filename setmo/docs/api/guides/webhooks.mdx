@@ -1,0 +1,106 @@
+---
+title: "Webhooks"
+description: "Signed events as each call starts, ends, and is scored."
+---
+
+SetMo POSTs JSON to the webhook URL you give the SetMo team (one for test, one for live). It must be a public `https` URL. For local development, a tunnel such as ngrok works.
+
+## Events
+
+| Event | When | What's new in `session` |
+|---|---|---|
+| `session.started` | The trainee's call connected. | `status: "in_progress"`, `started_at` |
+| `session.ended` | The call ended. | `status: "ended"`, `ended_at`, `duration_seconds`, `tokens_used` |
+| `session.completed` | The call was scored, about a minute after it ended. | `status: "completed"`, `result`, `recording` |
+| `session.failed` | The call won't be scored. | `status: "failed"`, `failure_reason` |
+
+A call normally sends `started`, then `ended`, then `completed` or `failed`. A call that never connects sends only `failed` (`no_transcript`), and a session that's never started sends `failed` (`abandoned`) after 24 hours.
+
+## The body
+
+```json
+{
+  "id": "evt_6f2c41a0b7d94e0f9a3b1c2d4e5f6a7b",
+  "object": "event",
+  "type": "session.completed",
+  "created": "2026-11-03T18:44:31.000Z",
+  "mode": "live",
+  "data": {
+    "session": { "id": "a28d62a0-…", "status": "completed", "reference": "attempt_8812", "result": { "score": 3.6 } }
+  }
+}
+```
+
+`data.session` is the full [session object](/guides/results), as `GET /sessions/{id}` would return it at that moment.
+
+## Headers
+
+| Header | |
+|---|---|
+| `X-Setmo-Event-Id` | Same as the body's `id`. It stays the same across retries, so **dedupe on it**. |
+| `X-Setmo-Event-Type` | Same as the body's `type`. |
+| `X-Setmo-Timestamp` | Unix seconds when this delivery attempt was signed. |
+| `X-Setmo-Signature` | `sha256=` + the hex HMAC-SHA256 of `"<timestamp>.<raw body>"`, keyed with your webhook secret (`whsec_…`). |
+
+## Verify every webhook
+
+Use the **raw** request body: the bytes exactly as received, before any JSON parsing. Compare in constant time, and reject old timestamps so a captured request can't be replayed.
+
+<CodeGroup>
+```js Node (Express)
+import crypto from "node:crypto";
+import express from "express";
+
+const app = express();
+
+function verifySetmo(rawBody, headers, secret) {
+  const ts = headers["x-setmo-timestamp"];
+  const sig = headers["x-setmo-signature"] ?? "";
+  if (!ts || Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false; // older than 5 minutes
+  const expected = "sha256=" + crypto.createHmac("sha256", secret).update(`${ts}.${rawBody}`).digest("hex");
+  return sig.length === expected.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+}
+
+app.post("/setmo/webhooks", express.raw({ type: "application/json" }), (req, res) => {
+  const raw = req.body.toString("utf8");
+  if (!verifySetmo(raw, req.headers, process.env.SETMO_WEBHOOK_SECRET)) return res.sendStatus(400);
+  const event = JSON.parse(raw);
+  res.sendStatus(200); // answer fast, then do the work
+  handleSetmoEvent(event); // dedupe on event.id
+});
+```
+
+```python Python (Flask)
+import hashlib, hmac, os, time
+from flask import Flask, request
+
+app = Flask(__name__)
+
+def verify_setmo(raw_body: bytes, headers, secret: str) -> bool:
+    ts = headers.get("X-Setmo-Timestamp", "")
+    sig = headers.get("X-Setmo-Signature", "")
+    if not ts.isdigit() or abs(time.time() - int(ts)) > 300:  # older than 5 minutes
+        return False
+    expected = "sha256=" + hmac.new(secret.encode(), f"{ts}.".encode() + raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(sig, expected)
+
+@app.post("/setmo/webhooks")
+def setmo_webhook():
+    raw = request.get_data()
+    if not verify_setmo(raw, request.headers, os.environ["SETMO_WEBHOOK_SECRET"]):
+        return "", 400
+    event = request.get_json()
+    handle_setmo_event(event)  # dedupe on event["id"]
+    return "", 200
+```
+</CodeGroup>
+
+## Responding and retries
+
+- Answer with any `2xx` within **10 seconds**. Do slow work after you respond. SetMo doesn't follow redirects.
+- Anything else is retried with growing gaps, from minutes up to 12 hours apart, for about a day. After that it's marked failed. The SetMo team can re-send any event from their console.
+- An event can arrive more than once, and rarely out of order. Treat `data.session.status` as the truth, and if in doubt, call `GET /sessions/{id}`.
+
+<Note>
+`recording.url` in `session.completed` is a signed link that works for **one hour** from when that delivery was sent. Copy the file if you want to keep it, or fetch the session again for a fresh link.
+</Note>
