@@ -14,7 +14,7 @@ export type ConsoleMode = {
   wallet: { addedTokens: number; usedTokens: number; balanceTokens: number };
   entries: { id: string; minutes: number; amountCents: number | null; note: string | null; createdAt: string }[];
   keys: { id: string; label: string | null; prefix: string; createdAt: string; lastUsedAt: string | null; revokedAt: string | null }[];
-  integration: { webhookUrl: string | null; allowedOrigins: string[]; accentColor: string | null; hasSecret: boolean } | null;
+  integration: { webhookUrl: string | null; allowedOrigins: string[]; accentColor: string | null; backgroundColor: string | null; hasSecret: boolean } | null;
   locations: { id: string; externalId: string; name: string; city: string | null; doctorName: string | null; trainees: number; calls: number; tokens: number; lastCall: string | null }[];
   totals: { locations: number; trainees: number; calls: number; calls30: number };
   deliveries: { id: string; type: string; sessionId: string | null; status: string; attempts: number; lastStatus: number | null; lastError: string | null; createdAt: string; deliveredAt: string | null; nextAttemptAt: string | null }[];
@@ -224,6 +224,7 @@ function Settings({ partnerId, m, canAct }: { partnerId: string; m: ConsoleMode;
   const [url, setUrl] = useState(m.integration?.webhookUrl ?? "");
   const [origins, setOrigins] = useState((m.integration?.allowedOrigins ?? []).join("\n"));
   const [accent, setAccent] = useState(m.integration?.accentColor ?? "");
+  const [background, setBackground] = useState(m.integration?.backgroundColor ?? "");
   const [secret, setSecret] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -237,6 +238,7 @@ function Settings({ partnerId, m, canAct }: { partnerId: string; m: ConsoleMode;
       webhookUrl: url.trim() || null,
       allowedOrigins: origins.split(/[\s,]+/).map((o) => o.trim()).filter(Boolean),
       accentColor: accent.trim() || null,
+      backgroundColor: background.trim() || null,
     });
     setBusy(false);
     setMsg(r.ok ? "Saved." : r.error ?? "Couldn't save.");
@@ -257,13 +259,20 @@ function Settings({ partnerId, m, canAct }: { partnerId: string; m: ConsoleMode;
           <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://api.partner.com/setmo/webhooks" disabled={!canAct} />
         </label>
         <label style={{ display: "grid", gap: 4, fontSize: 12.5 }}>
-          <span className="muted">Accent color for the call screen</span>
+          <span className="muted">Accent color for the call screen (buttons, highlights)</span>
           <div style={{ display: "flex", gap: 8 }}>
             <input type="color" value={/^#[0-9a-f]{6}$/i.test(accent) ? accent : "#8b5cf6"} onChange={(e) => setAccent(e.target.value)} disabled={!canAct} style={{ width: 44, height: 38, border: "none", background: "none" }} />
             <input className="input" value={accent} onChange={(e) => setAccent(e.target.value)} placeholder="#2E7D6B (blank = SetMo purple)" disabled={!canAct} />
           </div>
         </label>
       </div>
+      <label style={{ display: "grid", gap: 4, fontSize: 12.5, marginTop: 12, maxWidth: 420 }}>
+        <span className="muted">Background of the call screen — a light color switches it to dark text on light</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input type="color" value={/^#[0-9a-f]{6}$/i.test(background) ? background : "#08080f"} onChange={(e) => setBackground(e.target.value)} disabled={!canAct} style={{ width: 44, height: 38, border: "none", background: "none" }} />
+          <input className="input" value={background} onChange={(e) => setBackground(e.target.value)} placeholder="#F4F7F9 (blank = SetMo dark)" disabled={!canAct} />
+        </div>
+      </label>
       <label style={{ display: "grid", gap: 4, fontSize: 12.5, marginTop: 12 }}>
         <span className="muted">Sites allowed to show the call in a frame — one per line{m.mode === "TEST" ? " (test mode also allows http://localhost:3000 and the like)" : ""}</span>
         <textarea className="input" rows={3} value={origins} onChange={(e) => setOrigins(e.target.value)} placeholder="https://app.partner.com" disabled={!canAct} style={{ resize: "vertical" }} />

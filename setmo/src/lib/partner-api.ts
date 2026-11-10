@@ -125,9 +125,9 @@ export const isAccentColor = (c: string) => /^#[0-9a-fA-F]{6}$/.test(c);
 export async function updateIntegration(
   partnerId: string,
   mode: PartnerMode,
-  input: { webhookUrl?: string | null; allowedOrigins?: string[]; accentColor?: string | null }
+  input: { webhookUrl?: string | null; allowedOrigins?: string[]; accentColor?: string | null; backgroundColor?: string | null }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const data: { webhookUrl?: string | null; allowedOrigins?: string[]; accentColor?: string | null } = {};
+  const data: { webhookUrl?: string | null; allowedOrigins?: string[]; accentColor?: string | null; backgroundColor?: string | null } = {};
   if (input.webhookUrl !== undefined) {
     if (input.webhookUrl === null || input.webhookUrl.trim() === "") data.webhookUrl = null;
     else {
@@ -149,6 +149,12 @@ export async function updateIntegration(
   if (input.accentColor !== undefined) {
     if (input.accentColor && !isAccentColor(input.accentColor)) return { ok: false, error: "The accent color must look like #2E7D6B." };
     data.accentColor = input.accentColor || null;
+  }
+  // The call screen's background: blank keeps SetMo's dark screen; a light color
+  // switches the embed to a light palette (lib/embed-theme).
+  if (input.backgroundColor !== undefined) {
+    if (input.backgroundColor && !isAccentColor(input.backgroundColor)) return { ok: false, error: "The background color must look like #F4F7F9." };
+    data.backgroundColor = input.backgroundColor || null;
   }
   await ensureIntegration(partnerId, mode);
   await prisma.partnerIntegration.update({ where: { partnerId_mode: { partnerId, mode } }, data });

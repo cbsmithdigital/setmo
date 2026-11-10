@@ -60,7 +60,7 @@ async function modeView(partnerId: string, mode: PartnerMode) {
     entries,
     keys,
     integration: integration
-      ? { webhookUrl: integration.webhookUrl, allowedOrigins: integration.allowedOrigins, accentColor: integration.accentColor, hasSecret: Boolean(integration.webhookSecret) }
+      ? { webhookUrl: integration.webhookUrl, allowedOrigins: integration.allowedOrigins, accentColor: integration.accentColor, backgroundColor: integration.backgroundColor, hasSecret: Boolean(integration.webhookSecret) }
       : null,
     locations,
     totals: {

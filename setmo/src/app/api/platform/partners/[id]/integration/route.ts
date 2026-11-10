@@ -23,6 +23,7 @@ const Body = z.discriminatedUnion("action", [
     webhookUrl: z.string().max(500).nullable().optional(),
     allowedOrigins: z.array(z.string().max(200)).max(10).optional(),
     accentColor: z.string().max(7).nullable().optional(),
+    backgroundColor: z.string().max(7).nullable().optional(),
   }),
   z.object({ action: z.literal("secret.reveal"), mode: Mode }),
   z.object({ action: z.literal("secret.rotate"), mode: Mode }),
@@ -81,13 +82,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return json({ ok: true });
     }
     case "settings.update": {
-      const r = await updateIntegration(partnerId, b.mode, { webhookUrl: b.webhookUrl, allowedOrigins: b.allowedOrigins, accentColor: b.accentColor });
+      const r = await updateIntegration(partnerId, b.mode, { webhookUrl: b.webhookUrl, allowedOrigins: b.allowedOrigins, accentColor: b.accentColor, backgroundColor: b.backgroundColor });
       if (!r.ok) return error(r.error, 422);
       await log("partner.settings", `Updated ${partner.name}'s ${modeLabel(b.mode)} API settings`, {
         mode: b.mode,
         webhookUrl: b.webhookUrl,
         allowedOrigins: b.allowedOrigins,
         accentColor: b.accentColor,
+        backgroundColor: b.backgroundColor,
       });
       return json({ ok: true });
     }

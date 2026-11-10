@@ -681,7 +681,7 @@ function SessionInner({
             minWidth: 130,
             background: muted ? "rgba(239,68,68,.14)" : "var(--s3)",
             borderColor: muted ? "rgba(239,68,68,.4)" : "var(--line)",
-            color: muted ? "#fca5a5" : "var(--text)",
+            color: muted ? "var(--danger-text, #fca5a5)" : "var(--text)",
           }}
         >
           <Icon name="mic" size={18} /> {muted ? "Muted" : "Mute"}

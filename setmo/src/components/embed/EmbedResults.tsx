@@ -40,7 +40,7 @@ const HANDLED: Record<string, { label: string; cls: string }> = {
 function showColor(rate: number): { bg: string; fg: string } {
   if (rate >= 56) return { bg: "rgba(52,211,153,.15)", fg: "var(--mint)" };
   if (rate >= 46) return { bg: "rgba(251,191,36,.16)", fg: "var(--amber)" };
-  if (rate >= 36) return { bg: "rgba(239,68,68,.15)", fg: "#fb7185" };
+  if (rate >= 36) return { bg: "rgba(239,68,68,.15)", fg: "var(--rose)" };
   return { bg: "rgba(148,163,184,.15)", fg: "var(--muted)" };
 }
 
@@ -120,7 +120,7 @@ export function EmbedResults({ r }: { r: EmbedResult }) {
                   <div className="track">
                     <div className={"fill" + (high ? " mint" : "")} style={{ width: (s.score / 5) * 100 + "%" }} />
                   </div>
-                  <div className="sc" style={{ color: high ? "var(--mint)" : s.score < 4 ? "var(--amber)" : "#fff" }}>{s.score.toFixed(1)}</div>
+                  <div className="sc" style={{ color: high ? "var(--mint)" : s.score < 4 ? "var(--amber)" : "var(--text-strong, #fff)" }}>{s.score.toFixed(1)}</div>
                 </div>
               );
             })}
@@ -156,7 +156,7 @@ export function EmbedResults({ r }: { r: EmbedResult }) {
                   <b style={{ fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--rose)", display: "block", marginBottom: 4 }}>You said</b>
                   {p.from}
                 </div>
-                <div style={{ background: "rgba(52,211,153,.07)", border: "1px solid rgba(52,211,153,.22)", borderRadius: 12, padding: "11px 13px", fontSize: 14, color: "#fff" }}>
+                <div style={{ background: "rgba(52,211,153,.07)", border: "1px solid rgba(52,211,153,.22)", borderRadius: 12, padding: "11px 13px", fontSize: 14, color: "var(--text-strong, #fff)" }}>
                   <b style={{ fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--mint)", display: "block", marginBottom: 4 }}>Try instead</b>
                   {p.to}
                 </div>

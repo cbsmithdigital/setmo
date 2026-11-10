@@ -15,7 +15,7 @@ There's no SetMo login: the launch link carries everything the frame needs.
 <iframe
   src="LAUNCH_URL"
   allow="microphone"
-  style="width: 100%; height: 760px; border: 0"
+  style="width: 100%; height: 760px; border: 0; background: #F4F7F9"
 ></iframe>
 ```
 
@@ -29,7 +29,7 @@ There's no SetMo login: the launch link carries everything the frame needs.
 - **Registered sites only.** The frame only appears on the site origins you've given the SetMo team, for example `https://app.yourcompany.com`. Anywhere else it's blank (the browser enforces a `frame-ancestors` rule). In test mode, `http://localhost:<port>` can be registered for development.
 - **Size.** About 760px tall fits the lead card and call screen without scrolling on a laptop. The page is responsive down to phone width.
 - **Phones.** Headphones work best; on speaker, the lead can hear itself. The frame asks for headphones when it detects a phone.
-- **Colors.** The screen is dark, with your accent color on buttons and highlights. Send the SetMo team your hex color.
+- **Colors.** Your accent color goes on buttons and highlights. The screen is dark unless you give SetMo a background color; a light one (for example `#F4F7F9`) switches it to dark text on a light page, from the first frame. Send the SetMo team both hex colors, and give your `<iframe>` the same background so nothing else shows while it loads.
 
 ## Messages from the frame
 

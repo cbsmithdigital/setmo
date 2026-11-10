@@ -574,6 +574,9 @@ model PartnerIntegration {
   webhookSecret  String      @map("webhook_secret") // signs every webhook (HMAC-SHA256)
   allowedOrigins String[]    @default([]) @map("allowed_origins") // e.g. https://app.teamcaredental.com
   accentColor    String?     @map("accent_color") // #RRGGBB
+  // Background of the embedded call screen, #RRGGBB. Blank = SetMo's dark screen;
+  // a light color switches the embed to a light palette (dark text, white cards).
+  backgroundColor String?    @map("background_color")
   createdAt      DateTime    @default(now()) @map("created_at")
   updatedAt      DateTime    @updatedAt @map("updated_at")
 

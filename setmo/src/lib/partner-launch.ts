@@ -24,20 +24,32 @@ export async function mintLaunch(sessionId: string, partnerId: string): Promise<
   return { url: `${appUrl()}/embed/${token}`, expires_at: expiresAt.toISOString() };
 }
 
-/** The sites allowed to frame the page a launch link opens (for the CSP). */
-export async function embedFrameAncestors(launchToken: string): Promise<string[]> {
-  if (!/^[A-Za-z0-9_-]{20,64}$/.test(launchToken)) return [];
+/** The partner settings behind a launch link (used or not): who may frame it
+ *  and how it looks. Null for a link that doesn't exist. */
+async function launchIntegration(launchToken: string) {
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(launchToken)) return null;
   const launch = await prisma.partnerLaunch.findUnique({
     where: { tokenHash: hashSecret(launchToken) },
     select: { session: { select: { partnerId: true, partnerMode: true } } },
   });
   const s = launch?.session;
-  if (!s?.partnerId || !s.partnerMode) return [];
-  const integration = await prisma.partnerIntegration.findUnique({
+  if (!s?.partnerId || !s.partnerMode) return null;
+  return prisma.partnerIntegration.findUnique({
     where: { partnerId_mode: { partnerId: s.partnerId, mode: s.partnerMode } },
-    select: { allowedOrigins: true },
+    select: { allowedOrigins: true, accentColor: true, backgroundColor: true },
   });
-  return integration?.allowedOrigins ?? [];
+}
+
+/** The sites allowed to frame the page a launch link opens (for the CSP). */
+export async function embedFrameAncestors(launchToken: string): Promise<string[]> {
+  return (await launchIntegration(launchToken))?.allowedOrigins ?? [];
+}
+
+/** How the page a launch link opens looks (accent, background) — also for an
+ *  already-used or expired link, so even the "link already opened" page matches. */
+export async function embedLaunchLook(launchToken: string): Promise<{ accent: string | null; background: string | null }> {
+  const i = await launchIntegration(launchToken);
+  return { accent: i?.accentColor ?? null, background: i?.backgroundColor ?? null };
 }
 
 export type OpenedLaunch = {
@@ -47,6 +59,7 @@ export type OpenedLaunch = {
   mode: PartnerMode;
   allowedOrigins: string[];
   accentColor: string | null;
+  backgroundColor: string | null;
 };
 
 /** Use a launch link: once, before it expires. Returns the frame token. */
@@ -70,7 +83,7 @@ export async function openLaunch(token: string): Promise<{ ok: true; launch: Ope
 
   const integration = await prisma.partnerIntegration.findUnique({
     where: { partnerId_mode: { partnerId: row.session.partnerId, mode: row.session.partnerMode } },
-    select: { allowedOrigins: true, accentColor: true },
+    select: { allowedOrigins: true, accentColor: true, backgroundColor: true },
   });
   return {
     ok: true,
@@ -81,6 +94,7 @@ export async function openLaunch(token: string): Promise<{ ok: true; launch: Ope
       mode: row.session.partnerMode,
       allowedOrigins: integration?.allowedOrigins ?? [],
       accentColor: integration?.accentColor ?? null,
+      backgroundColor: integration?.backgroundColor ?? null,
     },
   };
 }
