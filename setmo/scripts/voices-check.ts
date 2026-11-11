@@ -1,10 +1,14 @@
 /**
  * Voice roster check (pnpm voices:check): every voice in the roster must be in
- * the ElevenLabs account's My Voices, and be the gender the roster says.
+ * the ElevenLabs account's My Voices, be the gender the roster says, and not have
+ * live moderation turned on.
  *
  * A voice that isn't in the account doesn't fail anything: ElevenLabs quietly
  * plays the agent's default voice instead, so a man can end up speaking in a
- * woman's voice with no error anywhere. Run this whenever the roster changes.
+ * woman's voice with no error anywhere. A Voice Library voice whose owner turns
+ * live moderation on is refused for agents: every call with it cuts out the
+ * moment it connects (Heyez, October 2026). Owners can change that at any time,
+ * so run this now and then, not only when the roster changes.
  * Needs ELEVENLABS_API_KEY, from the environment or a .env.local here or one
  * level up.
  */
@@ -23,7 +27,7 @@ function apiKey(): string | null {
   return null;
 }
 
-type AccountVoice = { voice_id: string; name: string; labels?: { gender?: string } };
+type AccountVoice = { voice_id: string; name: string; labels?: { gender?: string }; sharing?: { live_moderation_enabled?: boolean } | null };
 
 async function run(): Promise<number> {
   const key = apiKey();
@@ -52,6 +56,7 @@ async function run(): Promise<number> {
     const a = account.get(v.id);
     if (!a) problems.push(`${v.name} (${v.id}) isn't in My Voices — leads given it get the agent's default voice`);
     else if (a.labels?.gender && a.labels.gender !== v.gender) problems.push(`${v.name} (${v.id}) is "${a.name}", labeled ${a.labels.gender}, but the roster says ${v.gender}`);
+    if (a?.sharing?.live_moderation_enabled) problems.push(`${v.name} (${v.id}) has live moderation on — ElevenLabs refuses it for agents, so calls with it cut out at once. Take it out of the roster.`);
   }
 
   console.log(`${VOICE_CATALOG.length} roster voices, ${account.size} voices in the account.`);
@@ -60,7 +65,7 @@ async function run(): Promise<number> {
     for (const p of problems) console.error(`  ${p}`);
     return 1;
   }
-  console.log("✓ every roster voice is in My Voices and matches its gender.");
+  console.log("✓ every roster voice is in My Voices, matches its gender, and has no live moderation.");
   return 0;
 }
 

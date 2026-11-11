@@ -1,6 +1,6 @@
 import { VOICE_CATALOG, voiceSuits, type VoiceMeta } from "@/lib/voices";
 import { ageBand, type AgeBand } from "@/lib/realism/types";
-import type { Rng } from "@/lib/realism/rng";
+import { rngFrom, type Rng } from "@/lib/realism/rng";
 
 // Voices made for young adults come up more often for a caller that young, so a
 // 25-year-old usually sounds young without every young caller sharing one voice
@@ -22,6 +22,15 @@ export function pickVoiceFor(
   const pool: VoiceMeta[] = fresh.length ? fresh : suited.length ? suited : VOICE_CATALOG.filter((v) => v.gender === opts.gender);
   const chosen = rng.weighted(pool.map((v) => ({ item: v, weight: v.ages === "young" ? YOUNG_VOICE_WEIGHT : 1 })));
   return { id: chosen.id, name: chosen.name, band: ageBand(age), bandMatched: suited.length > 0 };
+}
+
+/** The voice for a lead saved earlier (a lead card already shown, a call being
+ *  called back): the one it was given, unless that voice has since been taken out
+ *  of the roster — then one that suits the same caller, the same one every time
+ *  for the same lead. */
+export function voiceForSavedLead(voiceId: string, caller: { gender: "male" | "female"; age: number }, leadKey: string): string {
+  if (VOICE_CATALOG.some((v) => v.id === voiceId)) return voiceId;
+  return pickVoiceFor(rngFrom(`voice:${leadKey}`), caller).id;
 }
 
 /** Caller ages no voice suits, per gender, as ranges ("female 76-120") — what to

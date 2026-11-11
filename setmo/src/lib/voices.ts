@@ -6,7 +6,14 @@
 // Every voice here must be in the ElevenLabs account's My Voices: a voice that
 // isn't is silently replaced by the agent's default voice (Ms Walker), with no
 // error. (Voice override must also be enabled on the agent's Security → Overrides
-// settings — it is.)
+// settings — it is.) And none may have "live moderation" turned on by its owner:
+// ElevenLabs refuses those voices for agents, so the call cuts out the moment it
+// connects. pnpm voices:check catches both.
+//
+// Taken out: Heyez (6rr4jpS124uCLNtgVdAk), 2026-11-10. Its owner turned live
+// moderation on in October, and every call with it has cut out since. A lead
+// saved with a voice that's no longer here gets a matching one when it connects
+// (voiceForSavedLead in src/lib/realism/voices.ts).
 
 export type Voice = { name: string; id: string };
 
@@ -29,7 +36,6 @@ export const VOICE_CATALOG: VoiceMeta[] = [
   { name: "Brian", id: "gPPH6SLdL8XSX6GNJ40G", gender: "male", ages: "any" },
   { name: "Josh", id: "wSO34DbFKBGmeCNpJL5K", gender: "male", ages: "any" },
   { name: "Victor", id: "KSGYe0fMqoZR5BREvtf1", gender: "male", ages: "any" },
-  { name: "Heyez", id: "6rr4jpS124uCLNtgVdAk", gender: "male", ages: "any" },
   { name: "Dan", id: "v54DUrx2qPTkyzeYbsyW", gender: "male", ages: "any" },
   // "Andre Rene" in the Voice Library (Adam's pick, 2026-10-14; any age, as he
   // first described Andre). The library's other André (nlkkWck0nIz1Nd4Bydut) he

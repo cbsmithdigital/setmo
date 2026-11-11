@@ -2,6 +2,7 @@ import { generatePersona, buildLeadPrompt, personaLabel, type Difficulty, type P
 import { sampleLead } from "@/lib/realism/sampler";
 import { composeLead, templateProse, type LeadProse } from "@/lib/realism/compose";
 import { buildLeadPromptV2, leadLabel } from "@/lib/realism/prompt";
+import { voiceForSavedLead } from "@/lib/realism/voices";
 import type { LeadChoice, LeadSkeleton } from "@/lib/realism/types";
 import type { ServicePack } from "@/lib/packs/types";
 
@@ -40,7 +41,7 @@ export async function buildImplantLead(opts: {
   return {
     systemPrompt: buildLeadPrompt(persona, opts.office, opts.setterFirstName, opts.difficulty),
     firstMessage: persona.openingLine,
-    voiceId: persona.voice.id,
+    voiceId: voiceForSavedLead(persona.voice.id, { gender: persona.gender, age: Number.parseInt(persona.age, 10) || 40 }, persona.name),
     personaName: persona.name,
     seed: { persona: personaLabel(persona), ...persona },
   };
@@ -91,7 +92,7 @@ export async function buildPackLead(opts: {
   return {
     systemPrompt,
     firstMessage,
-    voiceId: skeleton.voice.id,
+    voiceId: voiceForSavedLead(skeleton.voice.id, skeleton.caller, `${skeleton.caller.firstName} ${skeleton.caller.lastName}`),
     personaName: skeleton.caller.firstName,
     seed: { persona: leadLabel(skeleton), skeleton, prose, engine: "realism-v1" },
   };
