@@ -29,11 +29,18 @@ function withRef(response: NextResponse, value: string | null): NextResponse {
   return response;
 }
 
+// Presentation decks: a short public link to a self-contained page in /public.
+const DECKS: Record<string, string> = {
+  "/teamcare": "/setmo-teamcare-presentation.html",
+};
+
 // Next 16 renamed Middleware -> Proxy. This refreshes the Supabase auth session
 // on every request and gates app routes behind login — except the embedded
-// partner call, which has its own rules (embedResponse).
+// partner call, which has its own rules (embedResponse), and the decks.
 export async function proxy(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith("/embed/")) return embedResponse(request);
+  const deck = DECKS[request.nextUrl.pathname.toLowerCase()];
+  if (deck) return deckResponse(request, deck);
   const response = await route(request);
   // SetMo's own pages are never shown inside another site's frame (clickjacking).
   response.headers.set("X-Frame-Options", "SAMEORIGIN");
@@ -59,6 +66,16 @@ async function embedResponse(request: NextRequest) {
   response.headers.set("Permissions-Policy", "microphone=(self)");
   // The URL carries the launch token; never pass it on to other sites.
   response.headers.set("Referrer-Policy", "no-referrer");
+  return response;
+}
+
+// A deck is open to anyone: no login and no session refresh. Like every SetMo
+// page it can't be framed by another site, and it stays out of search results.
+function deckResponse(request: NextRequest, file: string): NextResponse {
+  const response = withRef(NextResponse.rewrite(new URL(file, request.url)), refFromUrl(request));
+  response.headers.set("X-Frame-Options", "SAMEORIGIN");
+  response.headers.set("Content-Security-Policy", "frame-ancestors 'self'");
+  response.headers.set("X-Robots-Tag", "noindex");
   return response;
 }
 
