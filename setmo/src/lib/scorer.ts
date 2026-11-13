@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { IMPLANT_RUBRIC } from "@/lib/skills";
-import type { Rubric } from "@/lib/packs/types";
+import type { GoodCallProfile, Rubric } from "@/lib/packs/types";
 import { captureError } from "@/lib/observability";
 
 const IMPLANT_RUBRIC_ID = "implant.v1";
@@ -194,6 +194,36 @@ ${transcriptText}`;
 // service's own skills and the booking definition change.
 // ---------------------------------------------------------------------------
 
+const DEPTH: Record<GoodCallProfile["depth"], string> = {
+  deep: "a lot of digging: the setter has to uncover what the problem is really costing the caller, and why they've put it off, before talking about price",
+  medium: "some digging: what the caller wants and why now, without a long interview",
+  light: "little digging: the reason for the call is usually plain, and the job is to get the right visit booked smoothly",
+};
+
+/** The call type's "good call" profile, as it goes into the scoring request
+ *  (empty when the rubric has none). Exported for tests. */
+export function goodCallSection(p: GoodCallProfile | undefined): string {
+  if (!p) return "";
+  const list = (items: string[]) => items.map((s) => `- ${s}`).join("\n");
+  const nice = p.niceToHave?.length ? `\nGood to see, but never a reason to mark a call down:\n${list(p.niceToHave)}` : "";
+  const notNeeded = p.notNeeded?.length
+    ? `\nNot needed on this kind of call (never lower a score for these or list them as misses):\n${list(p.notNeeded)}`
+    : "";
+  return `
+
+What a strong ${p.label} call looks like:
+A strong call of this type usually runs about ${p.minutes[0]} to ${p.minutes[1]} minutes and needs ${DEPTH[p.depth]}.
+It covers:
+${list(p.mustHaves)}${nice}${notNeeded}
+
+Grade against this call type, not against a longer, deeper kind of call:
+- A call that covers what a strong call covers, warmly and accurately, and books the appointment is a strong call: overall 4.0 or higher however short it was, unless it also had a serious problem (wrong information, rudeness, pressure).
+- Never lower a skill score, or list a miss, for depth this call type doesn't need.
+- Don't mark a call down for its length either: only when extra questions visibly annoyed the lead or got in the way of booking.
+- Keep wins and misses about what this call type needs. On a strong call, misses can be small refinements.
+- This guidance is for scores and coaching only. Judge booked exactly as its definition below says, no more strictly.`;
+}
+
 const RubricScoreZ = z.object({
   overall: z.number(),
   skills: z.array(z.object({ key: z.string(), score: z.number(), reasoning: z.string() })),
@@ -226,7 +256,7 @@ async function scoreWithRubric(opts: {
 Rubric:
 ${guide}
 
-Return one entry in "skills" for each rubric key above, using the key exactly as written.
+Return one entry in "skills" for each rubric key above, using the key exactly as written.${goodCallSection(opts.rubric.goodCall)}
 
 Also write: 2-3 specific "wins" (what the setter did well, concrete), 2-3 "misses" (specific growth areas), 1-3 replacement_phrases ({from: what they said, to: a stronger line}), persona_coaching (how to handle this lead type), next_scenario (a tougher rep to try), and a one-sentence encouraging narrative headline. overall = your holistic 1-5 for the call.
 

@@ -48,10 +48,30 @@ export const COSMETIC_RUBRIC_V1: Rubric = {
     },
     SHARED_SKILLS.closing,
   ],
+  goodCall: {
+    label: "cosmetic (whitening, bonding or veneers)",
+    minutes: [4, 6],
+    depth: "medium",
+    mustHaves: [
+      "Gets the caller to say what bothers them about their smile and what they'd like it to look like.",
+      "Finds out why now (an event, photos, work, a fresh start), usually with one good open question, and ties the consultation to it.",
+      "Explains the options in plain words as possibilities the dentist will recommend at the consultation: no diagnosing, and no pushing someone who asked about whitening toward veneers.",
+      "Handles money honestly: insurance usually doesn't pay for cosmetic work, payment plans or financing exist, and the consultation is where they get a real plan and price.",
+      "Asks for a specific day and time and confirms it.",
+    ],
+    niceToHave: ["Offering before-and-after photos, or saying what the consultation visit is like."],
+    notNeeded: [
+      "Implant-style questions about pain and its consequences.",
+      "Long probing once the caller has said what they want and why.",
+    ],
+  },
 };
 
 export const COSMETIC_PERSONA: PersonaSpec = {
   patientAge: [18, 75],
+  // There's a real personal reason (an event, work, a fresh start), but one
+  // good "why now" question usually brings it out.
+  reasonDepth: "reachable",
   callerMix: [
     { role: "SELF", weight: 94 },
     { role: "SPOUSE", weight: 6 },

@@ -49,10 +49,32 @@ export const ORTHO_RUBRIC_V1: Rubric = {
     },
     SHARED_SKILLS.closing,
   ],
+  goodCall: {
+    label: "orthodontic (braces or clear aligners)",
+    minutes: [3, 5],
+    depth: "light",
+    mustHaves: [
+      "Finds out who the patient is and their age, what they've noticed or been told (crowding, gaps, the bite, a dentist's referral), and any earlier braces or retainer.",
+      "Learns whether they're thinking braces or clear aligners, and matches them to the right consultation.",
+      "When an adult is calling about their own teeth, asks once what made them look into it now.",
+      "Handles money honestly: whether their plan has an orthodontic benefit (the practice will check it) and how payment usually works (a down payment and a monthly plan), with no guaranteed coverage or final fee on the phone.",
+      "Says what the consultation includes, and that a parent or guardian comes for a minor.",
+      "Asks for a specific day and time and confirms it.",
+    ],
+    notNeeded: [
+      "Emotional digging when a parent is calling about a child or teen.",
+      "Implant-style questions about pain and how it affects their life.",
+      "Long value-building before offering a time.",
+    ],
+  },
 };
 
 export const ORTHO_PERSONA: PersonaSpec = {
   patientAge: [7, 55],
+  // A parent calling about a child, or a bite problem, has nothing to dig out.
+  // Adults who want straighter teeth for themselves do have a personal reason,
+  // but one good "why now" question gets it (their storylines say so below).
+  reasonDepth: "open",
   callerMix: [
     { role: "SELF", weight: 50 },
     { role: "PARENT", weight: 46 },
@@ -162,6 +184,7 @@ export const ORTHO_PERSONA: PersonaSpec = {
     {
       key: "adult_aligners",
       interest: "Clear aligners",
+      reasonDepth: "reachable",
       sources: [
         { key: "ig_ad", weight: 30 },
         { key: "fb_ad", weight: 25 },
@@ -193,6 +216,7 @@ export const ORTHO_PERSONA: PersonaSpec = {
     {
       key: "shifted_after_braces",
       interest: "Teeth that shifted after braces",
+      reasonDepth: "reachable",
       sources: [
         { key: "google_form", weight: 35 },
         { key: "ig_ad", weight: 25 },

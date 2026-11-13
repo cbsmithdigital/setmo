@@ -1,5 +1,5 @@
 import { generatePersona, buildLeadPrompt, personaLabel, type Difficulty, type Persona } from "@/lib/personas";
-import { sampleLead } from "@/lib/realism/sampler";
+import { reasonDepthFor, sampleLead } from "@/lib/realism/sampler";
 import { composeLead, templateProse, type LeadProse } from "@/lib/realism/compose";
 import { buildLeadPromptV2, leadLabel } from "@/lib/realism/prompt";
 import { voiceForSavedLead } from "@/lib/realism/voices";
@@ -87,6 +87,8 @@ export async function buildPackLead(opts: {
     adOffer: opts.pack.adOffer,
     setterFirstName: opts.setterFirstName,
     difficulty: opts.difficulty,
+    reasonDepth: reasonDepthFor(opts.pack.persona, skeleton.archetype),
+    typicalMinutes: opts.pack.rubric.goodCall?.minutes,
   });
 
   return {

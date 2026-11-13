@@ -35,6 +35,32 @@ export interface Rubric {
   skills: RubricSkill[];
   /** What counts as a booked appointment on this kind of call. */
   bookedDefinition: string;
+  /** What a strong call of this type looks like, so a short, clean call on a
+   *  simple call type isn't judged against the deep implant call. */
+  goodCall?: GoodCallProfile;
+}
+
+/** What a strong call of one type looks like, handed to the scorer.
+ *
+ *  This is grading guidance, not a skill definition: it sets how much a call of
+ *  this type needs (a two-minute new-patient booking can be a strong call)
+ *  without changing what any skill means, so it can be tuned without a new
+ *  rubric version. The implant rubric has none on purpose: its scoring request
+ *  stays exactly as every stored implant score was graded. Written in plain
+ *  words so it can be edited by people who know these calls. */
+export interface GoodCallProfile {
+  /** The call type in plain words, e.g. "orthodontic (braces or clear aligners)". */
+  label: string;
+  /** How long a strong call of this type usually runs, in minutes. */
+  minutes: [number, number];
+  /** How much digging a strong call of this type needs. */
+  depth: "deep" | "medium" | "light";
+  /** What a strong call of this type covers. */
+  mustHaves: string[];
+  /** Good to see, but never a reason to mark a call down. */
+  niceToHave?: string[];
+  /** What this call type doesn't need: never marked down or listed as a miss. */
+  notNeeded?: string[];
 }
 
 export interface ServicePack {

@@ -49,10 +49,28 @@ export const DENTURE_RUBRIC_V1: Rubric = {
     },
     SHARED_SKILLS.closing,
   ],
+  // Like the full-arch implant call: denture callers have usually lived with it
+  // for years and don't want to come in, so the setter has to dig.
+  goodCall: {
+    label: "denture (full, partial or snap-in)",
+    minutes: [6, 10],
+    depth: "deep",
+    mustHaves: [
+      "Digs into what their teeth or denture are doing to their life: what they can't eat, slipping or clicking, sore spots, hiding their smile, avoiding people, and how long they've lived with it.",
+      "Finds out why they're calling now and what has kept them from coming in before (fear, cost, a bad past experience), since most denture callers have put this off for years.",
+      "Reflects it back in the caller's own words and builds the value of fixing it before talking about price.",
+      "Explains that the consultation is where the dentist examines them and walks through the options (a new full or partial denture, an immediate denture, or one that snaps onto implants), without diagnosing, promising a result, or quoting a final price.",
+      "Handles cost and coverage honestly (their plan, Medicare Advantage or Medicaid, which the practice will check, and payment options), and works out how the patient gets to the visit when someone else is calling for them.",
+      "Asks for a specific day and time and confirms it.",
+    ],
+  },
 };
 
 export const DENTURE_PERSONA: PersonaSpec = {
   patientAge: [40, 95],
+  // Like full-arch implant callers: they've usually lived with it for years and
+  // don't want to come in, so the setter has to dig for the real reason.
+  reasonDepth: "hidden",
   callerMix: [
     { role: "SELF", weight: 68 },
     { role: "ADULT_CHILD", weight: 17 },

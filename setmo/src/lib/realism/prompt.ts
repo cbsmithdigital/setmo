@@ -3,6 +3,7 @@ import { onFileBlock } from "@/lib/realism/lead-card";
 import { doctorLine } from "@/lib/realism/doctor";
 import { CALLER_LABEL, COVERAGE_LABEL, type LeadSkeleton } from "@/lib/realism/types";
 import type { Difficulty } from "@/lib/personas";
+import type { ReasonDepth } from "@/lib/realism/sampler";
 
 // The role-play instructions sent to the voice agent. Same backbone as the
 // implant lead prompt, with the parts that differ per service filled from the
@@ -13,6 +14,39 @@ const DIFFICULTY_DIRECTIVE: Record<Difficulty, string> = {
   ADAPTIVE: `DIFFICULTY — BALANCED: Respond in proportion to the setter's skill — neither a pushover nor impossible. Warm up as they earn it.`,
   TOUGH: `DIFFICULTY — TOUGH: You're guarded. Make them earn it: keep your real reason hidden unless they ask well, hold your hesitation firmly and raise it again if it's brushed off, and only agree to book if they've genuinely handled it AND given you a reason that matters to YOU. Default to "let me think about it" unless they're good.`,
 };
+
+// Leads whose reason isn't hidden: the challenge level is about the hesitation
+// and committing, not about guarding why they called.
+const REACHABLE_DIRECTIVE: Record<Difficulty, string> = {
+  WARM: `DIFFICULTY — WARM: You're receptive. You still want to be heard, but you warm up quickly when the setter is decent: share your real reason as soon as they ask about it, hold your hesitation only briefly, and lean toward saying yes once they've handled it reasonably.`,
+  ADAPTIVE: DIFFICULTY_DIRECTIVE.ADAPTIVE,
+  TOUGH: `DIFFICULTY — TOUGH: You're guarded. Make them earn it: share your real reason only once they've asked about it and followed up, hold your hesitation firmly and raise it again if it's brushed off, and only agree to book if they've genuinely handled it AND given you a reason that matters to YOU. Default to "let me think about it" unless they're good.`,
+};
+
+const OPEN_DIRECTIVE: Record<Difficulty, string> = {
+  WARM: `DIFFICULTY — WARM: You're receptive and easy to talk to: answer questions openly, hold your hesitation only briefly, and lean toward saying yes once they've handled it reasonably.`,
+  ADAPTIVE: DIFFICULTY_DIRECTIVE.ADAPTIVE,
+  TOUGH: `DIFFICULTY — TOUGH: You're guarded about committing, not about why you called: answer questions about your situation plainly, but hold your hesitation firmly, raise it again if it's brushed off, and only agree to book if they've genuinely handled it. Default to "let me think about it" unless they're good.`,
+};
+
+/** The part of the prompt about the lead's real reason, by how readily they
+ *  share it. Hidden is the original wording, unchanged. */
+function reasonBlock(depth: ReasonDepth, prose: LeadProse): string {
+  const hesitation = `- Your hesitation: "${prose.objectionInTheirWords}". Raise it naturally at some point; don't give in easily.`;
+  if (depth === "reachable") {
+    return `WHAT'S UNDERNEATH
+- The real reason underneath: "${prose.hiddenWhyInTheirWords}". It isn't the first thing you say, but it isn't a secret either: as soon as the setter asks a genuine question about why you're looking into this now or what you're hoping for, tell them. If they never ask, don't bring it up.
+${hesitation}`;
+  }
+  if (depth === "open") {
+    return `WHAT'S ON YOUR MIND
+- What's behind your call: "${prose.hiddenWhyInTheirWords}". This isn't a secret. If the setter asks what's going on, why you're calling or how things are, tell them plainly; it can also come up on its own as you talk.
+${hesitation}`;
+  }
+  return `WHAT YOU DON'T VOLUNTEER
+- The real reason underneath: "${prose.hiddenWhyInTheirWords}". Don't offer this. Only open up if the setter earns it with genuine curiosity and good questions. If they never dig, stay surface-level.
+${hesitation}`;
+}
 
 export function buildLeadPromptV2(opts: {
   skeleton: LeadSkeleton;
@@ -31,9 +65,21 @@ export function buildLeadPromptV2(opts: {
   adOffer?: string | null;
   setterFirstName?: string | null;
   difficulty: Difficulty;
+  /** How readily this lead shares their real reason. Unset = hidden, the
+   *  original prompt word for word. */
+  reasonDepth?: ReasonDepth;
+  /** How long a strong call of this type usually runs, in minutes. Only used
+   *  when the reason isn't hidden, so a simple call isn't dragged out. */
+  typicalMinutes?: [number, number];
 }): { systemPrompt: string; firstMessage: string } {
   const { skeleton: s, prose, office } = opts;
   const isSelf = s.caller.role === "SELF";
+  const depth = opts.reasonDepth ?? "hidden";
+  const directive = (depth === "open" ? OPEN_DIRECTIVE : depth === "reachable" ? REACHABLE_DIRECTIVE : DIFFICULTY_DIRECTIVE)[opts.difficulty];
+  const lengthLine =
+    depth !== "hidden" && opts.typicalMinutes
+      ? ` A call like this usually takes about ${opts.typicalMinutes[0]} to ${opts.typicalMinutes[1]} minutes: once the setter has covered what matters to you, be ready to decide rather than dragging it out.`
+      : "";
 
   const whoYouAre = isSelf
     ? `- You are ${s.caller.firstName} ${s.caller.lastName}, ${s.patient.age}. You reached out about yourself.`
@@ -54,11 +100,9 @@ ${whoYouAre}
 - Coverage: ${COVERAGE_LABEL[s.coverage]}. Only talk about coverage the way someone with this plan would — you don't know the details perfectly.
 - ${s.yearsSinceLastVisit == null ? "You've never been to a dentist." : s.yearsSinceLastVisit === 0 ? "You were last at a dentist within the past year." : `It's been about ${s.yearsSinceLastVisit} years since you saw a dentist.`}
 ${s.card ? `\n${onFileBlock({ card: s.card, note: prose.formNote, coverage: s.coverage, interest: s.interest, adOffer: opts.adOffer })}\n` : ""}
-WHAT YOU DON'T VOLUNTEER
-- The real reason underneath: "${prose.hiddenWhyInTheirWords}". Don't offer this. Only open up if the setter earns it with genuine curiosity and good questions. If they never dig, stay surface-level.
-- Your hesitation: "${prose.objectionInTheirWords}". Raise it naturally at some point; don't give in easily.
+${reasonBlock(depth, prose)}
 
-${DIFFICULTY_DIRECTIVE[opts.difficulty]}
+${directive}
 
 HOW TO BEHAVE
 - Talk like a real person on the phone: short, natural, sometimes hesitant. One thought at a time.
@@ -66,7 +110,7 @@ HOW TO BEHAVE
 - Never invent a dentist's name, a price the setter didn't give you, or a brand.
 - The practice's offer: ${office?.offerFraming ?? "a first visit"}. Appointment framing: ${office?.appointmentFraming ?? "a first appointment"}.${doctorLine(office?.doctorName)}
 - If you agree to book, confirm it clearly so it's unmistakable ("okay, yes, let's do that"). If you're not convinced by the end, politely decline or stall.
-- Keep the call realistic in length; don't rush to a yes or a no.`;
+- Keep the call realistic in length; don't rush to a yes or a no.${lengthLine}`;
 
   return { systemPrompt, firstMessage: prose.openingLine };
 }

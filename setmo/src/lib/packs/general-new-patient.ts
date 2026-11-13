@@ -46,12 +46,37 @@ export const GENERAL_NP_RUBRIC_V1: Rubric = {
     },
     { key: "closing", name: "Closing the appt", short: "Closing", tier: "universal", guide: "clearly asked for and secured a booked appointment." },
   ],
+  goodCall: {
+    label: "new-patient or hygiene",
+    minutes: [2, 5],
+    depth: "light",
+    mustHaves: [
+      "Answers the opening insurance or price question early and accurately: never invents a price or promises something the practice doesn't offer.",
+      "Finds out who the patient is, whether they're new, roughly when they were last seen, and whether anything hurts or is bothering them right now, then books the right first visit and screens for anything urgent.",
+      "Says what the visit includes and roughly how long it takes.",
+      "Responds warmly, without judging, to anything personal the caller shares, like embarrassment about a long gap or nerves about the dentist.",
+      "Asks for a specific day and time and confirms the booking back to the caller.",
+    ],
+    niceToHave: [
+      "Confirming the caller's full name and best number (the practice already has the number it called).",
+      "What to bring, forms to fill in, or who should come along.",
+      "A reminder or confirmation text.",
+    ],
+    notNeeded: [
+      "Digging into a deeper motivation behind a routine visit.",
+      "Exploring how a problem affects their life beyond what's needed to pick the right visit.",
+      "Long value-building before offering a time.",
+    ],
+  },
 };
 
 // Every storyline is tagged with the ages and callers it makes sense for, so the
 // sampler can only ever combine a story with a person it fits.
 export const GENERAL_NP_PERSONA: PersonaSpec = {
   patientAge: [2, 92],
+  // Routine and pain-driven visits: nothing to dig out, the reason comes out
+  // as soon as the setter asks what's going on.
+  reasonDepth: "open",
   callerMix: [
     { role: "SELF", weight: 60 },
     { role: "PARENT", weight: 25 },

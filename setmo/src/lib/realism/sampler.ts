@@ -52,7 +52,25 @@ export type Archetype = {
   interest?: string;
   /** How leads in this storyline usually reach the practice (else the pack's). */
   sources?: { key: string; weight: number }[];
+  /** How readily this storyline's lead shares their real reason (else the pack's). */
+  reasonDepth?: ReasonDepth;
 };
+
+/** How readily a lead shares the real reason behind their call.
+ *  - hidden: only if the setter really digs; a guarded lead holds it back.
+ *    Implants and dentures, where callers have usually put it off for years.
+ *  - reachable: not the first thing they say, but one genuine question about
+ *    why now gets it (cosmetic, adults who want straighter teeth).
+ *  - open: no secret; it comes out as soon as the setter asks what's going on
+ *    (routine and pain-driven calls). */
+export type ReasonDepth = "hidden" | "reachable" | "open";
+
+/** A storyline's reason depth: its own, else its service's, else hidden (how
+ *  every lead behaved before depths existed). Looked up when the prompt is
+ *  built, so stored leads follow it without any change to what's stored. */
+export function reasonDepthFor(spec: PersonaSpec | undefined, archetypeKey: string): ReasonDepth {
+  return spec?.archetypes.find((a) => a.key === archetypeKey)?.reasonDepth ?? spec?.reasonDepth ?? "hidden";
+}
 
 export type PersonaSpec = {
   /** Hard bounds for this service. Nothing outside these is ever sampled. */
@@ -65,6 +83,9 @@ export type PersonaSpec = {
   leadSources?: { key: string; weight: number }[];
   /** Labels for the objection concern tags, for "pick your lead". */
   concerns?: { key: string; label: string }[];
+  /** How readily this service's leads share their real reason; a storyline can
+   *  override it. Unset means hidden. */
+  reasonDepth?: ReasonDepth;
 };
 
 export type SampleOpts = {

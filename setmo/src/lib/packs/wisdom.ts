@@ -49,10 +49,30 @@ export const WISDOM_RUBRIC_V1: Rubric = {
     },
     SHARED_SKILLS.closing,
   ],
+  goodCall: {
+    label: "wisdom-teeth",
+    minutes: [3, 5],
+    depth: "light",
+    mustHaves: [
+      "Checks symptoms: pain, swelling, fever, trouble opening the mouth or swallowing, and how long it's been going on. Anything serious gets seen right away, and someone in pain gets the soonest reasonable time.",
+      "Asks whether they already have x-rays or a referral.",
+      "Explains calmly, without medical advice, the consultation versus surgery day, sedation choices in plain words, that someone must drive them home after sedation, and typical time off to recover.",
+      "Sorts the practical side: timing around school, work or a trip; a parent or guardian for a minor; insurance, which the practice will check.",
+      "Answers fear of surgery or anesthesia calmly when it comes up.",
+      "Asks for a specific day and time and confirms it.",
+    ],
+    niceToHave: ["What to bring: x-rays, the referral, an insurance card."],
+    notNeeded: [
+      "Digging into a deeper emotional motivation: the reason for the visit is usually plain.",
+      "Long value-building before offering a time.",
+    ],
+  },
 };
 
 export const WISDOM_PERSONA: PersonaSpec = {
   patientAge: [15, 45],
+  // The reason for the visit is usually plain: it comes out when asked.
+  reasonDepth: "open",
   callerMix: [
     { role: "SELF", weight: 55 },
     { role: "PARENT", weight: 40 },
